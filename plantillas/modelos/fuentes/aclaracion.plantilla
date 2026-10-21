@@ -1,0 +1,110 @@
+// MODELO LIMPIO – Aclaración de nombre en escrituras anteriores (dentro de una compraventa)
+// Fuente: F48 (ver plantillas/modelos/INDICE.md). Datos del caso reemplazados por {{marcadores}}; el resto es el texto literal de la notaría.
+// Estado: PENDIENTE DE APROBACIÓN DEL NOTARIO.
+// Nota: La aclaración es el PARAGRAFO PRIMERO de la cláusula SEGUNDO (tradición): repítalo por cada escritura anterior en la que figure el nombre errado. En la carátula va un "ACLARACION SIN CUANTIA" por cada escritura aclarada.
+// Nota: El ejemplo tenía diez vendedores (10 % cada uno): se dejaron como {{lista_vendedores_con_porcentaje}}, {{comparecencia_vendedores}} y una firma modelo de vendedor.
+// Nota: La letra b. de la aceptación corresponde a compradores compañeros permanentes que NO afectan el inmueble a vivienda familiar.
+### ESCRITURA PUBLICA NÚMERO: {{numero_escritura_letras}}
+### FECHA DE OTORGAMIENTO: {{fecha_otorgamiento_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+!! VENDEDOR(A)(ES) EXOGENA%
+!! {{lista_vendedores_con_porcentaje}}
+!! COMPRADOR(A)(ES) EXOGENA%
+!! {{nombre_comprador_1}} {{documento_comprador_1}} {{porcentaje_comprador_1}}
+!! {{nombre_comprador_2}} {{documento_comprador_2}} {{porcentaje_comprador_2}}
+### CODIGO DE LA NOTARIA 410010001.
+### ESPECIFICACION VALOR DEL ACTO
+!! ACLARACION SIN CUANTIA
+!! COMPRAVENTA {{valor_venta_numeros}}
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria}}.
+CEDULA CATASTRAL: {{cedula_catastral}}.
+CEDULA CATASTRAL PAZ Y SALVO: {{cedula_catastral_paz_y_salvo}}.
+NOMBRE O DIRECCIÓN DEL INMUEBLE: {{direccion_inmueble}}.
+OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.
+En la ciudad de Neiva, Departamento del Huila, Republica de Colombia, a los {{dia_otorgamiento_letras}} ({{dia_otorgamiento}}) DÍAS del mes de {{mes_otorgamiento}} del año {{anio_otorgamiento_letras}} ({{anio_otorgamiento}}), en el CIRCULO NOTARIAL DE NEIVA, donde funciona la Notaria Primera cuyo notario titular en el ejercicio es el doctor {{nombre_notario}}.
+Comparecieron quienes dijeron ser, {{comparecencia_vendedores}}, y manifestaron:
+PRIMERO: Que por este instrumento público transfieren en venta a quienes dijeron ser, {{nombre_comprador_1}}, mayor de edad, domiciliado en {{domicilio_comprador_1}}, identificado con cédula de ciudadanía número {{documento_comprador_1}} expedida en {{lugar_expedicion_comprador_1}}, estado civil {{estado_civil_comprador_1}}, actividad económica {{actividad_economica_comprador_1}} y {{nombre_comprador_2}}, mayor de edad, domiciliada en {{domicilio_comprador_2}}, identificada con cédula de ciudadanía número {{documento_comprador_2}} expedida en {{lugar_expedicion_comprador_2}}, estado civil {{estado_civil_comprador_2}}, actividad económica {{actividad_economica_comprador_2}}, el derecho de dominio y la posesión que tienen y ejercen sobre el siguiente inmueble:
+{{descripcion_inmueble}}, ubicado en la {{direccion_inmueble}}, en la ciudad de {{municipio_inmueble}}, Departamento del {{departamento_inmueble}}, junto con la casa de habitación que allí existe, determinado por los siguientes linderos: {{linderos}}
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria}}.
+CEDULA CATASTRAL: {{cedula_catastral}}.
+CEDULA CATASTRAL PAZ Y SALVO: {{cedula_catastral_paz_y_salvo}}.
+PARAGRAFO PRIMERO: No obstante, se deja constancia que en el Certificado de Tradición inscrito al folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} en la Oficina de Registro de Instrumentos Públicos de Neiva, no figura el área del inmueble.
+PARAGRAFO SEGUNDO: No obstante, la mención del área y los linderos precisados, la venta se hace como cuerpo cierto.
+SEGUNDO. TRADICIÓN: Que el inmueble fue adquirido por los vendedores así:
+{{tradicion_detallada}}, todas inscritas al folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} en la Oficina de Registro de Instrumentos Públicos de Neiva; e inscrita a la cedula catastral número {{cedula_catastral_paz_y_salvo}}.
+PARAGRAFO PRIMERO: Que en la citada escritura pública número {{numero_escritura_aclarada}} del {{fecha_escritura_aclarada}}, otorgada en la {{notaria_escritura_aclarada}}, se nombró como otorgante a {{nombre_errado}} y se ACLARA que su nombre correcto es {{nombre_correcto}}, todo lo cual se acredita con la fotocopia de la cedula de ciudadanía y certificado de vigencia expedido por la Registraduría Nacional del Estado Civil, documentos que se adjuntan para su protocolización.
+TERCERO: Que el valor de la venta es por la suma de {{valor_venta_letras}} ({{valor_venta_numeros}}), suma que los vendedores manifiestan haber recibido en su totalidad en proporciones iguales a entera satisfacción de manos de los compradores.
+PARAGRAFO: Los otorgantes de manera libre y espontanea declaramos bajo la gravedad de juramento que conocemos el texto y alcance del Artículo 61 de la Ley 2010 del 27 de Diciembre de 2019, que se entiende prestado por el sólo hecho de la firma y manifestaron: 1. Que el precio incluido en la presente escritura de compraventa es real y no ha sido objeto de pactos privados en los que se señale un valor diferente. 2. Que no existen sumas que se hayan convenido o facturado por fuera de la misma. CUARTO: Garantizan los vendedores que el inmueble objeto de esta venta se encuentra libre de toda clase de gravámenes que puedan afectar su dominio, posesión y tenencia del mismo, tales como censo, hipoteca, embargo, anticresis, pleitos pendientes, demanda civil registrada, arrendamiento por escritura pública, patrimonio de familia inembargable, condiciones resolutorias, limitaciones del mismo y cualquier otro, y en general libre de todo gravamen, pero que en todo caso se obligan a salir al saneamiento de lo vendido conforme a la Ley.
+QUINTO: Que el inmueble está libre por concepto de servicios públicos domiciliarios de agua, luz y alcantarillado (en caso que existan), hasta la fecha de otorgamiento de la presente escritura pública; tasas y contribuciones, impuestos nacionales, Departamentales y Municipales etc.
+SEXTO: Que, desde el día de hoy, en su condición de vendedores hacen entrega real y material a los compradores del inmueble objeto de venta, junto con todos sus usos, costumbres y servidumbres, que legalmente les corresponde, sin reserva ni limitación alguna y en el estado en que se encuentra.
+SEPTIMO: Los vendedores manifiestan que el inmueble que enajenan no se encuentra afectado a vivienda familiar.
+OCTAVO. CONSTANCIA (REDAM): Ley 2097 de 2021, Decreto Reglamentario 1310 de 2022, Circular 355 del 20 Septiembre 2023. Se le(s) hizo saber a el/la/los enajenante(s) sobre el contenido del numeral 3 Articulo 6 de la Ley 2097 de 2021 y su Decreto Reglamentario 1310 de 2022, quien(es) manifiesta(n) no aportar el correspondiente certificado de REDAM; y ante la imposibilidad de dar aplicación a lo dispuesto en la Ley 2097 de 2021 y su Decreto Reglamentario 1310 de 2022, en el sentido de llevar a cabo la consulta para verificación en la base de datos del REDAM, dado que a la fecha la misma no se encuentra disponible para el acceso del notario(a), el/la/los compareciente(s) declara(n) que al momento de otorgar la presente escritura pública no se encuentra(n) inscrito(s) en el REGISTRO DE DEUDORES ALIMENTARIOS MOROSOS - REDAM.
+NOVENO: El(la)(los) compareciente(s) solicita(n) e insiste(n) al Notario en autorizar el presente instrumento público con el Certificado de Tradición y Libertad del folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} de fecha {{fecha_certificado_tradicion}}.
+Presentes, {{nombre_comprador_1}} y {{nombre_comprador_2}}, de las condiciones civiles y personales ya enunciadas, y manifestaron:
+a. Que pagaron el valor del inmueble y que aceptan la presente escritura pública y la venta que en ella se hace por estar a su entera satisfacción y que están en posesión de lo aquí comprado por entrega real y material que le hicieran los vendedores.
+b. Los compradores manifestaron ser de estado civil {{estado_civil_compradores}}, y declaran además que no poseen otro inmueble afectado a vivienda familiar y que el inmueble que adquieren por la presente escritura NO LO AFECTAN A VIVIENDA FAMILIAR, de acuerdo a la Ley 258 de 1996, reformada por la Ley 854 de 2003; razón por la cual el Notario deja la siguiente constancia: Previa indagación a los comparecientes, el inmueble NO QUEDA AFECTADO A VIVIENDA FAMILIAR, por voluntad expresa y conjunta de los compañeros permanentes, manifestada en tal sentido.
+Se le agregan los comprobantes fiscales correspondientes cuyo texto es el del siguiente tenor: Certificados de paz y salvos por concepto de predial unificado y valorización del predio inscrito en el catastro vigente bajo el número {{cedula_catastral_paz_y_salvo}} expedidos por la Secretaría de Hacienda de Neiva (H), con vigencia hasta el {{vigencia_paz_y_salvo}}, en el cual consta que el referido inmueble tiene un avalúo de {{avaluo_catastral}}.
+- Fotocopias de las cédulas de ciudadanía correspondientes.
+- Certificado de vigencia expedido por la Registraduría Nacional del Estado Civil.
+DATOS PERSONALES. De conformidad con lo previsto en la Ley 1581 de 2012, Régimen General de Datos Personales y su Decreto Reglamentario 1377 de 2013, se informa a los comparecientes que dentro del protocolo de seguridad adoptado por esta Notaria se ha implementado la toma de huellas e imagen digital de los otorgantes a través del sistema biométrico que se recoge por parte de la Notaria al momento del otorgamiento del presente instrumento público, conociendo que dicho sistema de control implementado tiene por objeto prevenir posibles suplantaciones, salvaguardar los instrumentos y a la eficacia de los negocios jurídicos celebrados, para lo cual los comparecientes autorizan al Notario Primero del Círculo de Neiva, el tratamiento de los datos personales que proporcionen, si son datos de terceros, declaran que tienen el poder suficiente para otorgar esta autorización. Los datos personales podrán ser recolectados, almacenados, clasificados, actualizados, usados, suprimidos, transmitidos o transferidos, para el cumplimiento de las funciones y obligaciones de los notarios, la prestación de los servicios notariales de acuerdo con el Estatuto del Notariado (Decreto 960 de 1970) y demás regulación jurídica vigente; para las demás finalidades que establezca la ley para el caso específico; y las establecidas en las Políticas de Tratamiento de Datos Personales del Notario, disponibles en www.notaria1neiva.com.co. Son derechos de los titulares de datos personales: conocer, actualizar, y rectificar sus datos, previo los procedimientos establecidos en la mencionada Ley.
+ADVERTENCIA. El notario deja constancia que a los otorgantes se les advirtió sobre el contenido del texto y alcance del Artículo 61 de la Ley 2010 del 27 de Diciembre de 2019, y que conocen sus consecuencias. Así mismo se advirtió a los otorgantes de esta escritura, de la obligación que tiene de leer la totalidad de su texto, a fin de verificar la exactitud de todos los datos en ella consignados con el fin de aclarar, modificar o corregir lo que le pareciere; la firma de la misma demuestra su aprobación total del texto. En consecuencia, el Notario no asume ninguna responsabilidad por errores o inexactitudes establecidas con posterioridad a la firma de (l) (los) otorgante(s) y del Notario. En tal caso, estos deben ser corregidos mediante el otorgamiento de una nueva escritura suscrita por el que intervino en la inicial y sufragada por el mismo (Artículo 35 Decreto Ley 960 de 1970).
+OTORGAMIENTO Y AUTORIZACION. Leído el presente instrumento por los otorgantes se hicieron las advertencias pertinentes y en especial la relacionada con la necesidad de inscribir la copia en el registro competente dentro del término de dos (2) meses siguientes a partir de la fecha de su otorgamiento (Art. 232 Ley 223 de 1995 y 14 del Decreto 650 de 1996), la aprueban y firman conmigo el suscrito Notario que lo autorizo y doy fe a los otorgantes se les advirtió finalmente que una vez firmado el presente instrumento el notario no aceptará correcciones o modificaciones sino en la forma y casos previstos por la ley.
+El anterior instrumento quedó elaborado en las hojas de papel notarial números: {{hojas_papel_notarial}}
+De lo cual doy fe.
+DERECHOS NOTARIALES: {{derechos_notariales}}
+RETEFUENTE: {{retefuente}}
+Resolución No. {{resolucion_tarifas}}.
+La presente escritura fue autorizada para otorgarse en diferentes momentos Art. 9 Decreto 2148/1983. {{codigo_minuta}}.
+!!
+!! LOS OTORGANTES,
+!!
+!!
+!! ______________________________________
+!! {{nombre_vendedor}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!!
+!! ______________________________________
+!! {{nombre_comprador_1}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!!
+!! ______________________________________
+!! {{nombre_comprador_2}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!! EL NOTARIO,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}

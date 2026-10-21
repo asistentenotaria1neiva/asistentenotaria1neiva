@@ -1,0 +1,21 @@
+// ANEXO – Oficios a registradurías / notarías para actos del estado civil (divorcio, cesación, unión marital).
+// Fuente: oficios al final de F59 y F66. Uno por cada registro civil que debe anotarse.
+{{#oficios}}
+@@SALTO_PAGINA@@
+!! Neiva,
+!!
+!! Señores
+!! {{destinatario}}.
+!! Ciudad.
+!!
+Atentamente me permito informarle que mediante escritura pública número {{numero_escritura}} de fecha {{fecha_escritura}}, otorgada en esta Notaria, se efectuó {{acto_texto}}, de los señores {{personas}}, cuyo {{registro_texto}}.
+!!
+!! Anotado Libro de Varios,
+!!
+!! Cordialmente,
+!!
+!! {{notario}}
+!! NOTARIO PRIMERO DE NEIVA
+!! CALLE 7 No 4-62 LOCAL HOTEL PLAZA - NEIVA (HUILA) TELÉFONOS (608) 8711484 - (608) 8710363 - (608) 8711215
+!! E-mail: PRIMERANEIVA@SUPERNOTARIADO.GOV.CO - NOTARIAPRIMERADENEIVA@HOTMAIL.COM
+{{/oficios}}

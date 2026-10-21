@@ -1,0 +1,20 @@
+// ACTO – CANCELACIÓN DE HIPOTECA.
+// Fuente: F16 (23 - BANCO DE BOGOTA). Cancelación total presentada por el apoderado de la entidad.
+// Si la entidad aporta su propia minuta, se carga como texto del banco (minuta externa) y esta plantilla no se usa.
+{{#titulo_acto}}
+### {{titulo_acto}}
+{{/titulo_acto}}
+{{a.comparecencia_acreedor}}, y manifestó: {{ord()}}: Que obrando en el carácter mencionado cancela totalmente la hipoteca constituida por {{a.deudores_texto}}, a favor {{a.acreedor_del}} {{a.acreedor.nombre}}, con NIT. {{a.acreedor.numero_documento}}, mediante escritura pública número {{a.escritura_hipoteca_texto}}, inscrita al folio de matrícula inmobiliaria número {{a.inmueble.matricula}} en la Oficina de Registro de Instrumentos Públicos de {{a.inmueble.orip_ciudad}}.
+{{ord()}}: Que el citado gravamen fue constituido sobre el siguiente inmueble:
+{{a.inmueble.nombre_corto_mayus}}, ubicado en la {{a.inmueble.direccion}}, en {{a.inmueble.municipio_texto}}, inscrito al folio de matrícula inmobiliaria número {{a.inmueble.matricula}} en la Oficina de Registro de Instrumentos Públicos de {{a.inmueble.orip_ciudad}}, determinado por su descripción, cabida, linderos, y demás especificaciones como aparece en la citada escritura pública.
+{{ord()}}: Que la hipoteca que por este instrumento se cancela se había constituido para garantizar obligaciones {{a.acreedor_al}} {{a.acreedor.nombre}}, por la suma de {{a.valor_hipoteca_letras}}, siendo entendido que son de cargo {{a.deudores_de_cargo}}, los gastos de notariado y registro que se causen por esta cancelación.
+{{#a.sin_cuantia}}
+PARAGRAFO: Para efectos del pago de derechos notariales y de inscripción en la Oficina de Registro de Instrumentos Públicos de {{a.inmueble.orip_ciudad}} correspondientes a la presente CANCELACION DE LA HIPOTECA se establece que se trata de un ACTO SIN CUANTIA al tenor de lo dispuesto por el Articulo 23 de la Ley 546 de 1999 en concordancia con el literal d) del Articulo 36 de la Resolución No. 088 de 2014 de la Superintendencia de Notariado y Registro.
+{{/a.sin_cuantia}}
+{{ord()}}: Que como consecuencia de esta cancelación {{a.acreedor_el}} {{a.acreedor.nombre}}, declara libre de todo gravamen el anterior inmueble.
+{{ord()}}: {{a.acreedor_El}} {{a.acreedor.nombre}}, deja constancia que la cancelación de esta garantía no significa que el deudor hubiera hecho pago hasta por la cuantía o limite señalado en la escritura de hipoteca que se cancela.
+{{ord()}}: El(la)(los) otorgante(s) solicita(n) e insiste(n) al Notario de autorizar el presente instrumento público con Certificado(s) de Tradición de fecha {{a.inmueble.fecha_certificado}}.
+{{#a.minuta_presentada}}
+### HASTA AQUI LA MINUTA PRESENTADA
+NOTA. LA PRESENTE ESCRITURA PÚBLICA SE ELABORÓ DE CONFORMIDAD CON LA MINUTA PRESENTADA ANTE ESTA NOTARIA POR SUS OTORGANTES A QUIENES LES FUE PRESENTADA PARA SU ESTUDIO Y QUIENES AL LEERLA APROBARON SU CONTENIDO POR LO CUAL PROCEDIERON A OTORGARLA CON SU FIRMA Y POSTERIORMENTE FUE AUTORIZADA POR EL NOTARIO.
+{{/a.minuta_presentada}}

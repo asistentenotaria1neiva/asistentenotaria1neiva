@@ -1,0 +1,83 @@
+// MODELO LIMPIO – Divorcio de matrimonio civil por mutuo acuerdo con disolución y liquidación de la sociedad conyugal en ceros (por apoderado)
+// Fuente: F59 (ver plantillas/modelos/INDICE.md). Datos del caso reemplazados por {{marcadores}}; el resto es el texto literal de la notaría.
+// Estado: PENDIENTE DE APROBACIÓN DEL NOTARIO.
+// Nota: El acuerdo entre comillas (“PRIMERO.- … QUINTO.- …”) es el texto que firman los cónyuges; se transcribe tal como lo presenten.
+// Nota: Sin hijos menores. Si hay hijos menores, el acuerdo debe regular custodia, visitas y alimentos y se requiere el concepto del defensor de familia (ver F03).
+// Nota: Al final va UN oficio de comunicación como modelo; se elabora uno por cada registro civil que deba anotarse (nacimiento de cada cónyuge y matrimonio).
+### ESCRITURA PÚBLICA NÚMERO: {{numero_escritura_letras}}
+### FECHA DE OTORGAMIENTO: {{fecha_otorgamiento_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+!! {{nombre_conyuge_1}} {{documento_conyuge_1}}
+!! {{nombre_conyuge_2}} {{documento_conyuge_2}}
+!! REPRESENTADOS POR {{nombre_apoderado}} {{documento_apoderado}}
+### CODIGO DE LA NOTARIA 410010001.
+### ESPECIFICACION VALOR DEL ACTO
+!! DIVORCIO MATRIMONIO CIVIL SIN CUANTIA
+!! DISOLUCION Y LIQUIDACIÓN DE LA SOCIEDAD CONYUGAL SIN CUANTIA
+Compareció quien dijo ser, {{nombre_apoderado}}, mayor de edad, domiciliado en {{domicilio_apoderado}}, identificado con cédula de ciudadanía número {{documento_apoderado}} expedida en {{lugar_expedicion_apoderado}}, Abogado en ejercicio con tarjeta profesional número {{tarjeta_profesional_apoderado}} del Consejo Superior de la Judicatura, quien obra en nombre y en representación de {{nombre_conyuge_1}}, mayor de edad, domiciliada en {{domicilio_conyuge_1}}, identificada con cedula de ciudadanía número {{documento_conyuge_1}} expedida en {{lugar_expedicion_conyuge_1}} y {{nombre_conyuge_2}}, mayor de edad, domiciliado en {{domicilio_conyuge_2}}, identificado con cédula de ciudadanía número {{documento_conyuge_2}} expedida en {{lugar_expedicion_conyuge_2}}, estado civil CASADOS ENTRE SI, CON SOCIEDAD CONYUGAL VIGENTE, en virtud del poder especial otorgado, de cuya vigencia y términos se hace plenamente responsable, documento que se adjunta para su protocolización, y manifestó: PRIMERO: Que comparece a otorgar el presente instrumento público contentivo del DIVORCIO DE MATRIMONIO CIVIL Y DISOLUCION Y LIQUIDACION DE LA SOCIEDAD CONYUGAL por mutuo consentimiento de sus poderdantes, en virtud de lo previsto para el efecto por el Artículo 34 de la Ley 962 de 2005, reglamentada por el Decreto 4436 de fecha 28 de Noviembre de 2005. SEGUNDO: Que los señores {{nombre_conyuge_1}} y {{nombre_conyuge_2}}, contrajeron matrimonio civil en la fecha {{fecha_matrimonio}}, en la {{lugar_celebracion_matrimonio}}, inscrito en la fecha {{fecha_inscripcion_matrimonio}}, bajo indicativo serial número {{serial_registro_matrimonio}} de la {{oficina_registro_matrimonio}}, documento que se adjunta para su protocolización. TERCERO: En dicho matrimonio no hubo procreación de hijos.
+CUARTO: Que sus poderdantes {{nombre_conyuge_1}} y {{nombre_conyuge_2}}, acuerdan lo siguiente:
+“PRIMERO.- Que es nuestro deseo o voluntad el Divorcio de nuestro Matrimonio Civil, celebrado el día {{fecha_matrimonio}}, en la {{lugar_celebracion_matrimonio}}.
+SEGUNDO.- Manifestamos que en nuestra unión NO procreamos hijos.
+TERCERO.- La sociedad conyugal se encuentra sin liquidar.
+CUARTO.- Que acordamos que cada uno de nosotros asume los gastos de sostenimiento y estableceremos nuestra residencia por separado, tal como la tenemos actualmente, dentro o fuera del País.
+QUINTO.- No hay por consiguiente acuerdo de alimentos, por la razón expuesta en el hecho precedente.”
+QUINTO: Que, por razón del MATRIMONIO CIVIL, queda DISUELTA LA SOCIEDAD CONYUGAL, constituida en virtud del mismo, la que liquidan por medio de la presente escritura sin repartir activos ni pasivos, dada la inexistencia de los mismos. SEXTO. ACEPTACIÓN: El apoderado de {{nombre_conyuge_1}} y {{nombre_conyuge_2}}, enterado del contenido del presente instrumento público, por encontrarse ajustado a la Ley y a las pretensiones de sus mandantes, procede a su otorgamiento en señal de aceptación.
+SEPTIMO. AUTORIZACIÓN: El suscrito Notario Primero de Neiva, autoriza el presente instrumento con el apoderado debidamente facultado por los cónyuges, previo el cumplimiento de las disposiciones legales. OCTAVO. INSCRIPCIÓN Y REGISTRO: Una vez suscrita la escritura de DIVORCIO MATRIMONIO CIVIL Y DISOLUCION Y LIQUIDACION DE LA SOCIEDAD CONYUGAL POR MUTUO ACUERDO, en el Libro de Registro de Varios, el Notario comunicará la inscripción al funcionario competente, de la REGISTRADURIA NACIONAL DEL ESTADO CIVIL Y/O NOTARIA, quien hará las anotaciones del caso de acuerdo con lo señalado en el Artículo 6º, Decreto 4436 de 2005. NOVENO. OBLIGATORIEDAD DEL CONVENIO: El presente acuerdo se celebra en desarrollo de las Leyes 1a. de 1976 y Ley 962 de 2005 y Decreto 4436 de 2005. En consideración a que el presente acuerdo, ha sido aprobado en todas y cada una de sus partes y estando en pleno uso de nuestras facultades mentales y libres de toda coacción aceptamos lo anterior en su integridad.
+DECIMO: El apoderado hace constar que ha verificado cuidadosamente los nombres completos, números de cédulas y demás datos de sus poderdantes; declara que todas las informaciones consignadas en el presente instrumento son correctas y, en consecuencia, asume la responsabilidad que se derive de cualquier inexactitud de los mismos, se advierte que el Notario responde de la regularidad formal del instrumento que autoriza, pero no de la veracidad de las declaraciones de los otorgantes.
+PARAGRAFO: El Notario, en vista que se ha cumplido los requisitos establecidos en el Artículo 34 de la Ley 962 de 2005, reglamentado por el Decreto 4436 del 28 de Noviembre de 2005, autoriza la presente escritura.
+Se le agregan los comprobantes correspondientes cuyo texto es el del siguiente tenor:
+- Fotocopias de las cédulas de ciudadanía correspondientes.
+- Registros civiles de nacimiento de {{nombre_conyuge_1}} y {{nombre_conyuge_2}}.
+- Registro civil de matrimonio de {{nombre_conyuge_1}} y {{nombre_conyuge_2}}. -
+- La respectiva petición.
+- Acuerdo correspondiente.
+- Poder especial otorgado a {{nombre_apoderado}}.
+DATOS PERSONALES. De conformidad con lo previsto en la Ley 1581 de 2012, Régimen General de Datos Personales y su Decreto Reglamentario 1377 de 2013, se informa a los comparecientes que dentro del protocolo de seguridad adoptado por esta Notaria se ha implementado la toma de huellas e imagen digital de los otorgantes a través del sistema biométrico que se recoge por parte de la Notaria al momento del otorgamiento del presente instrumento público, conociendo que dicho sistema de control implementado tiene por objeto prevenir posibles suplantaciones, salvaguardar los instrumentos y a la eficacia de los negocios jurídicos celebrados, para lo cual los comparecientes autorizan al Notario Primero del Círculo de Neiva, el tratamiento de los datos personales que proporcionen, si son datos de terceros, declaran que tienen el poder suficiente para otorgar esta autorización. Los datos personales podrán ser recolectados, almacenados, clasificados, actualizados, usados, suprimidos, transmitidos o transferidos, para el cumplimiento de las funciones y obligaciones de los notarios, la prestación de los servicios notariales de acuerdo con el Estatuto del Notariado (Decreto 960 de 1970) y demás regulación jurídica vigente; para las demás finalidades que establezca la ley para el caso específico; y las establecidas en las Políticas de Tratamiento de Datos Personales del Notario, disponibles en www.notaria1neiva.com.co. Son derechos de los titulares de datos personales:
+conocer, actualizar, y rectificar sus datos, previo los procedimientos establecidos en la mencionada Ley.
+ADVERTENCIA. Se advirtió a los otorgantes de esta escritura, de la obligación que tiene de leer la totalidad de su texto, a fin de verificar la exactitud de todos los datos en ella consignados con el fin de aclarar, modificar o corregir lo que le pareciere; la firma de la misma demuestra su aprobación total del texto. En consecuencia, el Notario no asume ninguna responsabilidad por errores o inexactitudes establecidas con posterioridad a la firma de (l) (los) otorgante(s) y del Notario. En tal caso, estos deben ser corregidos mediante el otorgamiento de una nueva escritura suscrita por el que intervino en la inicial y sufragada por el mismo (Artículo 35 Decreto Ley 960 de 1970).
+OTORGAMIENTO Y AUTORIZACION. Leído el presente instrumento por los otorgantes se hicieron las advertencias pertinentes y la aprueban y firman conmigo el suscrito Notario que lo autorizo y doy fe a los otorgantes que se les advirtió finalmente que una vez firmado el presente instrumento el notario no aceptará correcciones o modificaciones.
+El anterior instrumento quedó elaborado en las hojas de papel notarial números: {{hojas_papel_notarial}}
+De lo cual doy fe.
+DERECHOS NOTARIALES: {{derechos_notariales}}
+LIBRO DE VARIOS: {{libro_varios}}
+Resolución No. {{resolucion_tarifas}}.
+{{codigo_minuta}}.
+!!
+!! EL OTORGANTE,
+!!
+!!
+!! ______________________________________
+!! {{nombre_apoderado}}
+!! EN REPRESENTACION DE {{nombre_conyuge_1}} Y {{nombre_conyuge_2}}.
+!! C.C. No. TP. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!! EL NOTARIO,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}
+@@SALTO_PAGINA@@
+!! Neiva, {{fecha_oficio}}
+!! Señores
+!! {{destinatario_oficio}}.
+!! Ciudad.
+!! Atentamente me permito informarle que mediante escritura pública número {{numero_escritura}} de fecha {{fecha_escritura}}, otorgada en esta Notaria, se efectuó el DIVORCIO DE MATRIMONIO CIVIL Y DISOLUCION Y LIQUIDACION DE LA SOCIEDAD CONYUGAL, de los señores {{nombre_conyuge_1}} y {{nombre_conyuge_2}}, cuyo {{registro_civil_objeto_oficio}}, se encuentra inscrito en esa {{oficina_destino}}, {{datos_inscripcion_registro}}.
+!! Anotado Libro de Varios,
+!! Cordialmente,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}
+!! NOTARIO PRIMERO DE NEIVA
+!! CALLE 7 No 4-62 LOCAL HOTEL PLAZA - NEIVA (HUILA) TELÉFONOS (608) 8711484 - (608) 8710363 - (608) 8711215
+!! E-mail: PRIMERANEIVA@SUPERNOTARIADO.GOV.CO - NOTARIAPRIMERADENEIVA@HOTMAIL.COM

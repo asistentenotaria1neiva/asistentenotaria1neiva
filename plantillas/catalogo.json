@@ -1,0 +1,511 @@
+[
+  {
+    "id": "caratula",
+    "categoria": "Bloques comunes",
+    "nombre": "Carátula y encabezado",
+    "prioridad": "Alta",
+    "esBloque": true
+  },
+  {
+    "id": "cierre",
+    "categoria": "Bloques comunes",
+    "nombre": "Comprobantes, advertencias, otorgamiento y firmas",
+    "prioridad": "Alta",
+    "esBloque": true
+  },
+  {
+    "id": "oficios_registro",
+    "categoria": "Bloques comunes",
+    "nombre": "Oficios a registro civil (anexo de actos de familia)",
+    "prioridad": "Media",
+    "esBloque": true
+  },
+  {
+    "id": "compraventa",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Compraventa de inmueble",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F17, F18, F21, F22, F24, F26, F30, F31, F35, F37, F38, F39, F42, F47, F48, F49, F52, F53, F55, F56, F57, F58, F68."
+  },
+  {
+    "id": "compraventa_hipoteca",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Compraventa con constitución de hipoteca",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F02, F09, F19, F43, F63, F64."
+  },
+  {
+    "id": "compraventa_vis",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Compraventa con subsidio de vivienda (VIS/VIP)",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F08, F10, F12, F23, F25, F27, F40, F41, F46, F62, F65."
+  },
+  {
+    "id": "compraventa_cuota",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Compraventa de derechos de cuota (cuota parte)",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F15, F54, F67, F69."
+  },
+  {
+    "id": "compraventa_nuda_propiedad",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Compraventa de nuda propiedad / reserva de usufructo",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "derechos_herenciales",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Compraventa de derechos herenciales o cesión de derechos herenciales",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F33, F36, F50, F51."
+  },
+  {
+    "id": "hipoteca",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Hipoteca abierta (sin límite de cuantía) y cerrada",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F08, F12, F25, F27, F28, F46, F62, F65."
+  },
+  {
+    "id": "cancelacion_hipoteca",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Cancelación de hipoteca",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F06, F16, F30, F32, F34."
+  },
+  {
+    "id": "modificacion_hipoteca",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Ampliación o modificación de hipoteca",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "liberacion_hipoteca",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Liberación parcial de hipoteca",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Tipo encontrado en la carpeta de la notaría (no estaba en el catálogo base). Fuentes en la carpeta: F25."
+  },
+  {
+    "id": "permuta",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Permuta",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "donacion",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Donación (incluida la insinuación notarial cuando aplique)",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "dacion_pago",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Dación en pago",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "aporte_sociedad",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Aporte de inmueble a sociedad",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "usufructo",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Constitución y cancelación de usufructo",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "servidumbre",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Constitución de servidumbre",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "englobe",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Englobe",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "desenglobe",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Desenglobe / división material",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "loteo",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Loteo / subdivisión",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "declaracion_construccion",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Declaración de construcción o mejoras",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F08, F47."
+  },
+  {
+    "id": "compraventa_mejoras",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Compraventa de mejoras / posesión",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Tipo encontrado en la carpeta de la notaría (no estaba en el catálogo base). Fuentes en la carpeta: F20."
+  },
+  {
+    "id": "actualizacion_area",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Actualización o corrección de área y linderos",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "reglamento_ph",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Reglamento de propiedad horizontal",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "reforma_ph",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Reforma del reglamento de propiedad horizontal",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "constitucion_afectacion",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Constitución de afectación a vivienda familiar",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F10, F11, F19, F23, F29, F35, F41."
+  },
+  {
+    "id": "cancelacion_afectacion",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Cancelación de afectación a vivienda familiar",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F01, F05, F14, F24, F28, F41, F56."
+  },
+  {
+    "id": "constitucion_patrimonio",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Constitución de patrimonio de familia inembargable",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F08, F12, F25, F27, F40, F46, F62, F65."
+  },
+  {
+    "id": "cancelacion_patrimonio",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Cancelación de patrimonio de familia inembargable",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F02, F05, F13, F38, F47, F61, F64, F68."
+  },
+  {
+    "id": "cancelacion_condicion",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Cancelación de condición resolutoria",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F13, F44, F56, F61, F64."
+  },
+  {
+    "id": "fiducia",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Fiducia mercantil sobre inmuebles",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "leasing",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Leasing habitacional (transferencia o restitución)",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "aclaracion",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Aclaración o corrección de escritura",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F05, F48."
+  },
+  {
+    "id": "matrimonio_civil",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Matrimonio civil",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "capitulaciones",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Capitulaciones matrimoniales",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "divorcio_civil",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Divorcio de matrimonio civil de mutuo acuerdo",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F03, F59."
+  },
+  {
+    "id": "cesacion_efectos_civiles",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Cesación de efectos civiles de matrimonio religioso de mutuo acuerdo",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F05."
+  },
+  {
+    "id": "liquidacion_sociedad_conyugal",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Disolución y liquidación de sociedad conyugal",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F03, F05, F59."
+  },
+  {
+    "id": "union_marital",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Declaración de unión marital de hecho y sociedad patrimonial",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F45, F66."
+  },
+  {
+    "id": "liquidacion_sociedad_patrimonial",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Disolución y liquidación de sociedad patrimonial",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F45, F66."
+  },
+  {
+    "id": "reconocimiento_hijo",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Reconocimiento de hijo extramatrimonial",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "cambio_nombre",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Cambio de nombre",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "correccion_registro_civil",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Corrección del registro civil",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "correccion_sexo",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Corrección del componente sexo en el registro civil",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "salida_pais_menor",
+    "categoria": "B. Familia y estado civil",
+    "nombre": "Autorización de salida del país de menor de edad",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Tipo encontrado en la carpeta de la notaría (no estaba en el catálogo base). Fuentes en la carpeta: F04, F07, F60."
+  },
+  {
+    "id": "sucesion_intestada",
+    "categoria": "C. Sucesiones y testamentos",
+    "nombre": "Sucesión intestada (liquidación de herencia)",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "sucesion_testada",
+    "categoria": "C. Sucesiones y testamentos",
+    "nombre": "Sucesión testada",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "sucesion_con_liquidacion",
+    "categoria": "C. Sucesiones y testamentos",
+    "nombre": "Sucesión con liquidación de sociedad conyugal o patrimonial",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "testamento_abierto",
+    "categoria": "C. Sucesiones y testamentos",
+    "nombre": "Testamento abierto",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "testamento_cerrado",
+    "categoria": "C. Sucesiones y testamentos",
+    "nombre": "Testamento cerrado",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "revocatoria_testamento",
+    "categoria": "C. Sucesiones y testamentos",
+    "nombre": "Revocatoria de testamento",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "particion_en_vida",
+    "categoria": "C. Sucesiones y testamentos",
+    "nombre": "Partición del patrimonio en vida",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Tipo encontrado en la carpeta de la notaría (no estaba en el catálogo base). Fuentes en la carpeta: F71."
+  },
+  {
+    "id": "poder_general",
+    "categoria": "D. Poderes, apoyos y voluntad anticipada",
+    "nombre": "Poder general",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "poder_especial",
+    "categoria": "D. Poderes, apoyos y voluntad anticipada",
+    "nombre": "Poder especial por escritura pública",
+    "prioridad": "Alta",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "revocatoria_poder",
+    "categoria": "D. Poderes, apoyos y voluntad anticipada",
+    "nombre": "Revocatoria de poder",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "acuerdo_apoyo",
+    "categoria": "D. Poderes, apoyos y voluntad anticipada",
+    "nombre": "Acuerdo de apoyo para la toma de decisiones",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "terminacion_acuerdo_apoyo",
+    "categoria": "D. Poderes, apoyos y voluntad anticipada",
+    "nombre": "Terminación de acuerdo de apoyo",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Tipo encontrado en la carpeta de la notaría (no estaba en el catálogo base). Fuentes en la carpeta: F72."
+  },
+  {
+    "id": "directivas_anticipadas",
+    "categoria": "D. Poderes, apoyos y voluntad anticipada",
+    "nombre": "Directivas anticipadas",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F70."
+  },
+  {
+    "id": "constitucion_sociedad",
+    "categoria": "E. Sociedades y otros actos",
+    "nombre": "Constitución de sociedad",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "reforma_estatutos",
+    "categoria": "E. Sociedades y otros actos",
+    "nombre": "Reforma de estatutos",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "liquidacion_sociedad_comercial",
+    "categoria": "E. Sociedades y otros actos",
+    "nombre": "Disolución y liquidación de sociedad",
+    "prioridad": "Baja",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
+    "id": "protocolizacion",
+    "categoria": "E. Sociedades y otros actos",
+    "nombre": "Protocolizaciones (documentos, planos, licencias, sentencias, prescripción adquisitiva, etc.)",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Fuentes en la carpeta: F08, F25, F46, F65."
+  }
+]

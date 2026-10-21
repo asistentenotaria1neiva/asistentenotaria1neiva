@@ -1,0 +1,50 @@
+// MODELO LIMPIO – Cancelación de condición resolutoria (prohibición de enajenar por subsidio)
+// Fuente: F44 (ver plantillas/modelos/INDICE.md). Datos del caso reemplazados por {{marcadores}}; el resto es el texto literal de la notaría.
+// Estado: PENDIENTE DE APROBACIÓN DEL NOTARIO.
+// Nota: El plazo del ejemplo se cuenta desde el otorgamiento de la escritura de compra. Si la condición se cuenta desde la asignación del subsidio (p. ej., 5 años, F61), la cláusula TERCERO cita el oficio y el acta de la caja de compensación.
+### ESCRITURA PUBLICA NÚMERO: {{numero_escritura_letras}}
+### FECHA DE OTORGAMIENTO: {{fecha_otorgamiento_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+!! {{nombre_propietario}} {{documento_propietario}}
+### CODIGO DE LA NOTARIA 410010001.
+### ESPECIFICACION VALOR DEL ACTO
+!! CANCELACION CONDICION RESOLUTORIA SIN CUANTIA
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria}}. CEDULA CATASTRAL: {{cedula_catastral}}.
+NOMBRE O DIRECCIÓN DEL INMUEBLE: {{direccion_inmueble}}.
+OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.
+En la ciudad de Neiva, Departamento del Huila, Republica de Colombia, a los {{dia_otorgamiento_letras}} ({{dia_otorgamiento}}) DÍAS del mes de {{mes_otorgamiento}} del año {{anio_otorgamiento_letras}} ({{anio_otorgamiento}}), en el CIRCULO NOTARIAL DE NEIVA, donde funciona la Notaria Primera cuyo notario titular en el ejercicio es el doctor {{nombre_notario}}.
+Compareció quien dijo ser, {{nombre_propietario}}, mayor de edad, domiciliado en {{domicilio_propietario}}, identificado con cédula de ciudadanía número {{documento_propietario}} expedida en {{lugar_expedicion_propietario}}, estado civil {{estado_civil_propietario}}, actividad económica {{actividad_economica_propietario}}, y manifestó: PRIMERO: Que mediante escritura pública número {{numero_escritura_antecedente}} del {{fecha_escritura_antecedente}}, otorgada en la {{notaria_escritura_antecedente}}, inscrita al folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} en la Oficina de Registro de Instrumentos Públicos de Neiva, el señor {{nombre_propietario}}, adquirió por {{modo_adquisicion}} hecha a {{nombre_tradente_anterior}}, el derecho de dominio y la posesión del inmueble ubicado en la {{direccion_inmueble}}, en la ciudad de {{municipio_inmueble}}, Departamento del {{departamento_inmueble}}, determinado por su descripción, cabida, linderos, y demás especificaciones como aparece en la citada escritura pública.
+SEGUNDO: Que por la citada escritura pública número {{numero_escritura_antecedente}} del {{fecha_escritura_antecedente}}, otorgada en la {{notaria_escritura_antecedente}}, en la cláusula {{clausula_condicion}} de dicha escritura pública, se estableció como causal de condición resolutoria, la enajenación, durante los {{plazo_condicion_letras}} ({{plazo_condicion}}) años siguientes a la fecha de otorgamiento de la escritura pública o la falsedad o imprecisión de los documentos que acreditaron los requisitos de dicha asignación, limitación al dominio que se inscribió al folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} en la Oficina de Registro de Instrumentos Públicos de Neiva, como “{{descripcion_anotacion}}”, conforme a la anotación número {{numero_anotacion}} del citado folio.
+TERCERO: Que, no habiéndose acreditado falsedad, ni imprecisión en la documentación aportada para la obtención del subsidio y habiendo transcurrido el término de {{plazo_condicion_letras}} ({{plazo_condicion}}) años, contados a partir del otorgamiento de la escritura pública número {{numero_escritura_antecedente}} del {{fecha_escritura_antecedente}}, otorgada en la {{notaria_escritura_antecedente}}, el señor {{nombre_propietario}}, en su condición de actual propietario del inmueble, solicita a la Oficina de Registro de Instrumentos Públicos de Neiva, la cancelación de la anotación número {{numero_anotacion}} de dicho folio, que concierne a la condición resolutoria expresa, por las razones antes expuestas.
+CUARTO: El(la)(los) otorgante(s) solicita(n) e insiste(n) al Notario de autorizar el presente instrumento público con Certificado(s) de Tradición de fecha {{fecha_certificado_tradicion}}.
+Se le agregan los comprobantes correspondientes cuyo texto es el del siguiente tenor:
+- Fotocopia de la cédula de ciudadanía correspondiente.
+DATOS PERSONALES. De conformidad con lo previsto en la Ley 1581 de 2012, Régimen General de Datos Personales y su Decreto Reglamentario 1377 de 2013, se informa a los comparecientes que dentro del protocolo de seguridad adoptado por esta Notaria se ha implementado la toma de huellas e imagen digital de los otorgantes a través del sistema biométrico que se recoge por parte de la Notaria al momento del otorgamiento del presente instrumento público, conociendo que dicho sistema de control implementado tiene por objeto prevenir posibles suplantaciones, salvaguardar los instrumentos y a la eficacia de los negocios jurídicos celebrados, para lo cual los comparecientes autorizan al Notario Primero del Círculo de Neiva, el tratamiento de los datos personales que proporcionen, si son datos de terceros, declaran que tienen el poder suficiente para otorgar esta autorización. Los datos personales podrán ser recolectados, almacenados, clasificados, actualizados, usados, suprimidos, transmitidos o transferidos, para el cumplimiento de las funciones y obligaciones de los notarios, la prestación de los servicios notariales de acuerdo con el Estatuto del Notariado (Decreto 960 de 1970) y demás regulación jurídica vigente; para las demás finalidades que establezca la ley para el caso específico; y las establecidas en las Políticas de Tratamiento de Datos Personales del Notario, disponibles en www.notaria1neiva.com.co. Son derechos de los titulares de datos personales: conocer, actualizar, y rectificar sus datos, previo los procedimientos establecidos en la mencionada Ley.
+ADVERTENCIA. Se advirtió a los otorgantes de esta escritura de la obligación que tiene de leer la totalidad de su texto, a fin de verificar la exactitud de todos los datos en ella consignados con el fin de aclarar, modificar o corregir lo que le pareciere; la firma de la misma demuestre su aprobación total del texto. En consecuencia, la Notaria no asume ninguna responsabilidad por errores o inexactitudes establecidas con posterioridad a la firma de (l) (los) otorgante (s) y del Notario. En tal caso, estos deben ser corregidos mediante el otorgamiento de una nueva escritura, suscrita por el que intervino en la inicial y sufragada por el mismo (Artículo 35 Decreto Ley 960 de 1970). OTORGAMIENTO Y AUTORIZACION. Leído el presente instrumento por los otorgantes se hicieron las advertencias pertinentes y en especial la relacionada con la necesidad de inscribir la copia en el registro competente dentro del término de dos (2) meses siguientes a partir de la fecha de su otorgamiento (Art. 232 Ley 223 de 1995 y 14 del Decreto 650 de 1996), la aprueban y firman conmigo el suscrito Notario que lo autorizo y doy fe a los otorgantes se les advirtió finalmente que una vez firmado el presente instrumento el notario no aceptará correcciones o modificaciones sino en la forma y casos previstos por la ley.
+El anterior instrumento quedó elaborado en las hojas de papel notarial números: {{hojas_papel_notarial}}
+De lo cual doy fe.
+DERECHOS NOTARIALES: {{derechos_notariales}}
+Resolución No. {{resolucion_tarifas}}.
+{{codigo_minuta}}.
+!!
+!! EL OTORGANTE,
+!!
+!!
+!! ______________________________________
+!! {{nombre_propietario}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional Extranjera Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!! EL NOTARIO,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}

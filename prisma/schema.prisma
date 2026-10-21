@@ -1,0 +1,451 @@
+// Modelo de datos – Asistente de escrituración, Notaría Primera del Círculo de Neiva.
+// Base de datos: PostgreSQL (solo accesible desde el servidor de la aplicación).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------- Roles y usuarios
+
+enum Rol {
+  ADMINISTRADOR
+  REVISOR
+  DIGITADOR
+}
+
+enum EstadoUsuario {
+  ACTIVO
+  SUSPENDIDO
+}
+
+model Usuario {
+  id                    String        @id @default(cuid())
+  usuario               String        @unique // nombre de inicio de sesión
+  nombreCompleto        String
+  correo                String?
+  hashContrasena        String // Argon2id
+  rol                   Rol
+  estado                EstadoUsuario @default(ACTIVO)
+  totpSecretoCifrado    String? // AES-256-GCM con la clave maestra
+  totpActivo            Boolean       @default(false)
+  totpUltimoCodigoHash  String? // evita reutilizar el mismo código dentro de su ventana
+  intentosFallidos      Int           @default(0)
+  bloqueadoHasta        DateTime?
+  debeCambiarContrasena Boolean       @default(true)
+  ultimoAcceso          DateTime?
+  creadoEn              DateTime      @default(now())
+  actualizadoEn         DateTime      @updatedAt
+
+  sesiones                Sesion[]
+  expedientesResponsable  Expediente[]  @relation("responsable")
+  expedientesRevisor      Expediente[]  @relation("revisor")
+  documentos              Documento[]
+  observacionesResueltas  Observacion[]
+  correcciones            Correccion[]
+  dispositivosAprobados   Dispositivo[]
+  plantillasCargadas      Plantilla[]   @relation("cargadaPor")
+  plantillasAprobadas     Plantilla[]   @relation("aprobadaPor")
+
+  @@map("usuarios")
+}
+
+// ---------------------------------------------------------------- Dispositivos y sesiones
+
+enum EstadoDispositivo {
+  PENDIENTE
+  APROBADO
+  REVOCADO
+}
+
+model Dispositivo {
+  id             String            @id @default(cuid())
+  nombre         String // p. ej. "Recepción – equipo 2"
+  tokenHash      String            @unique // SHA-256 del token firmado entregado en cookie
+  huella         String? // huella del navegador (dato complementario)
+  estado         EstadoDispositivo @default(PENDIENTE)
+  ipRegistro     String?
+  agenteUsuario  String?
+  aprobadoPor    Usuario?          @relation(fields: [aprobadoPorId], references: [id])
+  aprobadoPorId  String?
+  aprobadoEn     DateTime?
+  ultimoAcceso   DateTime?
+  creadoEn       DateTime          @default(now())
+
+  sesiones Sesion[]
+
+  @@map("dispositivos")
+}
+
+model Sesion {
+  id               String       @id @default(cuid())
+  tokenHash        String       @unique
+  usuario          Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId        String
+  dispositivo      Dispositivo? @relation(fields: [dispositivoId], references: [id])
+  dispositivoId    String?
+  ip               String?
+  agenteUsuario    String?
+  remota           Boolean      @default(false) // fuera de la red de la oficina (solo administrador)
+  segundoFactorOk  Boolean      @default(false)
+  creadaEn         DateTime     @default(now())
+  ultimaActividad  DateTime     @default(now())
+  expiraEn         DateTime
+  revocadaEn       DateTime?
+  motivoRevocacion String?
+
+  @@index([usuarioId])
+  @@map("sesiones")
+}
+
+// ---------------------------------------------------------------- Tipos de escritura, plantillas y esquemas
+
+enum EstadoAprobacion {
+  PENDIENTE_APROBACION
+  APROBADA
+  RETIRADA
+}
+
+model TipoEscritura {
+  id          String  @id // slug, p. ej. "compraventa"
+  categoria   String
+  nombre      String
+  prioridad   String // Alta | Media | Baja
+  esBloque    Boolean @default(false) // bloque común (carátula, cierre…) y no un acto
+  activo      Boolean @default(true)
+  descripcion String?
+  normas      String? // referencia normativa – pendiente de validar por el notario
+
+  plantillas    Plantilla[]
+  esquemas      EsquemaFormulario[]
+  instrucciones InstruccionIA[]
+  expedientes   Expediente[]
+
+  @@map("tipos_escritura")
+}
+
+model Plantilla {
+  id            String           @id @default(cuid())
+  tipo          TipoEscritura    @relation(fields: [tipoId], references: [id])
+  tipoId        String
+  version       Int
+  estado        EstadoAprobacion @default(PENDIENTE_APROBACION)
+  nombreArchivo String
+  archivo       Bytes // .docx con variables {{...}}
+  hashSha256    String
+  notas         String?
+  cargadaPor    Usuario?         @relation("cargadaPor", fields: [cargadaPorId], references: [id])
+  cargadaPorId  String?
+  aprobadaPor   Usuario?         @relation("aprobadaPor", fields: [aprobadaPorId], references: [id])
+  aprobadaPorId String?
+  aprobadaEn    DateTime?
+  creadaEn      DateTime         @default(now())
+
+  @@unique([tipoId, version])
+  @@map("plantillas")
+}
+
+model EsquemaFormulario {
+  id       String           @id @default(cuid())
+  tipo     TipoEscritura    @relation(fields: [tipoId], references: [id])
+  tipoId   String
+  version  Int
+  estado   EstadoAprobacion @default(PENDIENTE_APROBACION)
+  esquema  Json // pasos, campos, tipo de dato, obligatoriedad, validaciones, documentos soporte, reglas
+  creadoEn DateTime         @default(now())
+
+  @@unique([tipoId, version])
+  @@map("esquemas_formulario")
+}
+
+// Instrucciones de la IA por tipo de escritura (el "entrenamiento" se hace aquí, versionado)
+model InstruccionIA {
+  id          String           @id @default(cuid())
+  tipo        TipoEscritura?   @relation(fields: [tipoId], references: [id])
+  tipoId      String? // null = instrucción general
+  proposito   String // EXTRACCION | REVISION
+  version     Int
+  estado      EstadoAprobacion @default(PENDIENTE_APROBACION)
+  contenido   String
+  motivo      String? // qué patrón de error motivó el cambio
+  creadoPorId String?
+  creadaEn    DateTime         @default(now())
+
+  @@unique([tipoId, proposito, version])
+  @@map("instrucciones_ia")
+}
+
+// ---------------------------------------------------------------- Expedientes
+
+enum EstadoExpediente {
+  BORRADOR
+  EN_REVISION
+  DEVUELTO
+  APROBADA // lista para firma del notario
+  FIRMADA
+  ARCHIVADA
+}
+
+model Expediente {
+  id                 String           @id @default(cuid())
+  numeroInterno      String           @unique // EXP-AAAA-NNNNN
+  tipo               TipoEscritura    @relation(fields: [tipoId], references: [id])
+  tipoId             String // acto principal
+  actos              Json // lista ordenada de actos (ids de tipo) que componen la escritura
+  estado             EstadoExpediente @default(BORRADOR)
+  datos              Json             @default("{}") // datos del formulario por pasos
+  responsable        Usuario          @relation("responsable", fields: [responsableId], references: [id])
+  responsableId      String
+  revisor            Usuario?         @relation("revisor", fields: [revisorId], references: [id])
+  revisorId          String?
+  comentarioRevision String?
+  numeroEscritura    Int?
+  creadoEn           DateTime         @default(now())
+  actualizadoEn      DateTime         @updatedAt
+  enviadoRevisionEn  DateTime?
+  aprobadoEn         DateTime?
+
+  comparecientes Compareciente[]
+  inmuebles      Inmueble[]
+  documentos     Documento[]
+  datosExtraidos DatoExtraido[]
+  analisis       AnalisisIA[]
+  observaciones  Observacion[]
+  borradores     Borrador[]
+  correcciones   Correccion[]
+
+  @@index([estado])
+  @@index([responsableId])
+  @@map("expedientes")
+}
+
+// Copias normalizadas de los comparecientes e inmuebles del formulario (búsqueda y estadísticas)
+model Compareciente {
+  id              String     @id @default(cuid())
+  expediente      Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  expedienteId    String
+  rol             String // VENDEDOR, COMPRADOR, APODERADO, ACREEDOR…
+  tipoPersona     String // NATURAL | JURIDICA
+  nombre          String
+  tipoDocumento   String
+  numeroDocumento String
+  datos           Json
+
+  @@index([numeroDocumento])
+  @@map("comparecientes")
+}
+
+model Inmueble {
+  id              String     @id @default(cuid())
+  expediente      Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  expedienteId    String
+  matricula       String?
+  cedulaCatastral String?
+  direccion       String?
+  datos           Json
+
+  @@index([matricula])
+  @@map("inmuebles")
+}
+
+model Documento {
+  id            String     @id @default(cuid())
+  expediente    Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  expedienteId  String
+  tipoDocumental String // CEDULA, CERTIFICADO_TRADICION, PAZ_Y_SALVO, …
+  nombreOriginal String
+  mime          String
+  tamano        Int
+  hashSha256    String // del archivo original (integridad)
+  rutaCifrada   String // ruta relativa en el almacenamiento cifrado
+  estadoAnalisis String   @default("PENDIENTE") // PENDIENTE | EN_CURSO | COMPLETADO | ERROR
+  hechos        Json? // datos extraídos por la IA: { campo: { valor, pagina, fragmento, confianza } }
+  subidoPor     Usuario    @relation(fields: [subidoPorId], references: [id])
+  subidoPorId   String
+  creadoEn      DateTime   @default(now())
+
+  datosExtraidos DatoExtraido[]
+
+  @@map("documentos")
+}
+
+// ---------------------------------------------------------------- IA
+
+enum Confianza {
+  ALTA
+  MEDIA
+  BAJA
+}
+
+model AnalisisIA {
+  id                  String     @id @default(cuid())
+  expediente          Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  expedienteId        String
+  proposito           String // EXTRACCION | REVISION
+  modelo              String
+  versionInstruccion  String?
+  estado              String // EN_CURSO | COMPLETADO | ERROR
+  tokensEntrada       Int        @default(0)
+  tokensSalida        Int        @default(0)
+  tokensCacheLectura  Int        @default(0)
+  duracionMs          Int?
+  error               String?
+  documentoId         String?
+  resultado           Json?
+  creadoEn            DateTime   @default(now())
+
+  datos DatoExtraido[]
+
+  @@map("analisis_ia")
+}
+
+model DatoExtraido {
+  id                 String      @id @default(cuid())
+  expediente         Expediente  @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  expedienteId       String
+  analisis           AnalisisIA  @relation(fields: [analisisId], references: [id], onDelete: Cascade)
+  analisisId         String
+  campo              String // ruta del campo en el formulario, p. ej. "vendedores[0].numero_documento"
+  valor              Json
+  documento          Documento?  @relation(fields: [documentoId], references: [id])
+  documentoId        String?
+  pagina             Int?
+  fragmento          String? // texto de origen
+  confianza          Confianza
+  revisionManual     Boolean     @default(false) // confianza baja o validación fallida
+  estado             String      @default("PENDIENTE") // PENDIENTE | ACEPTADO | CORREGIDO | DESCARTADO
+  valorFinal         Json?
+  creadoEn           DateTime    @default(now())
+
+  @@index([expedienteId, campo])
+  @@map("datos_extraidos")
+}
+
+enum NivelObservacion {
+  CRITICA
+  ADVERTENCIA
+  INFORMATIVA
+}
+
+enum EstadoObservacion {
+  ABIERTA
+  CORREGIDA
+  JUSTIFICADA
+  DESCARTADA
+}
+
+model Observacion {
+  id            String            @id @default(cuid())
+  expediente    Expediente        @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  expedienteId  String
+  origen        String // REGLA | IA
+  codigo        String // código de la regla o "IA"
+  nivel         NivelObservacion
+  mensaje       String
+  campo         String?
+  evidencia     Json?
+  estado        EstadoObservacion @default(ABIERTA)
+  justificacion String?
+  falsaAlarma   Boolean? // marcado por quien la resuelve (indicador mensual)
+  resueltaPor   Usuario?          @relation(fields: [resueltaPorId], references: [id])
+  resueltaPorId String?
+  resueltaEn    DateTime?
+  creadaEn      DateTime          @default(now())
+
+  @@index([expedienteId, estado])
+  @@map("observaciones")
+}
+
+model Borrador {
+  id                String     @id @default(cuid())
+  expediente        Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  expedienteId      String
+  version           Int
+  plantillasUsadas  Json // ids y versiones de las plantillas aprobadas usadas
+  rutaDocxCifrada   String
+  rutaPdfCifrada    String?
+  hashSha256        String
+  generadoPorId     String
+  creadoEn          DateTime   @default(now())
+
+  @@unique([expedienteId, version])
+  @@map("borradores")
+}
+
+// Casos de aprendizaje (anonimizados) para el ciclo de entrenamiento de 6 meses
+model Correccion {
+  id             String     @id @default(cuid())
+  expediente     Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  expedienteId   String
+  tipoId         String
+  categoria      String // EXTRACCION | OBSERVACION | BORRADOR | REVISION
+  campo          String?
+  valorIA        String? // anonimizado
+  valorCorregido String? // anonimizado
+  motivo         String?
+  creadoPor      Usuario    @relation(fields: [creadoPorId], references: [id])
+  creadoPorId    String
+  creadoEn       DateTime   @default(now())
+
+  @@index([tipoId, campo])
+  @@map("correcciones")
+}
+
+// ---------------------------------------------------------------- Auditoría, alertas y configuración
+
+// Registro inmodificable: un disparador en PostgreSQL bloquea UPDATE y DELETE,
+// y cada fila encadena el hash de la anterior (cualquier alteración rompe la cadena).
+model Auditoria {
+  id             BigInt   @id @default(autoincrement())
+  fecha          DateTime @default(now())
+  usuarioId      String?
+  usuarioNombre  String?
+  dispositivoId  String?
+  ip             String?
+  accion         String
+  entidad        String?
+  entidadId      String?
+  detalle        Json?
+  hashAnterior   String
+  hash           String   @unique
+
+  @@index([fecha])
+  @@index([usuarioId])
+  @@index([accion])
+  @@map("auditoria")
+}
+
+model Alerta {
+  id        String   @id @default(cuid())
+  tipo      String // DISPOSITIVO_NO_AUTORIZADO | BLOQUEO_USUARIO | IP_NO_PERMITIDA | ACTIVIDAD_INUSUAL | …
+  severidad String // ALTA | MEDIA | BAJA
+  mensaje   String
+  datos     Json?
+  atendida  Boolean  @default(false)
+  creadaEn  DateTime @default(now())
+
+  @@index([atendida, creadaEn])
+  @@map("alertas")
+}
+
+model Configuracion {
+  clave           String   @id
+  valor           Json
+  actualizadoPor  String?
+  actualizadoEn   DateTime @updatedAt
+
+  @@map("configuracion")
+}
+
+// Contador para limitar peticiones (rate limiting) por clave e intervalo
+model LimitePeticiones {
+  clave      String   @id
+  conteo     Int
+  ventanaFin DateTime
+
+  @@map("limite_peticiones")
+}

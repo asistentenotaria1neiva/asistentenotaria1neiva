@@ -1,0 +1,125 @@
+// MODELO LIMPIO – Declaración de unión marital de hecho y de sociedad patrimonial, con disolución y liquidación de la sociedad patrimonial (por apoderado)
+// Fuente: F66 (ver plantillas/modelos/INDICE.md). Datos del caso reemplazados por {{marcadores}}; el resto es el texto literal de la notaría.
+// Estado: PENDIENTE DE APROBACIÓN DEL NOTARIO.
+// Nota: El inventario del ejemplo tenía ocho partidas (inmuebles rurales con y sin matrícula, un derecho de cuota y dos vehículos). Se dejó una partida modelo de inmueble y una de vehículo: repítalas por cada bien.
+// Nota: En las hijuelas, {{partidas_hijuela_1}} y {{partidas_hijuela_2}} repiten la descripción completa de cada partida adjudicada.
+// Nota: El ejemplo adjudica sin tener en cuenta la liquidación por mitades ("según acuerdo entre las partes manifiestan no tener en cuenta la liquidación anterior"); si se reparte por mitades, ajuste la frase.
+// Nota: Para partidas sin matrícula (derechos derivados de contrato de compraventa) el ejemplo agrega: "PARAGRAFO: Esta partida no cuenta con pago de impuesto predial, teniendo en cuenta que solo tiene derechos derivados de un contrato de compraventa."
+// Nota: El ejemplo fue otorgado ante notaria encargada; si firma el notario titular use el encabezado estándar.
+### ESCRITURA PÚBLICA NÚMERO: {{numero_escritura_letras}}
+### FECHA DE OTORGAMIENTO: {{fecha_otorgamiento_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+!! {{nombre_companero_1}} {{documento_companero_1}}
+!! {{nombre_companero_2}} {{documento_companero_2}}
+!! REPRESENTADOS POR {{nombre_apoderado}} {{documento_apoderado}}
+### CODIGO DE LA NOTARIA 410010001.
+### ESPECIFICACION VALOR DEL ACTO
+!! DECLARACION DE LA EXISTENCIA DE LA UNION MARITAL DE HECHO SIN CUANTIA
+!! DECLARACION CONSTITUCION DE LA SOCIEDAD PATRIMONIAL DE HECHO SIN CUANTIA
+!! DISOLUCION Y LIQUIDACION DE LA SOCIEDAD PATRIMONIAL DE HECHO {{total_activos}}
+En la ciudad de Neiva, Departamento del Huila, República de Colombia, a los {{dia_otorgamiento_letras}} ({{dia_otorgamiento}}) DÍAS del mes de {{mes_otorgamiento}} del año {{anio_otorgamiento_letras}} ({{anio_otorgamiento}}) donde funciona la NOTARÍA PRIMERA DEL CÍRCULO DE NEIVA, cuya Notaria Encargada es la señora {{nombre_notario}}, según Resolución No. {{resolucion_encargo}}, de la Superintendencia de Notariado y Registro.
+Compareció quien dijo ser, {{nombre_apoderado}}, mayor de edad, domiciliada en {{domicilio_apoderado}}, identificada con cédula de ciudadanía número {{documento_apoderado}} expedida en {{lugar_expedicion_apoderado}}, Abogada en ejercicio con tarjeta profesional número {{tarjeta_profesional_apoderado}} del Consejo Superior de la Judicatura, quien obra en nombre y en representación de {{nombre_companero_1}}, mayor de edad, domiciliado en {{domicilio_companero_1}}, identificado con cédula de ciudadanía número {{documento_companero_1}} expedida en {{lugar_expedicion_companero_1}}, y de {{nombre_companero_2}}, mayor de edad, domiciliada en {{domicilio_companero_2}}, identificada con cédula de ciudadanía número {{documento_companero_2}} expedida en {{lugar_expedicion_companero_2}}, estado civil SOLTEROS, CON UNION MARITAL DE HECHO, ENTRE SI, en virtud del poder especial otorgado, de cuya vigencia y términos se hace plenamente responsable, documento que se adjunta para su protocolización, y manifestó:
+PRIMERO: Que sus poderdantes {{nombre_companero_1}} y {{nombre_companero_2}}, en la fecha {{fecha_inicio_union}}, de forma libre y espontánea, iniciaron vida común como marido y mujer, sin ser casados entre sí, conviviendo en forma permanente durante todo este tiempo y hasta la fecha, bajo un mismo techo; de conformidad a lo fundamentado en el Artículo 4 de la Ley 979 de 2005 y Artículos 2.2.6.15.2.5.1 subsección 5 del Decreto 1664 de 2015.
+SEGUNDO: Que este trámite se inicia por mutuo consentimiento a petición de sus poderdantes, quienes son solteros, sin uniones maritales o sociedades patrimoniales anteriores vigentes, y que de conformidad con el Artículo 7 del Decreto 2817 de 2006, no tienen hijos que tengan bienes bajo su administración, razón por la cual no adjuntan inventario solemne de bienes.
+TERCERO: Que en uso de la facultad consagrada en el Artículo 4 de la Ley 54 de 1990, modificada por la Ley 979 de 2005, la apoderada procede a realizar el acto de DECLARACION DE LA EXISTENCIA DE LA UNION MARITAL DE HECHO, para que a través del presente instrumento público se produzcan todos los efectos consagrados en la ley, al no existir impedimento alguno que impida su conformación y reconocimiento.
+CUARTO: Que, por lo anterior, y de conformidad con la facultad consagrada en la Ley 979 de 2005 en el Artículo 2.1 y Artículos 2.2.6.15.2.5.6, subsección 5 del Decreto 1664 de 2015, y sin que sus poderdantes tengan impedimento alguno para contraer matrimonio, y como resultado de dicha convivencia, la apoderada procede a realizar el acto de DECLARACION CONSTITUCION DE LA SOCIEDAD PATRIMONIAL DE HECHO. QUINTO: Que por razón de la DECLARACION DE LA EXISTENCIA DE LA UNION MARITAL DE HECHO, la apoderada procede a realizar el acto de DISOLUCION Y LIQUIDACION DE LA SOCIEDAD PATRIMONIAL DE HECHO, de acuerdo a lo dispuesto en el Artículo 5.1 de la Ley 979 de 2005 y Artículos 2.2.6.15.2.5.1 al 2.2.6.15.2.5.8, subsección 5 del Decreto 1664 de 2015.
+SEXTO: Que sus poderdantes {{nombre_companero_1}} y {{nombre_companero_2}}, acuerdan lo siguiente: 1. Que se declare nuestra UNION MARITAL DE HECHO el cual comenzó el {{fecha_inicio_union}}. 2. Que por medio de escritura pública se declare la CONSTITUCION DE LA SOCIEDAD PATRIMONIAL DE HECHO, surgida en virtud de la unión marital de hecho.
+3. Se declare la DISOLUCION Y LIQUIDACION DE LA SOCIEDAD PATRIMONIAL DE HECHO, la cual se hará la liquidación como mas adelante se indicará.
+4. Que una vez firmada la respectiva escritura pública que decrete la declaración de la unión marital de hecho, constitución de la sociedad patrimonial de hecho, disolución y liquidación de la sociedad patrimonial de hecho, las partes quedamos en libertad de contraer nuevas nupcias o relaciones maritales.
+5. Manifestamos que no nos debemos alimentos mutuos ya que contamos con ingresos derivados de nuestra actividad laboral, sino que por el contrario, cada uno velará por sus alimentos.
+6. Además nos obligamos y comprometemos a respetarnos mutuamente, esto es, no agresiones verbales y mucho menos físicas, porque de llegar a presentarse quedan en libertad de acudir a las autoridades competentes.
+7. Que la compañera {{nombre_companero_2}}, no se encuentra en estado de embarazo.
+8. Que los señores {{nombre_companero_1}} y {{nombre_companero_2}}, no quedan obligados a suministrarse alimentos en razón a que cuentan con lo necesario para asegurar su propia subsistencia, según acuerdo firmado por los compañeros permanentes y que se adjunta a esta solicitud para que sea protocolizado con la respectiva escritura pública.
+RESPECTO A LA SOCIEDAD PATRIMONIAL
+Que los bienes adquiridos por {{nombre_companero_1}} y {{nombre_companero_2}}, en la sociedad patrimonial son los siguientes:
+ACTIVOS
+PRIMERA PARTIDA: {{descripcion_inmueble_partida}}, ubicado en {{ubicacion_inmueble_partida}}, en {{municipio_inmueble_partida}}, Departamento del {{departamento_inmueble_partida}}, con área de {{area_partida_letras}} ({{area_partida}}), determinado por los siguientes linderos: {{linderos_partida}}
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria_partida}}.
+CEDULA CATASTRAL: {{cedula_catastral_partida}}.
+TRADICION: Que el inmueble fue adquirido por el compañero permanente {{nombre_adquirente_partida}}, por {{modo_adquisicion_partida}} hecha a {{nombre_tradente_partida}}, mediante escritura pública número {{numero_escritura_antecedente_partida}} del {{fecha_escritura_antecedente_partida}}, otorgada en la {{notaria_escritura_antecedente_partida}}, inscrita al folio de matrícula inmobiliaria número {{matricula_inmobiliaria_partida}} en la Oficina de Registro de Instrumentos Públicos de {{oficina_registro_partida}}; e inscrita a la cedula catastral número {{cedula_catastral_partida}}.
+Este bien inmueble se avalúa en la suma de {{avaluo_partida}}
+SEGUNDA PARTIDA: Vehículo automotor con las siguientes características:
+PLACA: {{placa}} MARCA: {{marca}}.
+LINEA: {{linea}} MODELO: {{modelo}}.
+COLOR: {{color}} SERVICIO: {{servicio}}.
+CLASE VEHICULO: {{clase_vehiculo}} PASAJEROS: {{pasajeros}}.
+TIPO CARROCERIA: {{tipo_carroceria}} COMBUSTIBLE: {{combustible}}.
+NÚMERO CHASIS: {{numero_chasis}} NÚMERO MOTOR: {{numero_motor}}.
+ORGANISMO DE TRANSITO: {{organismo_transito}}.
+TRADICIÓN: Que el vehículo automotor fue adquirido por el compañero permanente {{nombre_adquirente_vehiculo}}, en la fecha {{fecha_adquisicion_vehiculo}}. Este bien mueble según el acuerdo se avalúa en la suma de {{avaluo_acuerdo_vehiculo}} y según el avalúo comercial se avalúa en la suma de {{avaluo_comercial_vehiculo}} este último valor se tiene en cuenta para los derechos notariales.
+TOTAL ACTIVOS: Según lo estipulado en el acuerdo es por la suma de {{total_activos_acuerdo}}. De acuerdo a los avalúos comerciales de cada una de las partidas y para que sea liquidado los derechos notariales se tendrá en cuenta la totalidad del activo en la suma de {{total_activos}}.
+PASIVOS
+No existe pasivo alguno, por lo tanto, es $0.
+TOTAL PASIVOS $0
+LIQUIDACION: Ante la inexistencia de pasivos, el valor de los gananciales se obtiene dividiendo entre dos (2), el total del activo liquido una vez deducido el pasivo como se resume a continuación:
+TOTAL ACTIVOS - TOTAL PASIVOS = ACTIVO LIQUIDO / 2 = GANANCIALES
+{{total_activos}} - $0= {{total_activos}} / 2 = {{gananciales_cada_uno}} para cada uno.
+Para {{nombre_companero_1}} 50% {{gananciales_cada_uno}}
+Para {{nombre_companero_2}} 50% {{gananciales_cada_uno}}
+SUMAS IGUALES 100% {{total_activos}}
+ADJUDICACIONES: De acuerdo con lo antes determinado, según acuerdo entre las partes manifiestan no tener en cuenta la liquidación anterior, por lo tanto, la distribución de los bienes sociales es como sigue: PRIMERA HIJUELA PARA EL COMPAÑERO PERMANENTE {{nombre_companero_1}}, mayor de edad, domiciliado en {{domicilio_companero_1}}, identificado con cédula de ciudadanía número {{documento_companero_1}} expedida en {{lugar_expedicion_companero_1}}, le corresponde la suma de {{valor_hijuela_1_letras}} ({{valor_hijuela_1}}); para pagarle se le adjudica el 100% de las siguientes partidas:
+{{partidas_hijuela_1}}
+SUMA Y QUEDA PAGA ESTA HIJUELA EN {{valor_hijuela_1}}
+SEGUNDA HIJUELA PARA LA COMPAÑERA PERMANENTE {{nombre_companero_2}}, mayor de edad, domiciliada en {{domicilio_companero_2}}, identificada con cédula de ciudadanía número {{documento_companero_2}} expedida en {{lugar_expedicion_companero_2}}, le corresponde la suma de {{valor_hijuela_2_letras}} ({{valor_hijuela_2}}); para pagarle se le adjudica el 100% de las siguientes partidas:
+{{partidas_hijuela_2}}
+SUMA Y QUEDA PAGA ESTA HIJUELA EN {{valor_hijuela_2}}
+SEPTIMO. ACEPTACION: La apoderada de {{nombre_companero_1}} y {{nombre_companero_2}}, enterada del contenido del presente instrumento público, por encontrarse ajustado a la Ley y a las pretensiones de sus mandantes, procede a su otorgamiento en señal de aceptación.
+OCTAVO. AUTORIZACIÓN: El suscrito Notario Primero de Neiva, autoriza el presente instrumento con la apoderada debidamente facultada por los compañeros permanentes, previo el cumplimiento de las disposiciones legales.
+NOVENO. INSCRIPCIÓN Y REGISTRO: Una vez suscrita la escritura pública de DECLARACION DE LA EXISTENCIA DE LA UNION MARITAL DE HECHO, DECLARACION CONSTITUCION DE LA SOCIEDAD PATRIMONIAL DE HECHO Y DISOLUCION Y LIQUIDACION DE LA SOCIEDAD PATRIMONIAL DE HECHO POR MUTUO ACUERDO, en el Libro de Registro de Varios, el Notario comunicará la inscripción al funcionario competente, de la REGISTRADURIA NACIONAL DEL ESTADO CIVIL Y/O NOTARIA, quien hará las anotaciones del caso de acuerdo con lo señalado en el Artículo 6 del Decreto 4436 de 2005. DECIMO. OBLIGATORIEDAD DEL CONVENIO: El presente acuerdo se celebra en desarrollo de las Leyes 1a. de 1976 y Ley 962 de 2005 y Decreto 4436 de 2005. En consideración a que el presente acuerdo, ha sido aprobado en todas y cada una de sus partes y estando en pleno uso de nuestras facultades mentales y libres de toda coacción aceptamos lo anterior en su integridad. DECIMO PRIMERO: La apoderada hace constar que ha verificado cuidadosamente los nombres completos, números de cédulas y demás datos de sus poderdantes; declara que todas las informaciones consignadas en el presente instrumento son correctas y en consecuencia, asume la responsabilidad que se derive de cualquier inexactitud de los mismos se advierte que el Notario responde de la regularidad formal del instrumento que autoriza, pero no de la veracidad de las declaraciones de los otorgantes.
+PARAGRAFO: El Notario, en vista que se ha cumplido los requisitos establecidos en el Artículo 34 de la Ley 962 de 2005, reglamentado por el Decreto 4436 del 28 de Noviembre de 2005, autoriza la presente escritura.
+Se le agregan los comprobantes fiscales correspondientes cuyo texto es el del siguiente tenor: Certificado de paz y salvo por concepto de predial unificado del predio inscrito en el catastro vigente bajo el número {{cedula_catastral_partida}} expedido por la Secretaría de Hacienda de {{municipio_paz_y_salvo}}, de fecha {{fecha_paz_y_salvo}} con vigencia hasta el {{vigencia_paz_y_salvo}}, en el cual consta que el referido inmueble tiene un avalúo de {{avaluo_catastral}}.
+- Fotocopias de las cedulas de ciudadanía correspondientes. Registros civiles de nacimiento de {{nombre_companero_1}} y {{nombre_companero_2}}
+- La respectiva solicitud.
+- Acuerdo correspondiente.
+- Poder especial otorgado a {{nombre_apoderado}}.
+- {{documentos_soporte_partidas}}. Fotocopias de las tarjetas de propiedad de los vehículos correspondientes.
+- Certificados de tradición de los vehículos correspondientes.
+- Base gravable de los vehículos correspondientes.
+DATOS PERSONALES. De conformidad con lo previsto en la Ley 1581 de 2012, Régimen General de Datos Personales y su Decreto Reglamentario 1377 de 2013, se informa a los comparecientes que dentro del protocolo de seguridad adoptado por esta Notaria se ha implementado la toma de huellas e imagen digital de los otorgantes a través del sistema biométrico que se recoge por parte de la Notaria al momento del otorgamiento del presente instrumento público, conociendo que dicho sistema de control implementado tiene por objeto prevenir posibles suplantaciones, salvaguardar los instrumentos y a la eficacia de los negocios jurídicos celebrados, para lo cual los comparecientes autorizan al Notario Primero del Círculo de Neiva, el tratamiento de los datos personales que proporcionen, si son datos de terceros, declaran que tienen el poder suficiente para otorgar esta autorización. Los datos personales podrán ser recolectados, almacenados, clasificados, actualizados, usados, suprimidos, transmitidos o transferidos, para el cumplimiento de las funciones y obligaciones de los notarios, la prestación de los servicios notariales de acuerdo con el Estatuto del Notariado (Decreto 960 de 1970) y demás regulación jurídica vigente; para las demás finalidades que establezca la ley para el caso específico; y las establecidas en las Políticas de Tratamiento de Datos Personales del Notario, disponibles en www.notaria1neiva.com.co. Son derechos de los titulares de datos personales: conocer, actualizar, y rectificar sus datos, previo los procedimientos establecidos en la mencionada Ley.
+ADVERTENCIA. Se advirtió a los otorgantes de esta escritura, de la obligación que tiene de leer la totalidad de su texto, a fin de verificar la exactitud de todos los datos en ella consignados con el fin de aclarar, modificar o corregir lo que le pareciere; la firma de la misma demuestra su aprobación total del texto. En consecuencia, el Notario no asume ninguna responsabilidad por errores o inexactitudes establecidas con posterioridad a la firma de (l) (los) otorgante(s) y del Notario. En tal caso, estos deben ser corregidos mediante el otorgamiento de una nueva escritura suscrita por el que intervino en la inicial y sufragada por el mismo (Artículo 35 Decreto Ley 960 de 1970).
+OTORGAMIENTO Y AUTORIZACION. Leído el presente instrumento por los otorgantes se hicieron las advertencias pertinentes y la aprueban y firman conmigo el suscrito Notario que lo autorizo y doy fe a los otorgantes que se les advirtió finalmente que una vez firmado el presente instrumento el notario no aceptará correcciones o modificaciones.
+El anterior instrumento quedó elaborado en las hojas de papel notarial números: {{hojas_papel_notarial}}
+De lo cual doy fe.
+DERECHOS NOTARIALES: {{derechos_notariales}}
+LIBRO DE VARIOS: {{libro_varios}}
+Resolución No. {{resolucion_tarifas}}.
+{{codigo_minuta}}.
+!!
+!! LA OTORGANTE,
+!!
+!!
+!! ______________________________________
+!! {{nombre_apoderado}}
+!! EN REPRESENTACIÓN DE {{nombre_companero_1}} Y {{nombre_companero_2}}.
+!! C.C. No. TP. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!! LA NOTARIA E,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}
+@@SALTO_PAGINA@@
+!! Neiva, {{fecha_oficio}}
+!! Señores
+!! {{destinatario_oficio}}.
+!! Ciudad.
+!! Atentamente me permito informarle que mediante escritura pública número {{numero_escritura}} de fecha {{fecha_escritura}}, otorgada en esta Notaria, se efectuó la DECLARACION DE LA EXISTENCIA DE LA UNION MARITAL DE HECHO, DECLARACION DE LA CONSTITUCION DE LA SOCIEDAD PATRIMONIAL DE HECHO Y DISOLUCION Y LIQUIDACION DE LA SOCIEDAD PATRIMONIAL DE HECHO, de los señores {{nombre_companero_1}} y {{nombre_companero_2}}, cuyo {{registro_civil_objeto_oficio}}, se encuentra inscrito en esa {{oficina_destino}}, {{datos_inscripcion_registro}}.
+!! Anotado Libro de Varios,
+!! Cordialmente,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}
+!! NOTARIO PRIMERO DE NEIVA
+!! CALLE 7 No 4-62 LOCAL HOTEL PLAZA - NEIVA (HUILA) TELÉFONOS (608) 8711484 - (608) 8710363 - (608) 8711215
+!! E-mail: PRIMERANEIVA@SUPERNOTARIADO.GOV.CO - NOTARIAPRIMERADENEIVA@HOTMAIL.COM

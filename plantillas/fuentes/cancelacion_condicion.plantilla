@@ -1,0 +1,11 @@
+// ACTO – CANCELACIÓN DE CONDICIÓN RESOLUTORIA (subsidio de vivienda).
+// Fuentes: F44 (4 - CONDICION 2 AÑOS) y F61 (6 - CONDICION 5 AÑOS), primer acto.
+// Variante de 2 años: el plazo se cuenta desde el otorgamiento de la escritura.
+// Variante de 5 años: el plazo se cuenta desde la asignación del subsidio (oficio/acta de la caja).
+{{#titulo_acto}}
+### {{titulo_acto}}
+{{/titulo_acto}}
+{{a.comparecencia}}, y {{a.manifesto}}: {{ord()}}: Que mediante escritura pública número {{a.escritura_origen_texto}}, inscrita al folio de matrícula inmobiliaria número {{a.inmueble.matricula}} en la Oficina de Registro de Instrumentos Públicos de {{a.inmueble.orip_ciudad}}, {{a.propietario | el:'señor'}} {{a.propietario.nombre}}, adquirió por {{a.inmueble.modo_y_tradente}}, el derecho de dominio y la posesión del inmueble {{a.inmueble.identificado_como}}ubicado en la {{a.inmueble.direccion}}, en {{a.inmueble.municipio_texto}}, determinado por su descripción, cabida, linderos, y demás especificaciones como aparece en la citada escritura pública.
+{{ord()}}: Que por la citada escritura pública número {{a.escritura_origen_corta}}, en la cláusula {{a.clausula}} de dicha escritura pública, se estableció como causal de condición resolutoria, {{a.causal_texto}}, limitación al dominio que se inscribió al folio de matrícula inmobiliaria número {{a.inmueble.matricula}} en la Oficina de Registro de Instrumentos Públicos de {{a.inmueble.orip_ciudad}}, como “{{a.inscripcion_texto}}”, conforme a la anotación número {{a.anotacion}} del citado folio.
+{{ord()}}: Que, no habiéndose acreditado falsedad, ni imprecisión en la documentación aportada para la obtención del subsidio y habiendo transcurrido el término de {{a.plazo_texto}}, {{a.conteo_texto}}, {{a.propietario | el:'señor'}} {{a.propietario.nombre}}, en su condición de {{a.propietario | sust:'actual propietario'}} del inmueble, solicita a la Oficina de Registro de Instrumentos Públicos de {{a.inmueble.orip_ciudad}}, la cancelación de la anotación número {{a.anotacion}} de dicho folio, que concierne a la condición resolutoria expresa, por las razones antes expuestas.
+{{ord()}}: El(la)(los) otorgante(s) solicita(n) e insiste(n) al Notario de autorizar el presente instrumento público con Certificado(s) de Tradición de fecha {{a.inmueble.fecha_certificado}}.

@@ -1,0 +1,62 @@
+// MODELO LIMPIO – Cancelación de hipoteca (por entidad bancaria)
+// Fuente: F16 (ver plantillas/modelos/INDICE.md). Datos del caso reemplazados por {{marcadores}}; el resto es el texto literal de la notaría.
+// Estado: PENDIENTE DE APROBACIÓN DEL NOTARIO.
+// Nota: El texto conserva "el señor" para el deudor; ajústelo si es mujer o varios deudores.
+### ESCRITURA PÚBLICA NÚMERO: {{numero_escritura_letras}}
+### FECHA DE OTORGAMIENTO: {{fecha_otorgamiento_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+!! {{banco_acreedor}} NIT. {{nit_banco}}
+!! REPRESENTADO POR {{nombre_apoderado_banco}} {{documento_apoderado_banco}}
+### CODIGO DE LA NOTARIA 410010001.
+### ESPECIFICACION VALOR DEL ACTO
+!! CANCELACION HIPOTECA SIN CUANTIA
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria}}.
+CEDULA CATASTRAL: {{cedula_catastral}}.
+NOMBRE O DIRECCIÓN DEL INMUEBLE: {{direccion_inmueble}}.
+OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.
+En la ciudad de Neiva, Departamento del Huila, Republica de Colombia, a los {{dia_otorgamiento_letras}} ({{dia_otorgamiento}}) DÍAS del mes de {{mes_otorgamiento}} del año {{anio_otorgamiento_letras}} ({{anio_otorgamiento}}), en el CIRCULO NOTARIAL DE NEIVA, donde funciona la Notaria Primera cuyo notario titular en el ejercicio es el doctor {{nombre_notario}}.
+Compareció quien dijo ser, {{nombre_apoderado_banco}}, mayor de edad, domiciliado en {{domicilio_apoderado_banco}}, identificado con cédula de ciudadanía número {{documento_apoderado_banco}} expedida en {{lugar_expedicion_apoderado_banco}}, quien obra en nombre y en representación del {{banco_acreedor}}, con NIT. {{nit_banco}}, establecimiento bancario con domicilio principal en {{domicilio_banco}}, en virtud del poder especial otorgado mediante escritura pública número {{escritura_poder}}, otorgada en la {{notaria_poder}}, junto con el certificado de vigencia, documentos que se adjuntan para su protocolización con esta escritura para que forme parte de ella y se inserte en las copias de que de la misma se expidan, y manifestó: PRIMERO: Que obrando en el carácter mencionado cancela totalmente la hipoteca constituida por el señor {{nombre_deudor}}, mayor de edad, identificado con cedula de ciudadanía número {{documento_deudor}} expedida en {{lugar_expedicion_deudor}}, a favor del {{banco_acreedor}}, con NIT. {{nit_banco}}, mediante escritura pública número {{numero_escritura_hipoteca}} del {{fecha_escritura_hipoteca}}, otorgada en la {{notaria_escritura_hipoteca}}, inscrita al folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} en la Oficina de Registro de Instrumentos Públicos de Neiva.
+SEGUNDO: Que el citado gravamen fue constituido sobre el siguiente inmueble:
+{{descripcion_inmueble}}, ubicado en la {{direccion_inmueble}}, en {{municipio_inmueble}}, Departamento del {{departamento_inmueble}}, inscrito al folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} en la Oficina de Registro de Instrumentos Públicos de Neiva, determinado por su descripción, cabida, linderos, y demás especificaciones como aparece en la citada escritura pública.
+TERCERO: Que la hipoteca que por este instrumento se cancela se había constituido para garantizar obligaciones al {{banco_acreedor}}, por la suma de {{valor_hipoteca_letras}} ({{valor_hipoteca_numeros}}), siendo entendido que son de cargo del señor {{nombre_deudor}}, los gastos de notariado y registro que se causen por esta cancelación.
+PARAGRAFO: Para efectos del pago de derechos notariales y de inscripción en la Oficina de Registro de Instrumentos Públicos de Neiva correspondientes a la presente CANCELACION DE LA HIPOTECA se establece que se trata de un ACTO SIN CUANTIA al tenor de lo dispuesto por el Articulo 23 de la Ley 546 de 1999 en concordancia con el literal d) del Articulo 36 de la Resolución No. 088 de 2014 de la Superintendencia de Notariado y Registro.
+CUARTO: Que como consecuencia de esta cancelación el {{banco_acreedor}}, declara libre de todo gravamen el anterior inmueble.
+QUINTO: El {{banco_acreedor}}, deja constancia que la cancelación de esta garantía no significa que el deudor hubiera hecho pago hasta por la cuantía o limite señalado en la escritura de hipoteca que se cancela.
+SEXTO: El(la)(los) otorgante(s) solicita(n) e insiste(n) al Notario de autorizar el presente instrumento público con Certificado(s) de Tradición de fecha {{fecha_certificado_tradicion}}.
+HASTA AQUI LA MINUTA PRESENTADA
+NOTA. LA PRESENTE ESCRITURA PÚBLICA SE ELABORÓ DE CONFORMIDAD CON LA MINUTA PRESENTADA ANTE ESTA NOTARIA POR SUS OTORGANTES A QUIENES LES FUE PRESENTADA PARA SU ESTUDIO Y QUIENES AL LEERLA APROBARON SU CONTENIDO POR LO CUAL PROCEDIERON A OTORGARLA CON SU FIRMA Y POSTERIORMENTE FUE AUTORIZADA POR EL NOTARIO.
+Se le agregan los comprobantes correspondientes cuyo texto es el del siguiente tenor: Certificado de Existencia y Representación Legal del {{banco_acreedor}}.
+- Escritura Poder General otorgado a {{nombre_apoderado_banco}}. -
+DATOS PERSONALES. De conformidad con lo previsto en la Ley 1581 de 2012, Régimen General de Datos Personales y su Decreto Reglamentario 1377 de 2013, se informa a los comparecientes que dentro del protocolo de seguridad adoptado por esta Notaria se ha implementado la toma de huellas e imagen digital de los otorgantes a través del sistema biométrico que se recoge por parte de la Notaria al momento del otorgamiento del presente instrumento público, conociendo que dicho sistema de control implementado tiene por objeto prevenir posibles suplantaciones, salvaguardar los instrumentos y a la eficacia de los negocios jurídicos celebrados, para lo cual los comparecientes autorizan al Notario Primero del Círculo de Neiva, el tratamiento de los datos personales que proporcionen, si son datos de terceros, declaran que tienen el poder suficiente para otorgar esta autorización. Los datos personales podrán ser recolectados, almacenados, clasificados, actualizados, usados, suprimidos, transmitidos o transferidos, para el cumplimiento de las funciones y obligaciones de los notarios, la prestación de los servicios notariales de acuerdo con el Estatuto del Notariado (Decreto 960 de 1970) y demás regulación jurídica vigente; para las demás finalidades que establezca la ley para el caso específico; y las establecidas en las Políticas de Tratamiento de Datos Personales del Notario, disponibles en www.notaria1neiva.com.co. Son derechos de los titulares de datos personales: conocer, actualizar, y rectificar sus datos, previo los procedimientos establecidos en la mencionada Ley.
+ADVERTENCIA. Se advirtió a los otorgantes de esta escritura, de la obligación que tiene de leer la totalidad de su texto, a fin de verificar la exactitud de todos los datos en ella consignados con el fin de aclarar, modificar o corregir lo que le pareciere; la firma de la misma demuestra su aprobación total del texto. En consecuencia, el Notario no asume ninguna responsabilidad por errores o inexactitudes establecidas con posterioridad a la firma de (l) (los) otorgante(s) y del Notario. En tal caso, estos deben ser corregidos mediante el otorgamiento de una nueva escritura suscrita por el que intervino en la inicial y sufragada por el mismo (Artículo 35 Decreto Ley 960 de 1970).
+OTORGAMIENTO Y AUTORIZACION. Leído el presente instrumento por los otorgantes se hicieron las advertencias pertinentes y en especial la relacionada con la necesidad de inscribir la copia en el registro competente dentro del término de dos (2) meses siguientes a partir de la fecha de su otorgamiento (Art. 232 Ley 223 de 1995 y 14 del Decreto 650 de 1996), la aprueban y firman conmigo el suscrito Notario que lo autorizo y doy fe a los otorgantes se les advirtió finalmente que una vez firmado el presente instrumento el notario no aceptará correcciones o modificaciones sino en la forma y casos previstos por la ley.
+El anterior instrumento quedó elaborado en las hojas de papel notarial números: {{hojas_papel_notarial}}
+De lo cual doy fe.
+DERECHOS NOTARIALES: {{derechos_notariales}}
+Resolución No. {{resolucion_tarifas}}.
+{{codigo_minuta}}.
+!!
+!! EL OTORGANTE,
+!!
+!!
+!! ______________________________________
+!! {{nombre_apoderado_banco}}
+!! EN REPRESENTACION DEL {{banco_acreedor}}.
+!! Firmada fuera del despacho notarial, Decreto 2148 de 1983, Artículo 12
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!! EL NOTARIO,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}

@@ -1,0 +1,71 @@
+// MODELO LIMPIO – Declaración de construcción (con reconocimiento de la construcción)
+// Fuente: F47 (ver plantillas/modelos/INDICE.md). Datos del caso reemplazados por {{marcadores}}; el resto es el texto literal de la notaría.
+// Estado: PENDIENTE DE APROBACIÓN DEL NOTARIO.
+// Nota: La cláusula QUINTO corresponde a construcción RECONOCIDA por resolución de la autoridad municipal; si la construcción tiene licencia, el texto cambia (ver F31 en el checklist).
+// Nota: El PARAGRAFO de la cláusula QUINTO (verificación de la resolución por correo, no en el SISG) solo aplica si la resolución no aparece en el SISG de la SNR.
+### ESCRITURA PUBLICA NÚMERO: {{numero_escritura_letras}}
+### FECHA DE OTORGAMIENTO: {{fecha_otorgamiento_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+!! {{nombre_propietario}} {{documento_propietario}}
+### CODIGO DE LA NOTARIA 410010001.
+### ESPECIFICACION VALOR DEL ACTO
+!! DECLARACION DE CONSTRUCCION {{valor_construccion_numeros}}
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria}}.
+CEDULA CATASTRAL: {{cedula_catastral}}.
+CEDULA CATASTRAL PAZ Y SALVO: {{cedula_catastral_paz_y_salvo}}.
+NOMBRE O DIRECCIÓN DEL INMUEBLE: {{direccion_inmueble}}.
+OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.
+En la ciudad de Neiva, Departamento del Huila, Republica de Colombia, a los {{dia_otorgamiento_letras}} ({{dia_otorgamiento}}) DÍAS del mes de {{mes_otorgamiento}} del año {{anio_otorgamiento_letras}} ({{anio_otorgamiento}}), en el CIRCULO NOTARIAL DE NEIVA, donde funciona la Notaria Primera cuyo notario titular en el ejercicio es el doctor {{nombre_notario}}.
+## DECLARACION DE CONSTRUCCION
+Compareció quien dijo ser, {{nombre_propietario}}, mayor de edad, domiciliada en {{domicilio_propietario}}, identificada con cédula de ciudadanía número {{documento_propietario}} expedida en {{lugar_expedicion_propietario}}, estado civil {{estado_civil_propietario}}, actividad económica {{actividad_economica_propietario}}, y manifestó:
+PRIMERO: Que por medio del presente instrumento público, ELEVA A ESCRITURA PUBLICA, la declaración de construcción de {{tipo_construccion}} con área de construcción de {{area_construida_letras}} ({{area_construida_numeros}} M2), {{descripcion_construccion}}.
+SEGUNDO: Que dicha edificación está construida sobre el lote de terreno de su propiedad, identificado como {{descripcion_inmueble}}, ubicado en la {{direccion_inmueble}}, en {{municipio_inmueble}}, Departamento del {{departamento_inmueble}}, con área de {{area_terreno_letras}} ({{area_terreno_numeros}} M2), determinado por los siguientes linderos: {{linderos}}
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria}}.
+CEDULA CATASTRAL: {{cedula_catastral}}.
+CEDULA CATASTRAL PAZ Y SALVO: {{cedula_catastral_paz_y_salvo}}.
+TERCERO. TRADICION: Que el inmueble fue adquirido por la señora {{nombre_propietario}}, siendo de estado civil {{estado_civil_propietario_al_adquirir}}, por {{modo_adquisicion}} hecha a {{nombre_tradente_anterior}}, mediante escritura pública número {{numero_escritura_antecedente}} del {{fecha_escritura_antecedente}}, otorgada en la {{notaria_escritura_antecedente}}, inscrita al folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} en la Oficina de Registro de Instrumentos Públicos de Neiva; e inscrita a la cedula catastral número {{cedula_catastral_paz_y_salvo}}. CUARTO: Que el objeto del otorgamiento de este instrumento público, es ELEVAR A ESCRITURA PUBLICA, la declaración de construcción de la edificación allí existente. Todo ello con el fin de que se proceda a efectuar su registro correspondiente de conformidad con los artículos 12 y 2 de los Decretos 960 y 1.250 de 1970; cuyo avaluó se estima en la suma de {{valor_construccion_letras}} ({{valor_construccion_numeros}}).
+PARAGRAFO: La otorgante manifiesta que conoce el texto y alcance del Artículo 61 de la Ley 2010 del 27 de Diciembre de 2019, por lo que, bajo la gravedad de juramento que se entiende prestado por el sólo hecho de la firma, y manifiesta: 1. Que el precio incluido en la presente escritura de declaración y/o reconocimiento de la construcción es real y no ha sido objeto de pactos privados en los que se señale un valor diferente. 2. Que no existen sumas que se hayan convenido o facturado por fuera de la misma.
+QUINTO: La compareciente manifiesta que la construcción a la que se hace referencia en la presente escritura pública fue RECONOCIDA mediante RESOLUCION No. {{resolucion_reconocimiento}} por la {{entidad_reconocimiento}}, junto con su notificación personal y constancia ejecutoria, documentos que se adjuntan para su protocolización; y cuyas mejoras fueron edificadas dentro del término de vigencia de la licencia en mención. PARAGRAFO: Se deja constancia que la RESOLUCION No. {{resolucion_reconocimiento}} expedida por la {{entidad_reconocimiento}}, no se encuentra verificada en el Sistema Integrado de Servicio y Gestión “SISG” de la página de la Superintendencia de Notariado y Registro, sin embargo, la misma fue verificada por el correo de dicha entidad, documento que se adjunta para su protocolización.
+Se le agregan los comprobantes fiscales correspondientes cuyo texto es el del siguiente tenor: Certificado de paz y salvo por concepto de predial unificado del predio inscrito en el catastro vigente bajo el número {{cedula_catastral_paz_y_salvo}} expedido por la Secretaría de Hacienda de {{municipio_paz_y_salvo}}, de fecha {{fecha_paz_y_salvo}} con vigencia hasta el {{vigencia_paz_y_salvo}}, en el cual consta que el referido inmueble tiene un avalúo de {{avaluo_catastral}}. Fotocopias de las cédulas de ciudadanía correspondientes. Resolución No. {{resolucion_reconocimiento}} expedida por la {{entidad_reconocimiento}}, junto con su notificación personal, constancia ejecutoria y verificación.
+DATOS PERSONALES. De conformidad con lo previsto en la Ley 1581 de 2012, Régimen General de Datos Personales y su Decreto Reglamentario 1377 de 2013, se informa a los comparecientes que dentro del protocolo de seguridad adoptado por esta Notaria se ha implementado la toma de huellas e imagen digital de los otorgantes a través del sistema biométrico que se recoge por parte de la Notaria al momento del otorgamiento del presente instrumento público, conociendo que dicho sistema de control implementado tiene por objeto prevenir posibles suplantaciones, salvaguardar los instrumentos y a la eficacia de los negocios jurídicos celebrados, para lo cual los comparecientes autorizan al Notario Primero del Círculo de Neiva, el tratamiento de los datos personales que proporcionen, si son datos de terceros, declaran que tienen el poder suficiente para otorgar esta autorización. Los datos personales podrán ser recolectados, almacenados, clasificados, actualizados, usados, suprimidos, transmitidos o transferidos, para el cumplimiento de las funciones y obligaciones de los notarios, la prestación de los servicios notariales de acuerdo con el Estatuto del Notariado (Decreto 960 de 1970) y demás regulación jurídica vigente; para las demás finalidades que establezca la ley para el caso específico; y las establecidas en las Políticas de Tratamiento de Datos Personales del Notario, disponibles en www.notaria1neiva.com.co. Son derechos de los titulares de datos personales: conocer, actualizar, y rectificar sus datos, previo los procedimientos establecidos en la mencionada Ley.
+ADVERTENCIA. El notario deja constancia que a los otorgantes se les advirtió sobre el contenido del texto y alcance del Artículo 61 de la Ley 2010 del 27 de Diciembre de 2019, y que conocen sus consecuencias. Así mismo se advirtió a los otorgantes de esta escritura, de la obligación que tiene de leer la totalidad de su texto, a fin de verificar la exactitud de todos los datos en ella consignados con el fin de aclarar, modificar o corregir lo que le pareciere; la firma de la misma demuestra su aprobación total del texto. En consecuencia, el Notario no asume ninguna responsabilidad por errores o inexactitudes establecidas con posterioridad a la firma de (l) (los) otorgante(s) y del Notario. En tal caso, estos deben ser corregidos mediante el otorgamiento de una nueva escritura suscrita por el que intervino en la inicial y sufragada por el mismo (Artículo 35 Decreto Ley 960 de 1970). OTORGAMIENTO Y AUTORIZACION. Leído el presente instrumento por los otorgantes se hicieron las advertencias pertinentes y en especial la relacionada con la necesidad de inscribir la copia en el registro competente dentro del término de dos (2) meses siguientes a partir de la fecha de su otorgamiento (Art. 232 Ley 223 de 1995 y 14 del Decreto 650 de 1996), la aprueban y firman conmigo el suscrito Notario que lo autorizo y doy fe a los otorgantes se les advirtió finalmente que una vez firmado el presente instrumento el notario no aceptará correcciones o modificaciones sino en la forma y casos previstos por la ley.
+El anterior instrumento quedó elaborado en las hojas de papel notarial números: {{hojas_papel_notarial}}
+De lo cual doy fe.
+DERECHOS NOTARIALES: {{derechos_notariales}}
+RETEFUENTE: {{retefuente}}
+Resolución No. {{resolucion_tarifas}}.
+La presente escritura fue autorizada para otorgarse en diferentes momentos Art. 9 Decreto 2148/1983. {{codigo_minuta}}.
+!!
+!! LA OTORGANTE,
+!!
+!!
+!! ______________________________________
+!! {{nombre_propietario}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!! EL NOTARIO,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}

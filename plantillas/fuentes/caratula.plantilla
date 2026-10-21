@@ -1,0 +1,29 @@
+// BLOQUE COMÚN – Carátula y encabezado de la escritura.
+// Fuente: carátulas de F16 (23 - BANCO DE BOGOTA), F52 (410) y F04 (12 - MENOR).
+// Si la escritura aún no tiene fecha (borrador), se omite el párrafo "En la ciudad de Neiva…", como en las minutas de la notaría.
+### ESCRITURA PÚBLICA NÚMERO: {{escritura.numero_letras}}
+### FECHA DE OTORGAMIENTO: {{escritura.fecha_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+{{#intervinientes}}
+!! {{linea}}
+{{/intervinientes}}
+### CODIGO DE LA NOTARIA {{notaria.codigo}}.
+### ESPECIFICACION VALOR DEL ACTO
+{{#especificacion}}
+!! {{acto}} {{valor}}
+{{/especificacion}}
+{{#inmuebles_caratula}}
+MATRICULA INMOBILIARIA: {{matricula}}.
+CEDULA CATASTRAL: {{catastral}}{{#involucrada}} (INVOLUCRADO){{/involucrada}}.
+{{#catastral_paz_salvo}}
+CEDULA CATASTRAL PAZ Y SALVO: {{catastral_paz_salvo}}.
+{{/catastral_paz_salvo}}
+NOMBRE O DIRECCIÓN DEL INMUEBLE: {{nombre_direccion}}.
+OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE {{orip}}.
+{{/inmuebles_caratula}}
+{{#escritura.encabezado_titular}}
+En la ciudad de Neiva, Departamento del Huila, Republica de Colombia, {{escritura.fecha_comparecencia}}, en el CIRCULO NOTARIAL DE NEIVA, donde funciona la Notaria Primera cuyo notario titular en el ejercicio es el doctor {{notaria.titular}}.
+{{/escritura.encabezado_titular}}
+{{#escritura.encabezado_encargado}}
+En la ciudad de Neiva, Departamento del Huila, República de Colombia, {{escritura.fecha_comparecencia}} donde funciona la NOTARÍA PRIMERA DEL CÍRCULO DE NEIVA, cuya {{escritura.encargado_cargo}} es la señora {{escritura.encargado_nombre}}, según Resolución No. {{escritura.resolucion_encargo}}, de la Superintendencia de Notariado y Registro.
+{{/escritura.encabezado_encargado}}

@@ -1,0 +1,45 @@
+// ACTO – COMPRAVENTA DE INMUEBLE (incluye la variante de derecho de cuota).
+// Fuente base: F52 (410 - CASA HABITACION - SOLTERA).
+// Variantes: afectación SÍ (F35), NO con indagación y coadyuvancia (F37), apoderado (F42),
+// persona jurídica vendedora (F17), derecho de cuota (F54), propiedad horizontal (F18/F11).
+// {{ord()}} numera las cláusulas automáticamente (PRIMERO, SEGUNDO…), aun cuando una cláusula opcional no aplique.
+{{#titulo_acto}}
+### {{titulo_acto}}
+{{/titulo_acto}}
+{{a.comparecencia_vendedores}}, y {{a.manifesto_vendedores}}:
+{{#a.constancia_poder}}
+PARAGRAFO. CONSTANCIA DEL NOTARIO: El(la)(los) apoderado(a)(s) declara(n) conocer plenamente el estado civil de su representado(a) y asume(n) la responsabilidad legal por esta afirmación. El suscrito Notario deja constancia que, aunque dicha facultad no figura de manera expresa en el(los) poder(es) aportado(s), se admite la declaración en virtud del principio de buena fe y para efectos de la plena identificación y determinación de la capacidad jurídica necesaria para el presente acto.
+{{/a.constancia_poder}}
+{{ord()}}: Que por este instrumento público {{a.vendedores | v:'transfiere':'transfieren'}} en venta a {{a.compradores | quien}}, {{a.compradores_identificacion}}, {{#a.es_cuota}}la totalidad del derecho de cuota que {{a.vendedores | v:'tiene':'tienen'}} equivalente a {{a.cuota_texto}} sobre {{a.objeto_inmuebles}}{{/a.es_cuota}}{{^a.es_cuota}}el derecho de dominio y la posesión que {{a.vendedores | v:'tiene y ejerce':'tienen y ejercen'}} sobre {{a.objeto_inmuebles}}{{/a.es_cuota}}:
+{{#a.inmuebles}}
+{{descripcion_completa}}
+MATRICULA INMOBILIARIA: {{matricula}}.
+CEDULA CATASTRAL: {{catastral}}.
+{{#catastral_paz_salvo}}
+CEDULA CATASTRAL PAZ Y SALVO: {{catastral_paz_salvo}}.
+{{/catastral_paz_salvo}}
+{{#ph}}
+PARAGRAFO. PROPIEDAD HORIZONTAL: {{ph_texto}}
+{{/ph}}
+{{/a.inmuebles}}
+PARAGRAFO: No obstante, la mención del área y los linderos precisados, la venta se hace como cuerpo cierto.
+{{ord()}}. TRADICIÓN: {{#a.inmuebles}}Que el inmueble{{#a.es_cuota}} sobre el cual recae el derecho de cuota que enajena{{/a.es_cuota}}{{#nombre_corto}} {{nombre_corto}}{{/nombre_corto}} fue adquirido por {{a.vendedores | el:'vendedor'}}{{#ec_adquirente}} siendo de estado civil {{ec_adquirente}},{{/ec_adquirente}} por {{tradicion_texto}}, inscrita al folio de matrícula inmobiliaria número {{matricula}} en la Oficina de Registro de Instrumentos Públicos de {{orip_ciudad}}; e inscrita a la cedula catastral número {{catastral_tradicion}}. {{/a.inmuebles}}
+{{ord()}}: Que el valor de la venta es por la suma de {{a.precio_letras}}, {{a.forma_pago_texto}}
+PARAGRAFO: {{a.otorgantes | El:'otorgante'}} de manera libre y espontanea declaramos bajo la gravedad de juramento que conocemos el texto y alcance del Artículo 61 de la Ley 2010 del 27 de Diciembre de 2019, que se entiende prestado por el sólo hecho de la firma y manifestaron: 1. Que el precio incluido en la presente escritura de compraventa es real y no ha sido objeto de pactos privados en los que se señale un valor diferente. 2. Que no existen sumas que se hayan convenido o facturado por fuera de la misma.
+{{ord()}}: Garantiza {{a.vendedores | el:'vendedor'}} que el inmueble objeto de esta venta se encuentra libre de toda clase de gravámenes que puedan afectar su dominio, posesión y tenencia del mismo, tales como censo, hipoteca, embargo, anticresis, pleitos pendientes, demanda civil registrada, arrendamiento por escritura pública, patrimonio de familia inembargable, condiciones resolutorias, limitaciones del mismo y cualquier otro, y en general libre de todo gravamen{{#a.excepcion_gravamen}}, con excepción de {{a.excepcion_gravamen}}{{/a.excepcion_gravamen}}, pero que en todo caso se obliga a salir al saneamiento de lo vendido conforme a la Ley.
+{{ord()}}: Que el inmueble está libre por concepto de servicios públicos domiciliarios de agua, luz y alcantarillado (en caso que existan), hasta la fecha de otorgamiento de la presente escritura pública; tasas y contribuciones, impuestos nacionales, Departamentales y Municipales etc.
+{{ord()}}: Que, desde el día de hoy, en su condición de {{a.vendedores | sust:'vendedor'}} {{a.vendedores | v:'hace':'hacen'}} entrega real y material a {{a.compradores | el:'comprador'}} del inmueble objeto de venta, junto con todos sus usos, costumbres y servidumbres, que legalmente le corresponde, sin reserva ni limitación alguna y en el estado en que se encuentra.
+{{ord()}}: {{a.vendedores | El:'vendedor'}} {{a.vendedores | v:'manifiesta':'manifiestan'}} que el inmueble que enajena no se encuentra afectado a vivienda familiar.
+{{ord()}}. CONSTANCIA (REDAM): Ley 2097 de 2021, Decreto Reglamentario 1310 de 2022, Circular 355 del 20 Septiembre 2023. Se le(s) hizo saber a el/la/los enajenante(s) sobre el contenido del numeral 3 Articulo 6 de la Ley 2097 de 2021 y su Decreto Reglamentario 1310 de 2022, quien(es) manifiesta(n) no aportar el correspondiente certificado de REDAM; y ante la imposibilidad de dar aplicación a lo dispuesto en la Ley 2097 de 2021 y su Decreto Reglamentario 1310 de 2022, en el sentido de llevar a cabo la consulta para verificación en la base de datos del REDAM, dado que a la fecha la misma no se encuentra disponible para el acceso del notario(a), el/la/los compareciente(s) declara(n) que al momento de otorgar la presente escritura pública no se encuentra(n) inscrito(s) en el REGISTRO DE DEUDORES ALIMENTARIOS MOROSOS - REDAM.
+{{ord()}}: El(la)(los) compareciente(s) solicita(n) e insiste(n) al Notario en autorizar el presente instrumento público con {{a.certificados_texto}}.
+{{a.aceptacion_compradores}}
+a. Que {{a.compradores | v:'pagó':'pagaron'}} el valor del inmueble y que {{a.compradores | v:'acepta':'aceptan'}} la presente escritura pública y la venta que en ella se hace por estar a su entera satisfacción y que {{a.compradores | v:'está':'están'}} en posesión de lo aquí comprado por entrega real y material que {{a.compradores | v:'le':'les'}} hiciera {{a.vendedores | el:'vendedor'}}.
+{{#a.afecta_no_aplica}}
+b. {{a.compradores | El:'comprador'}} {{a.compradores | v:'manifestó':'manifestaron'}} ser de estado civil {{a.estado_civil_compradores}}, razón por la cual no procede la AFECTACIÓN A VIVIENDA FAMILIAR de que trata la Ley 258 de 1996, reformada por la Ley 854 de 2003.
+{{/a.afecta_no_aplica}}
+{{#a.afecta_conyuges_compran}}
+b. {{a.compradores | El:'comprador'}} {{a.compradores | v:'manifestó':'manifestaron'}} ser de estado civil {{a.vinculo_compradores}}, y declaran además que no poseen otro inmueble afectado a vivienda familiar y que el inmueble que adquieren por la presente escritura {{#a.afecta_si}}SI LO AFECTAN A VIVIENDA FAMILIAR; razón por la cual y de acuerdo a la Ley 258 de 1996, reformada por la Ley 854 de 2003, el Notario deja constancia de AFECTACION A VIVIENDA FAMILIAR.{{/a.afecta_si}}{{^a.afecta_si}}NO LO AFECTAN A VIVIENDA FAMILIAR, de acuerdo a la Ley 258 de 1996, reformada por la Ley 854 de 2003; razón por la cual el Notario deja la siguiente constancia: Previa indagación a los comparecientes, el inmueble NO QUEDA AFECTADO A VIVIENDA FAMILIAR, por voluntad expresa y conjunta de los {{a.vinculo_plural}}, manifestada en tal sentido.{{/a.afecta_si}}
+{{/a.afecta_conyuges_compran}}
+{{#a.afecta_con_coadyuvante}}
+b. {{a.compradores | El:'comprador'}} {{a.compradores | v:'manifestó':'manifestaron'}} ser de estado civil {{a.estado_civil_compradores}} con {{a.coadyuvante_trato}} {{a.coadyuvante.nombre}}, {{a.coadyuvante.identificacion_corta}}, quien coadyuva la presente escritura y declara además que no posee otro inmueble afectado a vivienda familiar y que el inmueble que adquiere por la presente escritura {{#a.afecta_si}}SI LO AFECTA A VIVIENDA FAMILIAR, de acuerdo a la Ley 258 de 1996, reformada por la Ley 854 de 2003; razón por la cual el Notario deja la siguiente constancia: Previa indagación a los comparecientes, el inmueble SI QUEDA AFECTADO A VIVIENDA FAMILIAR, por voluntad expresa y conjunta de los {{a.vinculo_plural}}, manifestada en tal sentido.{{/a.afecta_si}}{{^a.afecta_si}}NO LO AFECTA A VIVIENDA FAMILIAR, de acuerdo a la Ley 258 de 1996, reformada por la Ley 854 de 2003; razón por la cual el Notario deja la siguiente constancia: Previa indagación a los comparecientes, el inmueble NO QUEDA AFECTADO A VIVIENDA FAMILIAR, por voluntad expresa y conjunta de los {{a.vinculo_plural}}, manifestada en tal sentido.{{/a.afecta_si}}
+{{/a.afecta_con_coadyuvante}}

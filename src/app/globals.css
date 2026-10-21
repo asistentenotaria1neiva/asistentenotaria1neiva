@@ -1,0 +1,122 @@
+/* Estilos de la aplicación (diseño para escritorio). Tokens de color y espaciado en :root */
+:root {
+  --fondo: #f4f5f7;
+  --superficie: #ffffff;
+  --borde: #d9dde3;
+  --texto: #1d2733;
+  --texto-suave: #5b6675;
+  --primario: #1f3864;
+  --primario-claro: #e8eef8;
+  --exito: #1e7a46;
+  --exito-claro: #e5f4ec;
+  --alerta: #8a5a00;
+  --alerta-claro: #fff4d6;
+  --peligro: #b42318;
+  --peligro-claro: #fdeceb;
+  --info: #1f5fa8;
+  --info-claro: #e8f1fb;
+  --radio: 6px;
+  --sombra: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.1);
+  --fuente: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { background: var(--fondo); color: var(--texto); font-family: var(--fuente); font-size: 15px; line-height: 1.5; }
+a { color: var(--primario); }
+h1 { font-size: 1.5rem; margin: 0 0 0.75rem; }
+h2 { font-size: 1.2rem; margin: 1.5rem 0 0.75rem; }
+h3 { font-size: 1.05rem; margin: 1rem 0 0.5rem; }
+code { background: #eef0f3; padding: 0 4px; border-radius: 4px; font-size: 0.9em; }
+
+/* Estructura */
+.app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+.lateral { background: var(--primario); color: #fff; padding: 1.25rem 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.lateral .marca { font-weight: 700; font-size: 1rem; padding: 0 0.5rem 1rem; border-bottom: 1px solid rgba(255,255,255,.2); margin-bottom: 0.75rem; }
+.lateral .marca small { display: block; font-weight: 400; opacity: 0.8; font-size: 0.8rem; }
+.lateral a { color: #fff; text-decoration: none; padding: 0.5rem 0.75rem; border-radius: var(--radio); display: block; }
+.lateral a:hover, .lateral a[aria-current='page'] { background: rgba(255,255,255,.14); }
+.lateral .seccion { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; padding: 1rem 0.75rem 0.25rem; }
+.lateral .pie { margin-top: auto; font-size: 0.85rem; padding: 0.75rem; border-top: 1px solid rgba(255,255,255,.2); }
+.principal { padding: 1.5rem 2rem; max-width: 1280px; width: 100%; }
+
+/* Tarjetas y tablas */
+.tarjeta { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 1.25rem; box-shadow: var(--sombra); margin-bottom: 1rem; }
+.rejilla { display: grid; gap: 1rem; }
+.rejilla.dos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rejilla.tres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rejilla.cuatro { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+table { width: 100%; border-collapse: collapse; background: var(--superficie); }
+th, td { text-align: left; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--borde); vertical-align: top; }
+th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--texto-suave); background: #f8f9fb; }
+tr:hover td { background: #fafbfc; }
+.cifra { font-size: 1.8rem; font-weight: 700; }
+.suave { color: var(--texto-suave); font-size: 0.9rem; }
+.fila { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+.fila.entre { justify-content: space-between; }
+
+/* Formularios */
+label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem; }
+.campo { margin-bottom: 0.9rem; }
+.campo .ayuda { font-size: 0.82rem; color: var(--texto-suave); margin-top: 0.2rem; }
+.campo .error { font-size: 0.85rem; color: var(--peligro); margin-top: 0.2rem; }
+input[type='text'], input[type='password'], input[type='number'], input[type='date'], input[type='file'], select, textarea {
+  width: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--borde); border-radius: var(--radio); font: inherit; background: #fff; color: var(--texto);
+}
+textarea { min-height: 90px; resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--primario); outline-offset: 0; border-color: var(--primario); }
+.invalido { border-color: var(--peligro) !important; background: var(--peligro-claro) !important; }
+.casilla { display: flex; gap: 0.5rem; align-items: center; font-weight: 500; }
+.casilla input { width: auto; }
+
+button, .boton {
+  display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1rem; border-radius: var(--radio); border: 1px solid var(--primario);
+  background: var(--primario); color: #fff; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; line-height: 1.3;
+}
+button:hover, .boton:hover { filter: brightness(1.1); }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+button.secundario, .boton.secundario { background: #fff; color: var(--primario); }
+button.peligro, .boton.peligro { background: var(--peligro); border-color: var(--peligro); }
+button.exito, .boton.exito { background: var(--exito); border-color: var(--exito); }
+button.pequeno, .boton.pequeno { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+
+/* Mensajes y etiquetas */
+.aviso { border-radius: var(--radio); padding: 0.75rem 1rem; margin-bottom: 1rem; border: 1px solid; }
+.aviso.error { background: var(--peligro-claro); border-color: #f3b8b2; color: var(--peligro); }
+.aviso.exito { background: var(--exito-claro); border-color: #a9dbbf; color: var(--exito); }
+.aviso.info { background: var(--info-claro); border-color: #b5d1f0; color: var(--info); }
+.aviso.alerta { background: var(--alerta-claro); border-color: #f0d9a0; color: var(--alerta); }
+.etiqueta { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; border: 1px solid var(--borde); background: #f2f4f7; white-space: nowrap; }
+.etiqueta.critica { background: var(--peligro-claro); color: var(--peligro); border-color: #f3b8b2; }
+.etiqueta.advertencia { background: var(--alerta-claro); color: var(--alerta); border-color: #f0d9a0; }
+.etiqueta.informativa { background: var(--info-claro); color: var(--info); border-color: #b5d1f0; }
+.etiqueta.ok { background: var(--exito-claro); color: var(--exito); border-color: #a9dbbf; }
+.etiqueta.alta { background: var(--exito-claro); color: var(--exito); }
+.etiqueta.media { background: var(--alerta-claro); color: var(--alerta); }
+.etiqueta.baja { background: var(--peligro-claro); color: var(--peligro); }
+
+/* Pasos del flujo */
+.pasos { display: flex; gap: 0.25rem; margin: 0 0 1.25rem; padding: 0; list-style: none; flex-wrap: wrap; }
+.pasos li a, .pasos li span { display: block; padding: 0.4rem 0.8rem; border-radius: 999px; border: 1px solid var(--borde); background: #fff; text-decoration: none; color: var(--texto-suave); font-size: 0.88rem; }
+.pasos li a[aria-current='page'] { background: var(--primario); color: #fff; border-color: var(--primario); }
+.pasos li.hecho a { border-color: #a9dbbf; color: var(--exito); }
+
+/* Sugerencias de la IA */
+.sugerencia { border: 1px dashed #b5d1f0; background: var(--info-claro); border-radius: var(--radio); padding: 0.5rem 0.7rem; margin-top: 0.35rem; font-size: 0.86rem; }
+.sugerencia.revision { border-color: #f3b8b2; background: var(--peligro-claro); }
+.sugerencia blockquote { margin: 0.25rem 0; padding-left: 0.5rem; border-left: 3px solid #b5d1f0; color: var(--texto-suave); font-style: italic; }
+
+/* Pantallas de acceso */
+.acceso { min-height: 100vh; display: grid; place-items: center; padding: 1rem; background: linear-gradient(160deg, #1f3864 0%, #2c4f86 100%); }
+.acceso .tarjeta { width: 100%; max-width: 420px; }
+.acceso h1 { color: var(--primario); }
+
+/* Detalles */
+details { border: 1px solid var(--borde); border-radius: var(--radio); padding: 0.5rem 0.75rem; background: #fff; margin-bottom: 0.5rem; }
+details summary { cursor: pointer; font-weight: 600; }
+.vista-previa { white-space: pre-wrap; font-family: Arial, sans-serif; font-size: 0.9rem; background: #fff; border: 1px solid var(--borde); padding: 1.5rem; max-height: 600px; overflow: auto; }
+.oculto { display: none; }
+
+/* Pasos del formulario (botones) */
+.pasos button.paso { width: 100%; text-align: left; background: #fff; color: var(--texto-suave); border: 1px solid var(--borde); border-radius: 999px; font-weight: 500; padding: 0.4rem 0.8rem; }
+.pasos button.paso.activo { background: var(--primario); color: #fff; border-color: var(--primario); }

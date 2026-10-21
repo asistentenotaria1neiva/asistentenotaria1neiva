@@ -1,0 +1,144 @@
+{
+  "_nota": "Datos de prueba FICTICIOS. Ninguna persona, documento, matrícula ni dirección corresponde a un caso real. Los NIT de entidades financieras son públicos.",
+  "casos": [
+    {
+      "clave": "compraventa_simple",
+      "descripcion": "Compraventa entre personas solteras (estructura de F52)",
+      "actos": ["compraventa"],
+      "datos": {
+        "escritura": { "autoriza": "TITULAR", "diferentes_momentos": true, "codigo_minuta": "COMPRAVENTA 410/ PRUEBA" },
+        "personas": [
+          { "id": "p1", "tipo_persona": "NATURAL", "nombre": "ANA LUCIA PRUEBA ROJAS", "genero": "F", "tipo_documento": "CC", "numero_documento": "1.075.000.111", "lugar_expedicion": "Neiva", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "SOLTERO(A), SIN UNION MARITAL DE HECHO", "actividad_economica": "INDEPENDIENTE" },
+          { "id": "p2", "tipo_persona": "NATURAL", "nombre": "MARTA ELENA FICTICIA GOMEZ", "genero": "F", "tipo_documento": "CC", "numero_documento": "1.075.000.222", "lugar_expedicion": "Neiva", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "SOLTERO(A), SIN UNION MARITAL DE HECHO", "actividad_economica": "INDEPENDIENTE" }
+        ],
+        "inmuebles": [
+          {
+            "id": "i1", "tipo_inmueble": "CASA", "direccion": "CARRERA 99 NÚMERO 1A SUR 01 - URBANIZACION DE PRUEBA", "municipio": "Neiva", "departamento": "Huila",
+            "area_terreno": 97.5, "area_construida": 50, "descripcion": "construida en placa de concreto, cubierta A.C, servicios sanitarios, instalaciones eléctricas, sanitaria e hidráulicas completas",
+            "linderos": "ORIENTE: Mide seis punto cincuenta metros (6.50 m) con el lote 7.\nOCCIDENTE: Mide seis punto cincuenta metros (6.50 m) con la transversal 14.\nNORTE: Mide quince metros (15.00 m) con el lote 4.\nSUR: Mide quince metros (15.00 m) con el lote 2.",
+            "matricula": "200-999001", "orip": "NEIVA - HUILA", "cedula_catastral": "410010199000009990001000000000", "cedula_catastral_paz_salvo": "0199000009990001000000000",
+            "tradicion": { "modo": "COMPRA", "tradente": "PEDRO PABLO EJEMPLO SALAS", "escritura_numero": "234", "escritura_fecha": "2024-02-07", "notaria": "la Notaria Primera de Neiva", "estado_civil_adquirente": "SOLTERO(A), SIN UNION MARITAL DE HECHO" },
+            "fecha_certificado_tradicion": "2026-10-06",
+            "paz_salvo": { "entidad": "la Secretaría de Hacienda de Neiva (H)", "vigencia_hasta": "2026-12-31", "avaluo": 35260000 }
+          }
+        ],
+        "actos": {
+          "compraventa": { "vendedores": ["p1"], "compradores": ["p2"], "inmuebles": ["i1"], "precio": 100000000, "afectacion": "NO_APLICA" }
+        }
+      }
+    },
+    {
+      "clave": "tres_actos",
+      "descripcion": "Cancelación de condición resolutoria (2 años) + cancelación de afectación + compraventa con coadyuvante que no afecta (estructura de F56)",
+      "actos": ["cancelacion_condicion", "cancelacion_afectacion", "compraventa"],
+      "datos": {
+        "escritura": { "autoriza": "ENCARGADO", "encargado_nombre": "LAURA PATRICIA ENSAYO VARGAS", "resolucion_encargo": "2026-000000-6 del 01 de Octubre de 2026", "fecha_otorgamiento": "2026-10-15", "numero": 2940, "diferentes_momentos": true, "codigo_minuta": "COMPRAVENTA 418/ PRUEBA" },
+        "personas": [
+          { "id": "v1", "tipo_persona": "NATURAL", "nombre": "JOSE ANTONIO PRUEBA LUNA", "genero": "M", "tipo_documento": "CC", "numero_documento": "83.000.301", "lugar_expedicion": "Garzón", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "SOLTERO(A), CON UNION MARITAL DE HECHO", "actividad_economica": "COMERCIANTE" },
+          { "id": "v2", "tipo_persona": "NATURAL", "nombre": "INES MARIA EJEMPLO SOTO", "genero": "F", "tipo_documento": "CC", "numero_documento": "36.000.302", "lugar_expedicion": "Neiva", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "SOLTERO(A), CON UNION MARITAL DE HECHO", "actividad_economica": "HOGAR" },
+          { "id": "c1", "tipo_persona": "NATURAL", "nombre": "CLAUDIA FERNANDA MODELO DIAZ", "genero": "F", "tipo_documento": "CC", "numero_documento": "1.075.000.303", "lugar_expedicion": "Neiva", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "SOLTERO(A), CON UNION MARITAL DE HECHO", "actividad_economica": "EMPLEADA" },
+          { "id": "c2", "tipo_persona": "NATURAL", "nombre": "IVAN DARIO SIMULADO PEÑA", "genero": "M", "tipo_documento": "CC", "numero_documento": "1.075.000.304", "lugar_expedicion": "Neiva", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "SOLTERO(A), CON UNION MARITAL DE HECHO", "actividad_economica": "INDEPENDIENTE" }
+        ],
+        "inmuebles": [
+          {
+            "id": "i1", "tipo_inmueble": "CASA", "nombre_corto": "LOTE 8 MANZANA 32", "direccion": "CARRERA 98 NÚMERO 21-110 - LOTE 8 MANZANA 32 - BARRIO DE PRUEBA", "municipio": "Neiva", "departamento": "Huila",
+            "area_terreno": 72, "area_construida": 48.3,
+            "linderos": "NORTE: En seis metros (6.00 m) con el lote 9.\nSUR: En seis metros (6.00 m) con la carrera 98.\nORIENTE: En doce metros (12.00 m) con el lote 7.\nOCCIDENTE: En doce metros (12.00 m) con el lote 10.",
+            "matricula": "200-999002", "orip": "NEIVA - HUILA", "cedula_catastral": "410010199000009990002000000000", "cedula_catastral_paz_salvo": "0199000009990002000000000",
+            "tradicion": { "modo": "COMPRA", "tradente": "CONSTRUCTORA DE PRUEBA S.A.S", "escritura_numero": "1520", "escritura_fecha": "2021-03-26", "notaria": "la Notaria Cuarta de Neiva", "estado_civil_adquirente": "SOLTERO(A), CON UNION MARITAL DE HECHO" },
+            "fecha_certificado_tradicion": "2026-10-01",
+            "paz_salvo": { "entidad": "la Secretaría de Hacienda de Neiva (H)", "vigencia_hasta": "2026-12-31", "avaluo": 31500000 }
+          }
+        ],
+        "actos": {
+          "cancelacion_condicion": { "propietario_id": "v1", "inmueble_id": "i1", "plazo_anios": 2, "clausula": "SEPTIMA", "anotacion": "015" },
+          "cancelacion_afectacion": { "propietario_id": "v1", "conyuge_id": "v2", "inmueble_id": "i1", "forma_afectacion": "LEY" },
+          "compraventa": { "vendedores": ["v1"], "compradores": ["c1"], "inmuebles": ["i1"], "precio": 40000000, "afectacion": "NO", "coadyuvante_id": "c2", "vinculo": "COMPANEROS" }
+        }
+      }
+    },
+    {
+      "clave": "cancelacion_hipoteca_banco",
+      "descripcion": "Cancelación de hipoteca por apoderado del banco (estructura de F16)",
+      "actos": ["cancelacion_hipoteca"],
+      "datos": {
+        "escritura": { "autoriza": "TITULAR", "fecha_otorgamiento": "2026-08-12", "numero": 2285, "diferentes_momentos": false, "codigo_minuta": "CANCELACION HIPOTECA 23/ PRUEBA" },
+        "personas": [
+          { "id": "b1", "tipo_persona": "JURIDICA", "nombre": "BANCO DE BOGOTA S.A", "tipo_documento": "NIT", "numero_documento": "860.002.964-4", "descripcion_entidad": "establecimiento bancario con domicilio principal en la ciudad de Bogotá D.C", "representante_id": "r1", "representacion": "PODER", "poder_entidad_soporte": "escritura pública número 9999 del 20 de DICIEMBRE de 2019, otorgada en la Notaría Treinta y Ocho de Bogotá D.C" },
+          { "id": "r1", "tipo_persona": "NATURAL", "nombre": "CARLOS ALBERTO APODERADO PRUEBA", "genero": "M", "tipo_documento": "CC", "numero_documento": "93.000.401", "lugar_expedicion": "Ibagué", "domicilio": "la ciudad de Neiva (H)" },
+          { "id": "d1", "tipo_persona": "NATURAL", "nombre": "JORGE IVAN DEUDOR FICTICIO", "genero": "M", "tipo_documento": "CC", "numero_documento": "1.075.000.402", "lugar_expedicion": "Neiva" }
+        ],
+        "inmuebles": [
+          {
+            "id": "i1", "tipo_inmueble": "LOTE", "nombre_corto": "LOTE AH-99", "direccion": "AVENIDA CARRERA 99 NÚMERO 44-03 - LOTE AH-99 - URBANIZACION DE PRUEBA", "municipio": "Palermo", "departamento": "Huila",
+            "linderos": "Los que constan en el título de adquisición.", "matricula": "200-999003", "orip": "NEIVA - HUILA", "cedula_catastral": "040001999001000", "involucrada_mayor_extension": true,
+            "tradicion": { "modo": "COMPRA", "tradente": "URBANIZADORA DE PRUEBA S.A.S", "escritura_numero": "3679", "escritura_fecha": "2022-10-31", "notaria": "la Notaria Primera de Neiva" },
+            "fecha_certificado_tradicion": "2026-05-14"
+          }
+        ],
+        "actos": {
+          "cancelacion_hipoteca": { "acreedor_id": "b1", "deudores": ["d1"], "inmueble_id": "i1", "escritura_hipoteca_numero": "3679", "escritura_hipoteca_fecha": "2022-10-31", "escritura_hipoteca_notaria": "la Notaría Primera de Neiva", "valor_hipoteca": 108000000, "sin_cuantia": true, "minuta_presentada": true }
+        }
+      }
+    },
+    {
+      "clave": "salida_pais",
+      "descripcion": "Autorización de salida del país de menor (estructura de F04)",
+      "actos": ["salida_pais_menor"],
+      "datos": {
+        "escritura": { "autoriza": "TITULAR", "diferentes_momentos": true, "codigo_minuta": "AUTORIZACION SALIDA DEL PAIS 12/ PRUEBA" },
+        "personas": [
+          { "id": "o1", "tipo_persona": "NATURAL", "nombre": "MANUEL ESTEBAN PADRE PRUEBA", "genero": "M", "tipo_documento": "CC", "numero_documento": "1.075.000.501", "lugar_expedicion": "Neiva", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "SOLTERO(A), SIN UNION MARITAL DE HECHO", "actividad_economica": "INDEPENDIENTE" },
+          { "id": "a1", "tipo_persona": "NATURAL", "nombre": "SOFIA ANDREA MADRE EJEMPLO", "genero": "F", "tipo_documento": "CC", "numero_documento": "1.075.000.502", "lugar_expedicion": "Neiva", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "SOLTERO(A), SIN UNION MARITAL DE HECHO", "actividad_economica": "CONTADORA PÚBLICA" },
+          { "id": "m1", "tipo_persona": "NATURAL", "nombre": "VALENTINA PADRE MADRE", "genero": "F", "tipo_documento": "NUIP", "numero_documento": "1.075.809.000", "domicilio": "la ciudad de Neiva (H)", "menor_de_edad": true }
+        ],
+        "inmuebles": [],
+        "actos": {
+          "salida_pais_menor": { "otorgante_id": "o1", "menor_id": "m1", "acompanante_id": "a1", "paises_texto": "ESPAÑA, FRANCIA, ITALIA y ESTADOS UNIDOS", "proposito": "TURISMO - EDUCACION", "fecha_inicio": "2026-11-01", "vigencia_hasta": "2030-10-31", "con_aceptacion": true }
+        }
+      }
+    },
+    {
+      "clave": "divorcio",
+      "descripcion": "Divorcio de matrimonio civil sin hijos, liquidación en ceros, por apoderado (estructura de F59)",
+      "actos": ["divorcio_civil"],
+      "datos": {
+        "escritura": { "autoriza": "TITULAR", "diferentes_momentos": false, "codigo_minuta": "DIVORCIO 5/ PRUEBA" },
+        "personas": [
+          { "id": "x1", "tipo_persona": "NATURAL", "nombre": "NUBIA PRUEBA SANCHEZ", "genero": "F", "tipo_documento": "CC", "numero_documento": "40.000.601", "lugar_expedicion": "Florencia", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "CASADO(A), CON SOCIEDAD CONYUGAL VIGENTE", "apoderado_id": "ab", "poder_tipo": "ESPECIAL" },
+          { "id": "x2", "tipo_persona": "NATURAL", "nombre": "WALTER EJEMPLO CARDOZO", "genero": "M", "tipo_documento": "CC", "numero_documento": "83.000.602", "lugar_expedicion": "Colombia", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "CASADO(A), CON SOCIEDAD CONYUGAL VIGENTE", "apoderado_id": "ab", "poder_tipo": "ESPECIAL" },
+          { "id": "ab", "tipo_persona": "NATURAL", "nombre": "JOSE BERNARDO ABOGADO PRUEBA", "genero": "M", "tipo_documento": "CC", "numero_documento": "7.000.603", "lugar_expedicion": "Neiva", "domicilio": "la ciudad de Neiva (H)", "tarjeta_profesional": "999999" }
+        ],
+        "inmuebles": [],
+        "actos": {
+          "divorcio_civil": {
+            "conyuges": ["x1", "x2"], "apoderado_id": "ab",
+            "matrimonio_fecha": "2010-06-18", "matrimonio_lugar": "la Notaria Única de Colombia, en el Municipio de Colombia, Departamento del Huila", "matrimonio_inscripcion": "2010-06-29", "matrimonio_serial": "00000001", "matrimonio_registro": "la Registraduría Municipal del Estado Civil de Colombia",
+            "hijos": "NINGUNO",
+            "acuerdo": "PRIMERO.- Que es nuestro deseo o voluntad el Divorcio de nuestro Matrimonio Civil. SEGUNDO.- Manifestamos que en nuestra unión NO procreamos hijos. TERCERO.- La sociedad conyugal se encuentra sin liquidar. CUARTO.- Que acordamos que cada uno de nosotros asume los gastos de sostenimiento y estableceremos nuestra residencia por separado. QUINTO.- No hay por consiguiente acuerdo de alimentos.",
+            "oficios": [
+              { "destinatario": "NOTARIA PRIMERA DE FLORENCIA - CAQUETA", "registro": "NACIMIENTO", "persona": "NUBIA PRUEBA SANCHEZ", "oficina": "NOTARIA", "ubicacion": "al TOMO 99 - FOLIO 11", "fecha": "1964-11-09" },
+              { "destinatario": "REGISTRADURIA MUNICIPAL DEL ESTADO CIVIL DE COLOMBIA - HUILA", "registro": "MATRIMONIO", "oficina": "REGISTRADURIA", "ubicacion": "bajo indicativo serial número 00000001", "fecha": "2010-06-29" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "clave": "derechos_herenciales",
+      "descripcion": "Venta de derechos herenciales a título universal (estructura de F36)",
+      "actos": ["derechos_herenciales"],
+      "datos": {
+        "escritura": { "autoriza": "TITULAR", "diferentes_momentos": true, "codigo_minuta": "COMPRAVENTA 364/ PRUEBA" },
+        "personas": [
+          { "id": "h1", "tipo_persona": "NATURAL", "nombre": "ALICIA PRUEBA CAMACHO", "genero": "F", "tipo_documento": "CC", "numero_documento": "36.000.701", "lugar_expedicion": "Neiva", "domicilio": "el Municipio de Palermo (H)", "estado_civil": "SOLTERO(A), SIN UNION MARITAL DE HECHO", "actividad_economica": "INDEPENDIENTE" },
+          { "id": "h2", "tipo_persona": "NATURAL", "nombre": "JUAN CAMILO COMPRADOR EJEMPLO", "genero": "M", "tipo_documento": "CC", "numero_documento": "1.075.000.702", "lugar_expedicion": "Neiva", "domicilio": "la ciudad de Neiva (H)", "estado_civil": "SOLTERO(A), SIN UNION MARITAL DE HECHO", "actividad_economica": "PROFESIONAL" }
+        ],
+        "inmuebles": [],
+        "actos": {
+          "derechos_herenciales": { "vendedores": ["h1"], "compradores": ["h2"], "precio": 40000000, "causante_nombre": "GUILLERMO CAUSANTE FICTICIO", "causante_genero": "M", "causante_documento": "1.000.703", "causante_fecha_defuncion": "2021-12-15", "causante_lugar_defuncion": "la ciudad de Neiva, Departamento del Huila", "parentesco": "padre" }
+        }
+      }
+    }
+  ]
+}

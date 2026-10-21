@@ -1,0 +1,76 @@
+// MODELO LIMPIO – Compraventa de derechos herenciales a título universal
+// Fuente: F36 (ver plantillas/modelos/INDICE.md). Datos del caso reemplazados por {{marcadores}}; el resto es el texto literal de la notaría.
+// Estado: PENDIENTE DE APROBACIÓN DEL NOTARIO.
+// Nota: El texto conserva el género y número del ejemplo (una vendedora heredera, un comprador).
+### ESCRITURA PUBLICA NÚMERO: {{numero_escritura_letras}}
+### FECHA DE OTORGAMIENTO: {{fecha_otorgamiento_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+!! {{nombre_vendedor}} {{documento_vendedor}}
+!! {{nombre_comprador}} {{documento_comprador}}
+### CODIGO DE LA NOTARIA 410010001.
+### ESPECIFICACION VALOR DEL ACTO
+!! COMPRAVENTA DERECHOS HERENCIALES TITULO UNIVERSAL {{valor_venta_numeros}}
+En la ciudad de Neiva, Departamento del Huila, Republica de Colombia, a los {{dia_otorgamiento_letras}} ({{dia_otorgamiento}}) DÍAS del mes de {{mes_otorgamiento}} del año {{anio_otorgamiento_letras}} ({{anio_otorgamiento}}), en el CIRCULO NOTARIAL DE NEIVA, donde funciona la Notaria Primera cuyo notario titular en el ejercicio es el doctor {{nombre_notario}}.
+Compareció quien dijo ser, {{nombre_vendedor}}, mayor de edad, domiciliada en {{domicilio_vendedor}}, identificada con cédula de ciudadanía número {{documento_vendedor}} expedida en {{lugar_expedicion_vendedor}}, estado civil {{estado_civil_vendedor}}, actividad económica {{actividad_economica_vendedor}}, y manifestó:
+PRIMERO: Que por este instrumento público transfiere en venta a quien dijo ser, {{nombre_comprador}}, mayor de edad, domiciliado en {{domicilio_comprador}}, identificado con cédula de ciudadanía número {{documento_comprador}} expedida en {{lugar_expedicion_comprador}}, estado civil {{estado_civil_comprador}}, actividad económica {{actividad_economica_comprador}}, todos los derechos y acciones que a título universal le corresponda o pueda corresponder en la sucesión intestada de su extinto {{parentesco_causante}} {{nombre_causante}}, quien se identificaba con cedula de ciudadanía número {{documento_causante}}, fallecido en la fecha {{fecha_defuncion_causante}}, en {{lugar_defuncion_causante}}, todo lo cual se acredita con los respectivos registros civiles de nacimiento y defunción, documentos que se adjuntan para su protocolización.
+SEGUNDO: Que el valor de la venta es por la suma de {{valor_venta_letras}} ({{valor_venta_numeros}}), suma que la vendedora manifiesta haber recibido en su totalidad a entera satisfacción de manos del comprador.
+PARAGRAFO: Los otorgantes de manera libre y espontanea declaran bajo la gravedad de juramento que conoce el texto y alcance del Artículo 61 de la Ley 2010 del 27 de Diciembre de 2019, que se entiende prestado por el sólo hecho de la firma y manifiesta:
+1. Que el precio incluido en la presente escritura de compraventa es real y no ha sido objeto de pactos privados en los que se señale un valor diferente.
+2. Que no existen sumas que se hayan convenido o facturado por fuera de la misma.
+TERCERO: Que los derechos herenciales no los ha enajenado antes y de ahora a ninguna otra persona, entidad o corporación, y que no se reserva ningún otro, razón por la cual renuncia a cualquier pretensión judicial o extrajudicial encaminadas a exigir algún otro derecho sobre la citada sucesión del causante {{nombre_causante}}.
+CUARTO. CONSTANCIA (REDAM): Ley 2097 de 2021, Decreto Reglamentario 1310 de 2022, Circular 355 del 20 Septiembre 2023. Se le(s) hizo saber a el/la/los enajenante(s) sobre el contenido del numeral 3 Articulo 6 de la Ley 2097 de 2021 y su Decreto Reglamentario 1310 de 2022, quien(es) manifiesta(n) no aportar el correspondiente certificado de REDAM; y ante la imposibilidad de dar aplicación a lo dispuesto en la Ley 2097 de 2021 y su Decreto Reglamentario 1310 de 2022, en el sentido de llevar a cabo la consulta para verificación en la base de datos del REDAM, dado que a la fecha la misma no se encuentra disponible para el acceso del notario(a), el/la/los compareciente(s) declara(n) que al momento de otorgar la presente escritura pública no se encuentra(n) inscrito(s) en el REGISTRO DE DEUDORES ALIMENTARIOS MOROSOS - REDAM.
+QUINTO: La vendedora {{nombre_vendedor}}, de las condiciones civiles y personales ya enunciadas, y manifestó:
+a. Que responde en calidad de heredera del causante {{nombre_causante}}.
+b. Que los derechos herenciales que enajena se encuentran libres de gravámenes, usufructo, limitaciones, condiciones, embargos, pleitos pendientes, y cualquier situación que afecte los derechos enajenados.
+c. Que se obliga a salir al saneamiento en los casos previstos por la ley. Presente, {{nombre_comprador}}, de las condiciones civiles y personales ya enunciadas, y manifestó: a. Que acepta la presente escritura y la venta a título universal de todos los derechos herenciales en ella contenida.
+b. Que ha pagado el precio de la presente compra y está en posesión de los derechos herenciales motivo de la misma, por entrega real y material que le hiciera la vendedora.
+Se le agregan los comprobantes correspondientes cuyo texto es el del siguiente tenor:
+- Fotocopias de las cédulas de ciudadanía correspondientes.
+- Registro civil de defunción de {{nombre_causante}}.
+- Registro civil de nacimiento de {{nombre_vendedor}}.
+DATOS PERSONALES. De conformidad con lo previsto en la Ley 1581 de 2012, Régimen General de Datos Personales y su Decreto Reglamentario 1377 de 2013, se informa a los comparecientes que dentro del protocolo de seguridad adoptado por esta Notaria se ha implementado la toma de huellas e imagen digital de los otorgantes a través del sistema biométrico que se recoge por parte de la Notaria al momento del otorgamiento del presente instrumento público, conociendo que dicho sistema de control implementado tiene por objeto prevenir posibles suplantaciones, salvaguardar los instrumentos y a la eficacia de los negocios jurídicos celebrados, para lo cual los comparecientes autorizan al Notario Primero del Círculo de Neiva, el tratamiento de los datos personales que proporcionen, si son datos de terceros, declaran que tienen el poder suficiente para otorgar esta autorización. Los datos personales podrán ser recolectados, almacenados, clasificados, actualizados, usados, suprimidos, transmitidos o transferidos, para el cumplimiento de las funciones y obligaciones de los notarios, la prestación de los servicios notariales de acuerdo con el Estatuto del Notariado (Decreto 960 de 1970) y demás regulación jurídica vigente; para las demás finalidades que establezca la ley para el caso específico; y las establecidas en las Políticas de Tratamiento de Datos Personales del Notario, disponibles en www.notaria1neiva.com.co. Son derechos de los titulares de datos personales: conocer, actualizar, y rectificar sus datos, previo los procedimientos establecidos en la mencionada Ley.
+ADVERTENCIA. El notario deja constancia que a los otorgantes se les advirtió sobre el contenido del texto y alcance del Artículo 61 de la Ley 2010 del 27 de Diciembre de 2019, y que conocen sus consecuencias. Así mismo se advirtió a los otorgantes de esta escritura, de la obligación que tiene de leer la totalidad de su texto, a fin de verificar la exactitud de todos los datos en ella consignados con el fin de aclarar, modificar o corregir lo que le pareciere; la firma de la misma demuestra su aprobación total del texto. En consecuencia, el Notario no asume ninguna responsabilidad por errores o inexactitudes establecidas con posterioridad a la firma de (l) (los) otorgante(s) y del Notario. En tal caso, estos deben ser corregidos mediante el otorgamiento de una nueva escritura suscrita por el que intervino en la inicial y sufragada por el mismo (Artículo 35 Decreto Ley 960 de 1970). OTORGAMIENTO Y AUTORIZACION. Leído el presente instrumento por los otorgantes se hicieron las advertencias pertinentes y en especial la relacionada con la necesidad de inscribir la copia en el registro competente dentro del término de dos (2) meses siguientes a partir de la fecha de su otorgamiento (Art. 232 Ley 223 de 1995 y 14 del Decreto 650 de 1996), la aprueban y firman conmigo el suscrito Notario que lo autorizo y doy fe a los otorgantes se les advirtió finalmente que una vez firmado el presente instrumento el notario no aceptará correcciones o modificaciones sino en la forma y casos previstos por la ley. El anterior instrumento quedó elaborado en las hojas de papel notarial números: {{hojas_papel_notarial}}
+De lo cual doy fe.
+DERECHOS NOTARIALES: {{derechos_notariales}}
+RETEFUENTE: {{retefuente}}
+Resolución No. {{resolucion_tarifas}}.
+La presente escritura fue autorizada para otorgarse en diferentes momentos Art. 9 Decreto 2148/1983.
+{{codigo_minuta}}.
+!!
+!! LOS OTORGANTES,
+!!
+!!
+!! ______________________________________
+!! {{nombre_vendedor}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!!
+!! ______________________________________
+!! {{nombre_comprador}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!! EL NOTARIO,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}

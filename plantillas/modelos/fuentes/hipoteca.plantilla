@@ -1,0 +1,102 @@
+// MODELO LIMPIO – Hipoteca abierta sin límite de cuantía a favor de particular
+// Fuente: F28 (ver plantillas/modelos/INDICE.md). Datos del caso reemplazados por {{marcadores}}; el resto es el texto literal de la notaría.
+// Estado: PENDIENTE DE APROBACIÓN DEL NOTARIO.
+// Nota: En el original la cláusula DECIMO QUINTO decía que el inmueble estaba afectado a vivienda familiar y que la afectación se cancelaba en el mismo instrumento (primer acto). Si el inmueble no está afectado, indíquelo en {{declaracion_afectacion_vivienda_familiar}}; si lo está, debe cancelarse antes (ver modelo cancelacion_afectacion).
+// Nota: Al final va la carta de aprobación de crédito que firma el acreedor (se protocoliza con la escritura).
+### ESCRITURA PÚBLICA NÚMERO: {{numero_escritura_letras}}
+### FECHA DE OTORGAMIENTO: {{fecha_otorgamiento_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+!! EL(LA)(LOS) HIPOTECANTE(S)
+!! {{nombre_hipotecante}} {{documento_hipotecante}}
+!! EL(LA)(LOS) ACREEDOR(A)(S)
+!! {{nombre_acreedor}} {{documento_acreedor}}
+### CODIGO DE LA NOTARIA 410010001.
+### ESPECIFICACION VALOR DEL ACTO
+!! HIPOTECA ABIERTA SIN LIMITE DE CUANTIA {{valor_cupo_numeros}}
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria}}.
+CEDULA CATASTRAL: {{cedula_catastral}}.
+CEDULA CATASTRAL PAZ Y SALVO: {{cedula_catastral_paz_y_salvo}}.
+NOMBRE O DIRECCIÓN DEL INMUEBLE: {{direccion_inmueble}}.
+OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.
+## HIPOTECA ABIERTA SIN LIMITE DE CUANTIA
+Compareció quien dijo ser, {{nombre_hipotecante}}, mayor de edad, domiciliado en {{domicilio_hipotecante}}, identificado con cedula de ciudadanía número {{documento_hipotecante}} expedida en {{lugar_expedicion_hipotecante}}, estado civil {{estado_civil_hipotecante}}, actividad económica {{actividad_economica_hipotecante}}, quien en adelante se denominará EL(LA)(LOS) HIPOTECANTE(S), y manifestó: PRIMERO: Que por este instrumento público constituye HIPOTECA ABIERTA SIN LIMITE DE CUANTIA a favor de quien dijo ser, {{nombre_acreedor}}, mayor de edad, domiciliado en {{domicilio_acreedor}}, identificado con cédula de ciudadanía número {{documento_acreedor}} expedida en {{lugar_expedicion_acreedor}}, estado civil {{estado_civil_acreedor}}, actividad económica {{actividad_economica_acreedor}}, quien en adelante se denominará EL(LA)(LOS) ACREEDOR(A)(S), sobre el siguiente inmueble: {{descripcion_inmueble}}, ubicado en la {{direccion_inmueble}}, en la ciudad de {{municipio_inmueble}}, Departamento del {{departamento_inmueble}}, con área de {{area_terreno_letras}} ({{area_terreno_numeros}} M2), junto con la casa de habitación que allí existe, {{descripcion_construccion}}, determinado por los siguientes linderos: {{linderos}}
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria}}.
+CEDULA CATASTRAL: {{cedula_catastral}}.
+CEDULA CATASTRAL PAZ Y SALVO: {{cedula_catastral_paz_y_salvo}}.
+PARAGRAFO: Queda en libertad de EL(LA)(LOS) ACREEDOR(A)(S) y con facultad expresa de EL(LA)(LOS) HIPOTECANTE(S), de corregir y/o actualizar los linderos del inmueble hipotecado, en caso de ser necesario. SEGUNDO. TRADICION: Que el inmueble a hipotecar fue adquirido por EL(LA)(LOS) HIPOTECANTE(S) siendo de estado civil {{estado_civil_hipotecante_al_adquirir}}, por {{modo_adquisicion}} hecha a {{nombre_tradente_anterior}}, mediante escritura pública número {{numero_escritura_antecedente}} del {{fecha_escritura_antecedente}}, otorgada en la {{notaria_escritura_antecedente}}, inscrita al folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} en la Oficina de Registro de Instrumentos Públicos de Neiva; e inscrita a la cedula catastral número {{cedula_catastral_paz_y_salvo}}. TERCERO: Que el inmueble no es objeto de ninguna demanda civil ni embargo judicial, que los derechos de dominio de EL(LA)(LOS) HIPOTECANTE(S) no está sujeto a condiciones resolutorias, ni limitaciones al derecho de dominio, ni se halla gravado con censo, embargo, pleitos pendientes, inscripciones de demanda, pactos comisorios, patrimonio inembargable ni entregado en anticresis, no soporta en la actualidad gravamen hipotecario alguno, que no ha sido movilizado ni dado en arrendamiento o anticresis por escritura pública, que no está sometido a procesos administrativos o judiciales de expropiación y que actualmente se encuentra bajo la exclusiva posesión real y material de EL(LA)(LOS) HIPOTECANTE(S), en forma regular, quieta y pacífica.
+CUARTO: Que esta hipoteca es abierta y garantiza a EL(LA)(LOS) ACREEDOR(A)(S), toda clase de obligación de cualquier índole o naturaleza y cualquiera que sea su origen, que a esta fecha está adeudando EL(LA)(LOS) HIPOTECANTE(S) a EL(LA)(LOS) ACREEDOR(A)(S) o que en el futuro llegue a adeudarle, háyalas, contraído directamente aquel respecto a este, directamente o como fiador o que EL(LA)(LOS) ACREEDOR(A)(S), haya adquirido los créditos respectivos de cualquier persona en virtud de cesión subrogación o cualquier otro título derivativo, trátese de obligación contraída exclusivamente por EL(LA)(LOS) HIPOTECANTE(S) o conjuntamente con otras personas. Las obligaciones garantizadas pueden provenir de préstamos, descuentos, negociaciones de cheques, endoso de títulos valores, cesión de créditos civiles o comerciales, fianzas, avales, cartas de crédito y en general de cualquier clase de operaciones que EL(LA)(LOS) HIPOTECANTE(S), realice. Tales obligaciones pueden constar en contratos, pagarés, letras de cambio, cheques, certificados oficiales, y en general cualquier clase de documentos de contenido civil o comercial, públicos o privados y se harán efectivas por EL(LA)(LOS) ACREEDOR(A)(S), en los términos en que conste en el respectivo título. PARAGRAFO: Es entendido que esta hipoteca se extiende también sin limitaciones de cuantía, a todos los accesorios de cada obligación, tales como intereses de todo tipo, costas y gastos de cobro judicial o extrajudicial, honorarios y en general a cualquier gasto que EL(LA)(LOS) ACREEDOR(A)(S), hiciere en la cobranza o que por cualquier concepto cubra éste por cuenta de EL(LA)(LOS) HIPOTECANTE(S), causando honorarios de abogado por el solo hecho de pasar la obligación a ella para su recaudo por vía judicial, siendo la obligación respectiva a cargo de EL(LA)(LOS) HIPOTECANTE(S). Esta hipoteca es además de cuantía indeterminada o ilimitada de tal manera que la totalidad del valor comercial del bien gravado determinado al efectuarse el pago judicial, garantiza las obligaciones enunciadas en esta cláusula. QUINTO: Que esta hipoteca incluye todas las mejoras, anexidades y dependencias existentes actualmente en la cosa hipotecada y se extiende a todos los aumentos y mejoras que en el futuro ella reciba, lo mismo que a las pensiones o indemnizaciones previstas en el Artículo 2446 del C.C. y conforme a la ley civil quedan comprendidas en la hipoteca. SEXTO: Que el otorgamiento de la presente escritura no implica obligación o promesa alguna para EL(LA)(LOS) ACREEDOR(A)(S), de celebrar operaciones de cualquier clase o modalidad con EL(LA)(LOS) HIPOTECANTE(S) ni de concederle prórrogas o renovaciones de obligaciones vencidas o por vencerse, pues aquella queda en absoluta libertad de celebrarlas o no. SEPTIMO: Que EL(LA)(LOS) ACREEDOR(A)(S), queda facultado para dar unilateralmente por vencidos, aunque no lo estuviere aún, los plazos para el cumplimiento de cualquier deuda y obligación de las garantizadas con esta hipoteca y demandar su pago judicial por las siguientes causales:
+a. Cuando EL(LA)(LOS) HIPOTECANTE(S) incumpliere alguna de las obligaciones contraídas frente a EL(LA)(LOS) ACREEDOR(A)(S), conforme a los documentos en que consten las obligaciones que esta hipoteca garantiza. b. Cuando EL(LA)(LOS) HIPOTECANTE(S), incumpliere cualquiera de las obligaciones que contraiga o que haya contraído conforme el presente instrumento. c. Cuando EL(LA)(LOS) HIPOTECANTE(S), enajene total o parcialmente a cualquier título el predio aquí hipotecado, o lo de en tenencia a terceros, sin la previa autorización escrita de EL(LA)(LOS) ACREEDOR(A)(S), y cuando pierda la posesión material de aquel total o parcialmente. d. En caso de incumplimiento o mora en el pago de capital o de intereses de cualquiera de las obligaciones garantizadas con esta hipoteca, sea como deudor(a) o fiador, o ante el incumplimiento por parte de EL(LA)(LOS) HIPOTECANTE(S) directa o indirectamente, como deudor o fiador, de alguna de las estipulaciones contenidas en cualquiera de los documentos suscritos a favor de EL(LA)(LOS) ACREEDOR(A)(S). e. Por muerte de cualquiera de las partes aquí contratantes. f. Si EL(LA)(LOS) HIPOTECANTE(S) constituye hipoteca en favor de terceros sobre la totalidad o parte del inmueble que por esta escritura hipoteca a favor de EL(LA)(LOS) ACREEDOR(A)(S), o constituye prenda agraria o industrial y sobre los frutos, plantaciones o maquinarias existentes en el mismo, sin previo consentimiento de EL(LA)(LOS) ACREEDOR(A)(S). g. Si el bien que por esta escritura se da en garantía hipotecaria fuere perseguido administrativa o judicialmente por terceros o sufriere desmejora o deprecio, tales que ya no presten suficiente garantía para la plena seguridad de EL(LA)(LOS) ACREEDOR(A)(S), a juicio de un perito designado por éste. Para los efectos de este literal, bastar la declaración escrita por EL(LA)(LOS) ACREEDOR(A)(S), dirigida a la parte EL(LA)(LOS) HIPOTECANTE(S) o la que haga en la solicitud escrita a autoridad competente para hacer efectivos sus derechos. Queda a elección de EL(LA)(LOS) ACREEDOR(A)(S), optar por la subsistencia del plazo, si EL(LA)(LOS) HIPOTECANTE(S) constituye a favor de EL(LA)(LOS) ACREEDOR(A)(S), una nueva garantía a su satisfacción. h. Si EL(LA)(LOS) ACREEDOR(A)(S), establece que los beneficiarios del crédito incurren en inexactitud en los balances o informes o documentos para obtenerlo. ---i. Si EL(LA)(LOS) HIPOTECANTE(S), el deudor o cualquiera de los fiadores o avalistas les promueven o les es admitido un proceso de concordato o si sus bienes son embargados o perseguidos judicial o administrativamente, en ejercicio de cualquier acción, y en general si sobreviniere acción judicial que en cualquier forma pudiere afectar el inmueble hipotecado. j. Si EL(LA)(LOS) HIPOTECANTE(S) no tuviere el predio explotado económicamente en forma adecuada. OCTAVO: Que EL(LA)(LOS) HIPOTECANTE(S) se obliga a mantener asegurado contra riesgo de incendio, rayo, terremoto, la parte asegurable del bien hipotecado, por todo el tiempo de duración de esta hipoteca y hasta la completa cancelación de la deuda, en favor de EL(LA)(LOS) ACREEDOR(A)(S). NOVENO: En razón de constituirse por el presente instrumento una garantía hipotecaria abierta sin límite de cuantía, el presente acto es de cuantía indeterminada, pero exclusivamente para efectos de fijar el valor de los derechos notariales y de inscripción en la Oficina de Registro de Instrumentos Públicos de Neiva, se protocoliza con el presente instrumento público la certificación expedida por EL(LA)(LOS) ACREEDOR(A)(S) sobre el cupo o monto de crédito aprobado a EL(LA)(LOS) HIPOTECANTE(S). DECIMO: Que son de cargo de EL(LA)(LOS) HIPOTECANTE(S) los gastos que se originen del cobro judicial o extrajudicial de las deudas y obligaciones amparadas con la garantía hipotecaria constituida en este instrumento, si a ello hubiere lugar. DECIMO PRIMERO: Que si EL(LA)(LOS) ACREEDOR(A)(S), necesitare hacer efectivas judicialmente alguna de las obligaciones garantizadas con esta hipoteca a cargo de EL(LA)(LOS) HIPOTECANTE(S), le bastar al efecto presentar los respectivos títulos, instrumentos, o documentos en que consten las deudas o se deduzcan éstas y copia registrada de esta escritura. DECIMO SEGUNDO: Que EL(LA)(LOS) HIPOTECANTE(S) acepta cualquier traspaso endoso o cesión que EL(LA)(LOS) ACREEDOR(A)(S), acreedor, hiciere de los títulos o instrumentos a su cargo. Así como de esta garantía, con todas las consecuencias que la ley señala.
+DECIMO TERCERO: Que para efectos de la norma del Artículo 81 del Decreto 960 de 1970, el Artículo 43 de la Ley 1395 de 2010; Articulo 2.2.6.15.2.8.1 Subsección 8 Decreto 1664 de 2015 y las normas que lo modifiquen o sustituyan, EL(LA)(LOS) HIPOTECANTE(S) confiere por medio del presente instrumento público, poder especial, amplio y suficiente de carácter irrevocable a EL(LA)(LOS) ACREEDOR(A)(S), para que en caso de pérdida o destrucción de la primera copia de la presente escritura, firme la escritura en representación de EL(LA)(LOS) HIPOTECANTE(S), poder que va dirigido al Notario que otorgue la presente escritura pública, para efectos de que expida una copia sustitutiva de la primera copia pérdida o destruida con mérito ejecutivo y con capacidad para ceder la obligación allí contenida. Bastara para EL(LA)(LOS) ACREEDOR(A)(S), la manifestación que haga de su pérdida o destrucción, en nombre y representación de ambas partes.
+DECIMO CUARTO: Que esta hipoteca se constituye por término indefinido y que mantendrá su vigencia mientras no sea legalmente cancelada y en especial, mientras exista a cargo de EL(LA)(LOS) HIPOTECANTE(S) y en favor de EL(LA)(LOS) ACREEDOR(A)(S), cualquier obligación insoluta de las que aquella está estimada a amparar según este mismo instrumento.
+DECIMO QUINTO: {{declaracion_afectacion_vivienda_familiar}}
+DECIMO SEXTO: El(la)(los) compareciente(s) solicita(n) e insiste(n) al Notario en autorizar el presente instrumento público con el Certificado de Tradición y Libertad del folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} de fecha {{fecha_certificado_tradicion}}.
+Presente, {{nombre_acreedor}}, de las condiciones civiles y personales ya enunciadas, y manifestó:
+a. Que acepta esta escritura y la hipoteca que por medio de ella se constituye a su favor y en general todas y cada una de las declaraciones que hacen en la misma EL(LA)(LOS) HIPOTECANTE(S). Se le agregan los comprobantes fiscales correspondientes cuyo texto es el del siguiente tenor: Certificados de paz y salvos por concepto de predial unificado y valorización del predio inscrito en el catastro vigente bajo el número {{cedula_catastral_paz_y_salvo}} expedidos por la Secretaría de Hacienda de Neiva (H), con vigencia hasta el {{vigencia_paz_y_salvo}}, en el cual consta que el referido inmueble tiene un avalúo de {{avaluo_catastral}}.
+- Fotocopias de las cédulas de ciudadanía correspondientes.
+- Carta de aprobación de crédito correspondiente.
+DATOS PERSONALES. De conformidad con lo previsto en la Ley 1581 de 2012, Régimen General de Datos Personales y su Decreto Reglamentario 1377 de 2013, se informa a los comparecientes que dentro del protocolo de seguridad adoptado por esta Notaria se ha implementado la toma de huellas e imagen digital de los otorgantes a través del sistema biométrico que se recoge por parte de la Notaria al momento del otorgamiento del presente instrumento público, conociendo que dicho sistema de control implementado tiene por objeto prevenir posibles suplantaciones, salvaguardar los instrumentos y a la eficacia de los negocios jurídicos celebrados, para lo cual los comparecientes autorizan al Notario Primero del Círculo de Neiva, el tratamiento de los datos personales que proporcionen, si son datos de terceros, declaran que tienen el poder suficiente para otorgar esta autorización. Los datos personales podrán ser recolectados, almacenados, clasificados, actualizados, usados, suprimidos, transmitidos o transferidos, para el cumplimiento de las funciones y obligaciones de los notarios, la prestación de los servicios notariales de acuerdo con el Estatuto del Notariado (Decreto 960 de 1970) y demás regulación jurídica vigente; para las demás finalidades que establezca la ley para el caso específico; y las establecidas en las Políticas de Tratamiento de Datos Personales del Notario, disponibles en www.notaria1neiva.com.co. Son derechos de los titulares de datos personales: conocer, actualizar, y rectificar sus datos, previo los procedimientos establecidos en la mencionada Ley.
+ADVERTENCIA. Se advirtió a los otorgantes de esta escritura de la obligación que tiene de leer la totalidad de su texto, a fin de verificar la exactitud de todos los datos en ella consignados con el fin de aclarar, modificar o corregir lo que le pareciere; la firma de la misma demuestre su aprobación total del texto. En consecuencia, la Notaria no asume ninguna responsabilidad por errores o inexactitudes establecidas con posterioridad a la firma de (l) (los) otorgante (s) y del Notario. En tal caso, estos deben ser corregidos mediante el otorgamiento de una nueva escritura, suscrita por el que intervino en la inicial y sufragada por el mismo (Artículo 35 Decreto Ley 960 de 1970). Igualmente se advirtió a los otorgantes, que la hipoteca debe registrarse, en el término de los noventa (90) días hábiles siguientes a la fecha de otorgamiento de la presente escritura, y que, de no hacerlo en el término indicado, se deberá otorgar una nueva escritura, según circular número 70 de fecha Julio 22 de 2.000, expedida por la Superintendencia de Notariado y Registro. OTORGAMIENTO Y AUTORIZACION. Leído el presente instrumento por los otorgantes se hicieron las advertencias pertinentes y en especial la relacionada con la necesidad de inscribir la copia en el registro competente dentro del término de dos (2) meses siguientes a partir de la fecha de su otorgamiento (Art. 232 Ley 223 de 1995 y 14 del Decreto 650 de 1996), la aprueban y firman conmigo el suscrito Notario que lo autorizo y doy fe a los otorgantes se les advirtió finalmente que una vez firmado el presente instrumento el notario no aceptará correcciones o modificaciones sino en la forma y casos previstos por la ley.
+El anterior instrumento quedó elaborado en las hojas de papel notarial números: {{hojas_papel_notarial}}
+De lo cual doy fe.
+DERECHOS NOTARIALES: {{derechos_notariales}}
+Resolución No. {{resolucion_tarifas}}.
+La presente escritura fue autorizada para otorgarse en diferentes momentos Art. 9 Decreto 2148/1983.
+{{codigo_minuta}}.
+!!
+!! LOS OTORGANTES,
+!!
+!!
+!! ______________________________________
+!! {{nombre_hipotecante}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional Extranjera Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!!
+!! ______________________________________
+!! {{nombre_acreedor}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!! EL NOTARIO,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}
+@@SALTO_PAGINA@@
+!! Neiva, {{fecha_carta_aprobacion}}.
+!! Señores
+!! NOTARIA PRIMERA DE NEIVA - HUILA.
+!! Ciudad.
+!! REF: CARTA APROBACION DE CREDITO.
+!! {{nombre_acreedor}}, mayor de edad, domiciliado en {{domicilio_acreedor}}, identificado con cédula de ciudadanía número {{documento_acreedor}} expedida en {{lugar_expedicion_acreedor}}, por medio del presente escrito manifiesto que he aprobado para HIPOTECA ABIERTA SIN LIMITE DE CUANTIA un cupo de crédito por valor de {{valor_cupo_letras}} ({{valor_cupo_numeros}}) a favor de {{nombre_hipotecante}}, mayor de edad, domiciliado en {{domicilio_hipotecante}}, identificado con cedula de ciudadanía número {{documento_hipotecante}} expedida en {{lugar_expedicion_hipotecante}}.
+!! Atentamente,
+!! {{nombre_acreedor}}
+!! CC. {{documento_acreedor}} expedida en {{lugar_expedicion_acreedor}}.

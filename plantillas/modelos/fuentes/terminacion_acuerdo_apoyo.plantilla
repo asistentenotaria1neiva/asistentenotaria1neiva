@@ -1,0 +1,60 @@
+// MODELO LIMPIO – Terminación unilateral de acuerdo de apoyos (Ley 1996 de 2019)
+// Fuente: F72 (ver plantillas/modelos/INDICE.md). Datos del caso reemplazados por {{marcadores}}; el resto es el texto literal de la notaría.
+// Estado: PENDIENTE DE APROBACIÓN DEL NOTARIO.
+// Nota: CORRECCIÓN PROPUESTA (validar con el notario): el original decía "Presentes la señora …, ya identificadasmanifiestan: Que aceptan la presente escritura y la MODIFICACIÓN …" (texto arrastrado de una minuta de modificación); se cambió a singular y a "TERMINACIÓN".
+// Nota: CORRECCIÓN PROPUESTA (validar con el notario): en la ADVERTENCIA faltaban las palabras "tiene de leer la" ("de la obligación que tiene de leer la totalidad de su texto"), tomadas del texto estándar de las demás escrituras.
+// Nota: Fecha, domicilio y actividad económica estaban en blanco en el original; ahora son marcadores.
+// Nota: Revise también que las citas normativas (art. 6 y art. 20 de la Ley 1996 de 2019; art. 2.2.4.5.2.5 del Decreto 1069 de 2015) sean las correctas: referencia normativa – pendiente de validar por el notario.
+### ESCRITURA PUBLICA NÚMERO: {{numero_escritura_letras}}
+### FECHA DE OTORGAMIENTO: {{fecha_otorgamiento_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+!! {{nombre_titular}} CC. {{documento_titular}}
+!! (Titular del acto Jurídico)
+### CÓDIGO DE LA NOTARIA 410010001.
+### ESPECIFICACION
+!! VALOR DEL ACTO
+!! TERMINACIÓN UNILATERAL DE ACUERDO DE APOYOS
+!! ACTO SIN CUANTÍA
+En la ciudad de Neiva, capital del departamento del Huila, República de Colombia, a los {{fecha_otorgamiento_comparecencia}}, al despacho de la Notaria Primera de Neiva, cuyo titular es el doctor {{nombre_notario}}, compareció:
+{{nombre_titular}}, mayor de edad, domiciliada y residente en {{domicilio_titular}}, identificada con la cédula de ciudadanía número {{documento_titular}}, de estado civil {{estado_civil_titular}}, de actividad económica {{actividad_economica_titular}}, quien obra en nombre propio, en su condición de titular del acto jurídico dentro del Acuerdo de Apoyos formalizado mediante Escritura Pública No. {{numero_escritura_acuerdo}} del {{fecha_escritura_acuerdo}} de esta Notaría, por medio del cual designó como personas de apoyo para el ejercicio de su capacidad legal a las señoras {{nombre_apoyo_1}}, identificada con cédula de ciudadanía No. {{documento_apoyo_1}}, y {{nombre_apoyo_2}}, identificada con cédula de ciudadanía No. {{documento_apoyo_2}}; quien, hallándose en pleno uso de su capacidad legal y en ejercicio del derecho que le reconoce el artículo 6 de la Ley 1996 de 2019, manifestó:
+PRIMERO. Que por medio del presente instrumento público y en su condición de titular del acto jurídico, decide terminar de manera unilateral, a partir de la fecha de otorgamiento de esta escritura, el Acuerdo de Apoyos contenido en la Escritura Pública No. {{numero_escritura_acuerdo}} del {{fecha_escritura_acuerdo}} de la Notaría Primera del Círculo de Neiva, mediante el cual había designado como personas de apoyo a las señoras {{nombre_apoyo_1}}, identificada con cédula de ciudadanía No. {{documento_apoyo_1}}, y {{nombre_apoyo_2}}, identificada con cédula de ciudadanía No. {{documento_apoyo_2}}, de conformidad con el artículo 20 de la Ley 1996 de 2019 y el artículo 2.2.4.5.2.5 del Decreto 1069 de 2015, adicionado por el Decreto 1429 de 2020.
+SEGUNDO. Que la presente terminación obedece a decisión unilateral de la titular del acto jurídico y, en consecuencia, no requiere el consentimiento ni la comparecencia de las personas de apoyo designadas, conforme al inciso primero del artículo 20 de la Ley 1996 de 2019 y al artículo 2.2.4.5.2.5 del Decreto 1069 de 2015, adicionado por el Decreto 1429 de 2020.
+TERCERO. Que solicita al Notario comunicar la presente decisión a las señoras {{nombre_apoyo_1}} y {{nombre_apoyo_2}}, personas de apoyo designadas, a la dirección registrada en el Acuerdo de Apoyos contenido en la Escritura Pública No. {{numero_escritura_acuerdo}} del {{fecha_escritura_acuerdo}}, en los términos del artículo 2.2.4.5.2.5 del Decreto 1069 de 2015.
+CUARTO. Que declara haber actuado de manera libre, consciente y sin presión ni coacción de ningún tipo, en pleno ejercicio de su capacidad legal, conforme al artículo 6 de la Ley 1996 de 2019, según el cual todas las personas son sujetos de derecho y obligaciones y tienen capacidad legal en igualdad de condiciones, sin distinción de ninguna clase.
+QUINTO. El Notario deja constancia de que se ordena sentar la correspondiente nota marginal de terminación en la matriz de la Escritura Pública No. {{numero_escritura_acuerdo}} del {{fecha_escritura_acuerdo}}, y de que el presente instrumento se incorporará al Sistema de Información de la Conciliación, el Arbitraje y la Amigable Composición (SICAAC), administrado por el Ministerio de Justicia y del Derecho, en los términos del artículo 2.2.4.5.2.5 del Decreto 1069 de 2015.
+SEXTO. RÉGIMEN TARIFARIO. De conformidad con el parágrafo 1 del artículo 16 de la Ley 1996 de 2019 y el artículo 2.2.4.5.2.8 del Decreto 1069 de 2015, el presente acto causa derechos notariales de acto sin cuantía.
+Presente la señora {{nombre_titular}}, ya identificada, manifiesta: Que acepta la presente escritura y la TERMINACIÓN que por medio de esta escritura se hace por encontrarla a su entera satisfacción.
+Se le agregan los siguientes documentos: Fotocopias de la cédula de ciudadanía correspondiente.
+- Solicitud respectiva.
+DATOS PERSONALES. De conformidad con lo previsto en la Ley 1581 de 2012, Régimen General de Datos Personales y su Decreto Reglamentario 1377 de 2013, se informa a los comparecientes que dentro del protocolo de seguridad adoptado por esta Notaria se ha implementado la toma de huellas e imagen digital de los otorgantes a través del sistema biométrico que se recoge por parte de la Notaria al momento del otorgamiento del presente instrumento público, conociendo que dicho sistema de control implementado tiene por objeto prevenir posibles suplantaciones, salvaguardar los instrumentos y a la eficacia de los negocios jurídicos celebrados, para lo cual los comparecientes autorizan al Notario Primero del Círculo de Neiva, el tratamiento de los datos personales que proporcionen, si son datos de terceros, declaran que tienen el poder suficiente para otorgar esta autorización. Los datos personales podrán ser recolectados, almacenados, clasificados, actualizados, usados, suprimidos, transmitidos o transferidos, para el cumplimiento de las funciones y obligaciones de los notarios, la prestación de los servicios notariales de acuerdo con el Estatuto del Notariado (Decreto 960 de 1970) y demás regulación jurídica vigente; para las demás finalidades que establezca la ley para el caso específico; y las establecidas en las Políticas de Tratamiento de Datos Personales del Notario, disponibles en www.notaria1neiva.com.co. Son derechos de los titulares de datos personales: conocer, actualizar, y rectificar sus datos, previo los procedimientos establecidos en la
+mencionada Ley. ADVERTENCIA. Se advirtió a la otorgante de esta escritura, de la obligación que tiene de leer la totalidad de su texto, a fin de verificar la exactitud de todos los datos en ella consignados con el fin de aclarar, modificar o corregir lo que le pareciere; la firma de la misma demuestra su aprobación total del texto. En consecuencia, el Notario no asume ninguna responsabilidad por errores o inexactitudes establecidas con posterioridad a la firma de (l) (los) otorgante(s) y del Notario. En tal caso, estos deben ser corregidos mediante el otorgamiento de una nueva escritura suscrita por el que intervino en la inicial y sufragada por el mismo (Artículo 35 Decreto Ley 960 de 1970).
+OTORGAMIENTO Y AUTORIZACION. Leído el presente instrumento por los otorgantes se hicieron las advertencias pertinentes, la aprueban y firman conmigo el suscrito Notario que lo autorizo y doy fe a los otorgantes que se les advirtió finalmente que una vez firmado el presente instrumento el notario no aceptará correcciones o modificaciones sino en la forma y casos previstos por la ley.
+El anterior instrumento quedó elaborado en las hojas de papel notarial números: {{hojas_papel_notarial}}
+De lo cual doy fe.
+DERECHOS NOTARIALES: {{derechos_notariales}}
+Resolución No. {{resolucion_tarifas}}.
+{{codigo_minuta}}.
+LIBRO DE VARIOS: {{libro_varios}}
+!!
+!! EL OTORGANTE,
+!!
+!!
+!! ______________________________________
+!! {{nombre_titular}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!! EL NOTARIO,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}

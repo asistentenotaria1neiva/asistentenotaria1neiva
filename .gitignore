@@ -1,0 +1,26 @@
+# Datos con información personal real (Ley 1581 de 2012) – NUNCA al repositorio
+datos_locales/
+almacenamiento/
+respaldos/
+
+# Secretos
+.env
+.env.*
+!.env.ejemplo
+*.pem
+*.key
+
+# Dependencias y compilados
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Sistema
+.DS_Store
+Thumbs.db
+~$*
+pruebas/salida/
+almacenamiento_pruebas/

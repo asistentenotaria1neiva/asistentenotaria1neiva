@@ -1,0 +1,3 @@
+*.sh text eol=lf
+despliegue/Caddyfile text eol=lf
+Dockerfile text eol=lf

@@ -1,0 +1,85 @@
+// MODELO LIMPIO – Compraventa de mejoras (posesión)
+// Fuente: F20 (ver plantillas/modelos/INDICE.md). Datos del caso reemplazados por {{marcadores}}; el resto es el texto literal de la notaría.
+// Estado: PENDIENTE DE APROBACIÓN DEL NOTARIO.
+// Nota: En el ejemplo la compradora era también dueña del lote donde están las mejoras (PARAGRAFO de la cláusula PRIMERO): {{nombre_propietario_lote}}.
+// Nota: El inmueble del ejemplo estaba en otro círculo registral (ORIP de La Plata): {{oficina_registro}}.
+// Nota: El texto conserva el género y número del ejemplo (una vendedora, una compradora).
+### ESCRITURA PÚBLICA NÚMERO: {{numero_escritura_letras}}
+### FECHA DE OTORGAMIENTO: {{fecha_otorgamiento_letras}}
+### PERSONAS QUE INTERVIENEN EN EL ACTO
+!! {{nombre_vendedor}} {{documento_vendedor}}
+!! {{nombre_comprador}} {{documento_comprador}}
+### CODIGO DE LA NOTARIA 410010001.
+### ESPECIFICACION VALOR DEL ACTO
+!! COMPRAVENTA MEJORAS {{valor_venta_numeros}}
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria}}.
+CEDULA CATASTRAL: {{cedula_catastral}}.
+NOMBRE O DIRECCIÓN DEL INMUEBLE: {{direccion_inmueble}}.
+OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE {{oficina_registro}}.
+En la ciudad de Neiva, Departamento del Huila, Republica de Colombia, a los {{dia_otorgamiento_letras}} ({{dia_otorgamiento}}) DÍAS del mes de {{mes_otorgamiento}} del año {{anio_otorgamiento_letras}} ({{anio_otorgamiento}}), en el CIRCULO NOTARIAL DE NEIVA, donde funciona la Notaria Primera cuyo notario titular en el ejercicio es el doctor {{nombre_notario}}.
+Compareció quien dijo ser, {{nombre_vendedor}}, mayor de edad, domiciliada en {{domicilio_vendedor}}, identificada con cedula de ciudadanía número {{documento_vendedor}} expedida en {{lugar_expedicion_vendedor}}, estado civil {{estado_civil_vendedor}}, actividad económica {{actividad_economica_vendedor}}, y manifestó:
+PRIMERO: Que por este instrumento público transfiere en venta a quien dijo ser, {{nombre_comprador}}, mayor de edad, domiciliada en {{domicilio_comprador}}, identificada con cédula de ciudadanía número {{documento_comprador}} expedida en {{lugar_expedicion_comprador}}, estado civil {{estado_civil_comprador}}, actividad económica {{actividad_economica_comprador}}, la posesión que tiene y ejerce sobre el siguiente inmueble: Se trata de unas mejoras consistentes en {{descripcion_mejoras}} ubicada en la {{direccion_inmueble}}, en {{municipio_inmueble}}, Departamento del {{departamento_inmueble}}, {{descripcion_construccion}}, determinado por los siguientes linderos: {{linderos}}
+MATRICULA INMOBILIARIA: {{matricula_inmobiliaria}}.
+CEDULA CATASTRAL: {{cedula_catastral}}.
+PARAGRAFO: Las mejoras antes descritas, se encuentran construidas sobre un lote de terreno de propiedad de {{nombre_propietario_lote}}, identificado(a) con cedula de ciudadanía número {{documento_propietario_lote}} expedida en {{lugar_expedicion_propietario_lote}}.
+SEGUNDO. TRADICION: Que las mejoras fueron adquiridas por la vendedora por {{modo_adquisicion}}, mediante escritura pública número {{numero_escritura_antecedente}} del {{fecha_escritura_antecedente}}, otorgada en la {{notaria_escritura_antecedente}}, inscrita al folio de matrícula inmobiliaria número {{matricula_inmobiliaria}} en la Oficina de Registro de Instrumentos Públicos de {{oficina_registro}}; e inscrita a la cedula catastral número {{cedula_catastral}}. TERCERO: Que el valor de la venta es por la suma de {{valor_venta_letras}} ({{valor_venta_numeros}}), suma que la vendedora manifiesta haber recibido en su totalidad a entera satisfacción de manos de la compradora.
+PARAGRAFO: Las otorgantes de manera libre y espontanea declaramos bajo la gravedad de juramento que conocemos el texto y alcance del Artículo 61 de la Ley 2010 del 27 de Diciembre de 2019, que se entiende prestado por el sólo hecho de la firma y manifestaron:
+1. Que el precio incluido en la presente escritura de compraventa es real y no ha sido objeto de pactos privados en los que se señale un valor diferente.
+2. Que no existen sumas que se hayan convenido o facturado por fuera de la misma.
+CUARTO: Garantiza la vendedora que las mejoras objeto de esta venta se encuentran libres de toda clase de gravámenes que puedan afectar su dominio, posesión y tenencia del mismo, tales como censo, hipoteca, embargo, anticresis, pleitos pendientes, demanda civil registrada, arrendamiento por escritura pública, patrimonio de familia inembargable, condiciones resolutorias, limitaciones del mismo y cualquier otro, y en general libre de todo gravamen, pero que en todo caso se obliga a salir al saneamiento de lo vendido conforme a la Ley.
+QUINTO: Que las mejoras están libres por concepto de servicios públicos domiciliarios de agua, luz y alcantarillado (en caso que existan), hasta la fecha de otorgamiento de la presente escritura pública; tasas y contribuciones, impuestos nacionales, Departamentales y Municipales etc.
+SEXTO: Que, desde el día de hoy, en su condición de vendedora hace entrega real y material a la compradora de las mejoras objeto de venta, junto con todos sus usos, costumbres y servidumbres, que legalmente le corresponde, sin reserva ni limitación alguna y en el estado en que se encuentra. SEPTIMO: La vendedora manifiesta que las mejoras que enajena no se encuentran afectadas a vivienda familiar. OCTAVO. CONSTANCIA (REDAM): Ley 2097 de 2021, Decreto Reglamentario 1310 de 2022, Circular 355 del 20 Septiembre 2023. Se le(s) hizo saber a el/la/los enajenante(s) sobre el contenido del numeral 3 Articulo 6 de la Ley 2097 de 2021 y su Decreto Reglamentario 1310 de 2022, quien(es) manifiesta(n) no aportar el correspondiente certificado de REDAM; y ante la imposibilidad de dar aplicación a lo dispuesto en la Ley 2097 de 2021 y su Decreto Reglamentario 1310 de 2022, en el sentido de llevar a cabo la consulta para verificación en la base de datos del REDAM, dado que a la fecha la misma no se encuentra disponible para el acceso del notario(a), el/la/los compareciente(s) declara(n) que al momento de otorgar la presente escritura pública no se encuentra(n) inscrito(s) en el REGISTRO DE DEUDORES ALIMENTARIOS MOROSOS - REDAM.
+NOVENO: El(la)(los) otorgante(s) solicita(n) e insiste(n) al Notario de autorizar el presente instrumento público con Certificado(s) de Tradición de fecha {{fecha_certificado_tradicion}}.
+Presente, {{nombre_comprador}}, de las condiciones civiles y personales ya enunciadas, y manifestó:
+a. Que pagó el valor de las mejoras y que acepta la presente escritura pública y la venta que en ella se hace por estar a su entera satisfacción y que está en posesión de lo aquí comprado por entrega real y material que le hiciera la vendedora.
+b. Una vez adquirida la plena propiedad, la compradora manifestó ser de estado civil {{estado_civil_comprador}}, razón por la cual no procede la AFECTACIÓN A VIVIENDA FAMILIAR de que trata la Ley 258 de 1996, reformada por la Ley 854 de 2003.
+ADVERTENCIA: ESTA ESCRITURA PUBLICA NO CONSTITUYE TITULO TRASLATICIO DE DOMINIO Y SOLO SERA INSCRIBIBLE EN LA OFICINA DE REGISTRO SI EXISTE FOLIO DE MEJORAS ABIERTO CON ANTERIORIDAD A LA INSTRUCCIÓN ADMINISTRATIVA NUMERO 15 DE 1994. (Instrucción Administrativa No. 04 de 2012).
+Se le agregan los comprobantes fiscales correspondientes cuyo texto es el del siguiente tenor: Certificado de paz y salvo por concepto de predial unificado del predio inscrito en el catastro vigente bajo el número {{cedula_catastral}} expedido por la Secretaría de Hacienda de {{municipio_paz_y_salvo}}, de fecha {{fecha_paz_y_salvo}} con vigencia hasta el {{vigencia_paz_y_salvo}}, en el cual consta que el referido inmueble tiene un avalúo de {{avaluo_catastral}}.
+- Fotocopias de las cédulas de ciudadanía correspondientes.
+DATOS PERSONALES. De conformidad con lo previsto en la Ley 1581 de 2012, Régimen General de Datos Personales y su Decreto Reglamentario 1377 de 2013, se informa a los comparecientes que dentro del protocolo de seguridad adoptado por esta Notaria se ha implementado la toma de huellas e imagen digital de los otorgantes a través del sistema biométrico que se recoge por parte de la Notaria al momento del otorgamiento del presente instrumento público, conociendo que dicho sistema de control implementado tiene por objeto prevenir posibles suplantaciones, salvaguardar los instrumentos y a la eficacia de los negocios jurídicos celebrados, para lo cual los comparecientes autorizan al Notario Primero del Círculo de Neiva, el tratamiento de los datos personales que proporcionen, si son datos de terceros, declaran que tienen el poder suficiente para otorgar esta autorización. Los datos personales podrán ser recolectados, almacenados, clasificados, actualizados, usados, suprimidos, transmitidos o transferidos, para el cumplimiento de las funciones y obligaciones de los notarios, la prestación de los servicios notariales de acuerdo con el Estatuto del Notariado (Decreto 960 de 1970) y demás regulación jurídica vigente; para las demás finalidades que establezca la ley para el caso específico; y las establecidas en las Políticas de Tratamiento de Datos Personales del Notario, disponibles en www.notaria1neiva.com.co. Son derechos de los titulares de datos personales: conocer, actualizar, y rectificar sus datos, previo los procedimientos establecidos en la mencionada Ley.
+ADVERTENCIA. El notario deja constancia que a los otorgantes se les advirtió sobre el contenido del texto y alcance del Artículo 61 de la Ley 2010 del 27 de Diciembre de 2019, y que conocen sus consecuencias. Así mismo se advirtió a los otorgantes de esta escritura, de la obligación que tiene de leer la totalidad de su texto, a fin de verificar la exactitud de todos los datos en ella consignados con el fin de aclarar, modificar o corregir lo que le pareciere; la firma de la misma demuestra su aprobación total del texto. En consecuencia, el Notario no asume ninguna responsabilidad por errores o inexactitudes establecidas con posterioridad a la firma de (l) (los) otorgante(s) y del Notario. En tal caso, estos deben ser corregidos mediante el otorgamiento de una nueva escritura suscrita por el que intervino en la inicial y sufragada por el mismo (Artículo 35 Decreto Ley 960 de 1970).
+OTORGAMIENTO Y AUTORIZACION. Leído el presente instrumento por los otorgantes se hicieron las advertencias pertinentes y en especial la relacionada con la necesidad de inscribir la copia en el registro competente dentro del término de dos (2) meses siguientes a partir de la fecha de su otorgamiento (Art. 232 Ley 223 de 1995 y 14 del Decreto 650 de 1996), la aprueban y firman conmigo el suscrito Notario que lo autorizo y doy fe a los otorgantes se les advirtió finalmente que una vez firmado el presente instrumento el notario no aceptará correcciones o modificaciones sino en la forma y casos previstos por la ley.
+El anterior instrumento quedó elaborado en las hojas de papel notarial números: {{hojas_papel_notarial}}
+De lo cual doy fe.
+DERECHOS NOTARIALES: {{derechos_notariales}}
+RETEFUENTE: {{retefuente}}
+Resolución No. {{resolucion_tarifas}}.
+La presente escritura fue autorizada para otorgarse en diferentes momentos Art. 9 Decreto 2148/1983. {{codigo_minuta}}.
+!!
+!! LAS OTORGANTES,
+!!
+!!
+!! ______________________________________
+!! {{nombre_vendedor}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!!
+!! ______________________________________
+!! {{nombre_comprador}}
+!! C.C. No.
+!! Estado Civil:
+!! Dirección y Domicilio:
+!! Teléfono:
+!! Actividad Económica:
+!! E-mail:
+!! Persona expuesta políticamente (Decreto 830 de 2021): SI ___ NO ___
+!! Nacional ___ Extranjera ___
+!! Es cónyuge, compañero permanente o pariente hasta segundo grado de consanguinidad, primero de afinidad o primero civil de PEP: SI ___ NO ___
+!! Fecha de vinculación: día ( ) mes ( ) año ( ).
+!! Fecha de desvinculación: día ( ) mes ( ) año ( ).
+!!
+!! EL NOTARIO,
+!!
+!!
+!! ______________________________________
+!! {{nombre_notario}}
