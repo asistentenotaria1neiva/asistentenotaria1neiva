@@ -30,10 +30,16 @@ export function BotonAccion({ accion, texto, textoPendiente, clase, confirmar }:
   );
 }
 
+const sinTildes = (x: string) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
 export function FormularioNuevo({ accion, actos }: { accion: (r: Resultado, f: FormData) => Promise<Resultado>; actos: { id: string; nombre: string; estadoPlantilla: string }[] }) {
   const [r, enviar, pendiente] = useActionState(accion, {});
   const [seleccion, setSeleccion] = useState<string[]>([]);
   const mover = (i: number, d: -1 | 1) => setSeleccion((s) => { const n = [...s]; [n[i], n[i + d]] = [n[i + d], n[i]]; return n; });
+  const [busqueda, setBusqueda] = useState('');
+  const terminos = sinTildes(busqueda).split(/\s+/).filter(Boolean);
+  // Cada palabra escrita debe aparecer en el nombre, en cualquier orden
+  const visibles = actos.filter((a) => terminos.every((t) => sinTildes(a.nombre).includes(t)));
   return (
     <form action={enviar}>
       <Mensaje r={r} />
@@ -42,7 +48,23 @@ export function FormularioNuevo({ accion, actos }: { accion: (r: Resultado, f: F
         <div className="tarjeta">
           <h2>1. Actos disponibles</h2>
           <p className="suave">Seleccione los actos de la escritura. Si la escritura combina varios (p. ej. cancelación de patrimonio + compraventa), agréguelos en el orden en que deben aparecer.</p>
-          {actos.map((a) => (
+          <div className="campo buscar-actos">
+            <label htmlFor="buscar-acto">Buscar acto</label>
+            <div className="fila" style={{ gap: '0.5rem', flexWrap: 'nowrap' }}>
+              <input id="buscar-acto" type="search" value={busqueda} placeholder="Escriba parte del nombre (p. ej. hipoteca)" autoComplete="off"
+                onChange={(e) => setBusqueda(e.target.value)}
+                // Enter no envía el formulario: si hay un solo resultado, lo selecciona
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  if (visibles.length === 1 && !seleccion.includes(visibles[0].id)) { setSeleccion((s) => [...s, visibles[0].id]); setBusqueda(''); }
+                }} />
+              {busqueda && <button type="button" className="secundario" onClick={() => setBusqueda('')}>Limpiar</button>}
+            </div>
+            <div className="ayuda" aria-live="polite">{busqueda ? `${visibles.length} de ${actos.length} actos` : `${actos.length} actos disponibles`}{seleccion.length ? ` · ${seleccion.length} seleccionado(s)` : ''}</div>
+          </div>
+          {!visibles.length && <p className="suave vacio">Ningún acto coincide con «{busqueda}».</p>}
+          {visibles.map((a) => (
             <label key={a.id} className="casilla opcion">
               <input type="checkbox" checked={seleccion.includes(a.id)} onChange={(e) => setSeleccion((s) => e.target.checked ? [...s, a.id] : s.filter((x) => x !== a.id))} />
               <span>{a.nombre}</span> {a.estadoPlantilla !== 'APROBADA' && <span className="etiqueta advertencia">plantilla pendiente de aprobación</span>}

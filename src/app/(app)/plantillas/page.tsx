@@ -57,7 +57,9 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
   else if (orden === 'reciente') filas.sort((a, b) => ultimaCarga(b) - ultimaCarga(a) || a.nombre.localeCompare(b.nombre));
   else if (orden === 'prioridad' || filtro === 'sin_plantilla') filas.sort(porPrioridad); // sin plantilla: primero lo más urgente
   // Por categoría se agrupa; con otro orden la lista es una sola
-  const categorias = [...new Set(tipos.map((t) => t.categoria))];
+  // Las categorías de escrituras en orden (A, B, C…) y la de las partes comunes siempre al final
+  const esComun = (c: string) => tipos.some((t) => t.categoria === c && t.esBloque);
+  const categorias = [...new Set(tipos.map((t) => t.categoria))].sort((a, b) => Number(esComun(a)) - Number(esComun(b)) || a.localeCompare(b));
   const grupos = orden && orden !== 'categoria'
     ? [{ titulo: 'Resultados', filas }].filter((g) => g.filas.length)
     : categorias.map((c) => ({ titulo: c === 'Bloques comunes' ? 'Partes comunes de todas las escrituras (carátula, cierre, oficios)' : c, filas: filas.filter((t) => t.categoria === c) })).filter((g) => g.filas.length);
