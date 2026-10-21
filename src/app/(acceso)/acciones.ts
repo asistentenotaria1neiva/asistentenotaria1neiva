@@ -95,7 +95,12 @@ export async function accionRegistrarEquipo(_: Estado, f: FormData): Promise<Est
 /** Crea el primer administrador. Solo funciona mientras no exista ningún usuario y desde la red de la oficina. */
 export async function accionInstalar(_: Estado, f: FormData): Promise<Estado> {
   const ip = await ipCliente();
-  if (!ipPermitida(ip, await obtenerConfig('red.ips_oficina'))) return { error: 'La instalación solo se puede hacer desde la red de la oficina.' };
+  const ipsOficina = await obtenerConfig('red.ips_oficina');
+  if (!ipPermitida(ip, ipsOficina)) {
+    // Se muestra la IP detectada (la del propio visitante) para poder registrarla; nunca la lista autorizada
+    console.warn(`[instalacion] IP ${ip} no autorizada; IP de oficina configuradas: ${ipsOficina.length}`);
+    return { error: `La instalación solo se puede hacer desde la red de la oficina. IP detectada: ${ip} (IP de oficina configuradas: ${ipsOficina.length}).` };
+  }
   const usuario = texto(f, 'usuario').trim().toLowerCase();
   const nombre = texto(f, 'nombre').trim();
   const contrasena = texto(f, 'contrasena');
