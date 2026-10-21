@@ -75,9 +75,9 @@ Parámetros en formato JSON: IP de la oficina, minutos de inactividad, duración
 
 ## 10. Copias de seguridad
 
-- Diarias y cifradas (`scripts/respaldo.sh --probar`, programado en el servidor), con copia en una ubicación separada y **prueba de restauración automática**.
-- Restauración real: `scripts/restaurar.sh <archivo> --produccion` (pide confirmación escrita). Úsela solo con autorización del notario.
-- Guarde `CLAVE_MAESTRA` y `CLAVE_RESPALDO` fuera del servidor y separadas de las copias. Sin ellas no hay recuperación posible.
+- La base de datos y los documentos están en Supabase. Las copias dependen del plan contratado (el gratuito **no** incluye copias descargables; el Pro incluye copias diarias que se restauran desde el panel de Supabase).
+- Restaurar una copia reemplaza los datos actuales: hágalo solo con autorización del notario.
+- Guarde `CLAVE_MAESTRA` fuera de Vercel y de Supabase. Sin ella los documentos de cualquier copia son ilegibles.
 
 ## 11. Ante un incidente
 

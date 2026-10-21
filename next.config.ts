@@ -14,11 +14,14 @@ const cabecerasSeguridad = [
 ];
 
 const config: NextConfig = {
-  // Imagen Docker: salida autónoma (BUILD_STANDALONE=1 en el Dockerfile)
-  output: process.env.BUILD_STANDALONE === '1' ? 'standalone' : undefined,
   poweredByHeader: false,
   productionBrowserSourceMaps: false, // el frontend se publica minificado y sin mapas de código
   serverExternalPackages: ['@node-rs/argon2', '@prisma/client'],
+  // El catálogo y las plantillas .docx se leen del disco al iniciar (src/lib/servicios/inicializacion.ts):
+  // en Vercel hay que incluirlos explícitamente en el paquete de cada función
+  outputFileTracingIncludes: {
+    '/**': ['./plantillas/catalogo.json', './plantillas/docx/**/*'],
+  },
   experimental: {
     serverActions: { bodySizeLimit: '30mb' }, // carga de documentos soporte
   },

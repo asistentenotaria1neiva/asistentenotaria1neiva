@@ -80,7 +80,7 @@ export async function generarBorrador(ctx: ContextoEscritura, cargar: CargadorPl
 }
 
 /**
- * Convierte el .docx a PDF con Gotenberg (LibreOffice) en la red interna.
+ * Convierte el .docx a PDF con un servicio Gotenberg (LibreOffice) externo, si PDF_CONVERSOR_URL está definida.
  * Devuelve null si no hay conversor configurado.
  */
 export async function convertirAPdf(docx: Buffer, nombre = 'borrador.docx'): Promise<Buffer | null> {

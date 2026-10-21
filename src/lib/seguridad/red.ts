@@ -1,7 +1,7 @@
 /**
  * Restricción por red: el personal solo entra desde la IP pública de la oficina.
- * Detrás del proxy (Caddy) la IP real llega en X-Real-IP; solo se confía en esa
- * cabecera si CONFIAR_EN_PROXY=true (en producción el proxy la sobrescribe siempre).
+ * En Vercel la IP real llega en X-Real-IP; solo se confía en esa cabecera si
+ * CONFIAR_EN_PROXY=true (en producción Vercel la sobrescribe siempre).
  */
 import 'server-only';
 import { headers } from 'next/headers';

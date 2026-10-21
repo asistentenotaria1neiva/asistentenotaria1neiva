@@ -10,7 +10,7 @@ La aplicación **prepara, verifica y advierte**. No reemplaza al notario: la fir
 
 | Área | Medida | Dónde está |
 | --- | --- | --- |
-| Transporte | HTTPS obligatorio (TLS automático en Caddy), HSTS de 2 años con preload | `despliegue/Caddyfile`, `next.config.ts` |
+| Transporte | HTTPS obligatorio (TLS automático en Vercel), HSTS de 2 años con preload | `next.config.ts` |
 | Cabeceras | CSP con *nonce* por petición, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`, COOP/CORP, `Cache-Control: no-store` | `src/proxy.ts`, `next.config.ts` |
 | Contraseñas | Argon2id (19 MiB, t=2, p=1); mínimo 12 caracteres con mayúsculas, minúsculas y números; cambio obligatorio de la contraseña temporal | `src/lib/seguridad/contrasenas.ts` |
 | Bloqueo | 5 intentos fallidos → bloqueo de 30 min (configurable), alerta ALTA; límite de 20 intentos por IP y 10 por usuario cada 15 min | `src/lib/sesion.ts` |
@@ -19,15 +19,15 @@ La aplicación **prepara, verifica y advierte**. No reemplaza al notario: la fir
 | Equipos | Token de equipo firmado en cookie `HttpOnly`, `Secure`, `SameSite=Strict` (`__Host-` en producción); huella HMAC en la base; huella del navegador como dato complementario; equipo nuevo = PENDIENTE hasta aprobación | `src/lib/sesion.ts`, `/admin/dispositivos` |
 | Red | El personal solo entra desde la IP pública de la oficina (lista blanca configurable, admite CIDR). El administrador puede entrar desde fuera, siempre con doble factor; cada acceso remoto genera alerta | `src/lib/seguridad/red.ts` |
 | Revocación inmediata | Cada petición revalida sesión, usuario, equipo y red: desactivar un equipo o suspender un usuario corta su sesión en la siguiente petición | `leerSesion()` en `src/lib/sesion.ts` |
-| Documentos | Cifrado AES-256-GCM en reposo, con verificación de integridad (SHA-256) al descargar; carpeta privada fuera de `/public`; se valida el tipo real del archivo por su firma (PDF, JPG, PNG, WEBP) | `src/lib/almacenamiento.ts`, `src/lib/servicios/documentos.ts` |
-| Base de datos | PostgreSQL en red interna de Docker sin puertos publicados; volumen sobre disco cifrado del proveedor; solo la app se conecta | `docker-compose.yml` |
+| Documentos | Cifrado AES-256-GCM en reposo, con verificación de integridad (SHA-256) al descargar; bucket privado de Supabase Storage (sin URL pública; el proveedor solo recibe bytes ya cifrados); se valida el tipo real del archivo por su firma (PDF, JPG, PNG, WEBP) | `src/lib/almacenamiento.ts`, `src/lib/servicios/documentos.ts` |
+| Base de datos | PostgreSQL de Supabase (cifrado en reposo del proveedor); solo la app se conecta, con su usuario. Se retiró el acceso de la API REST pública de Supabase (roles `anon`/`authenticated`) y RLS está activo en todas las tablas | `prisma/migrations/*_bloquear_api_publica` |
 | Clave de la API de Claude | Solo en el servidor (`ANTHROPIC_API_KEY` en `.env` o gestor de secretos). Nunca en el navegador ni en el repositorio (`.gitignore`) | `src/lib/ia/cliente.ts` (`server-only`) |
 | Autorización | Toda la lógica corre en el servidor; cada acción verifica rol y propiedad del expediente; el navegador nunca decide qué está permitido | `src/lib/servicios/*` |
 | CSRF | Acciones de servidor de Next verifican `Origin` contra `Host`; cookies `SameSite=Strict` | Next.js + `src/lib/sesion.ts` |
 | Exportaciones | No existe exportación masiva. Las descargas son individuales (documento, borrador, plantilla) y quedan auditadas | `src/app/api/*` |
 | Auditoría | Registro inmodificable: disparadores de PostgreSQL bloquean UPDATE, DELETE y TRUNCATE; cada fila encadena el hash de la anterior y la cadena se verifica desde el panel | `prisma/migrations/*_auditoria_inmodificable`, `src/lib/auditoria.ts` |
 | Alertas | Equipo no autorizado, IP no permitida, bloqueos, acceso remoto, códigos de doble factor errados, huella de navegador distinta, límites de peticiones | `/admin/alertas` |
-| Copias | Diarias, cifradas con AES-256 (clave aparte), en ubicación separada, con prueba de restauración | `scripts/respaldo.sh`, `scripts/restaurar.sh` |
+| Copias | **Pendiente.** Dependen del plan de Supabase (el gratuito no incluye copias descargables; el Pro, diarias). Ver decisión pendiente n.º 15 | Panel de Supabase |
 | Frontend | Compilado y minificado, sin mapas de código en producción | `next.config.ts` |
 
 ## 2. Cobertura del OWASP Top 10 (2021)
@@ -41,9 +41,9 @@ La aplicación **prepara, verifica y advierte**. No reemplaza al notario: la fir
 | **A05 – Configuración insegura** | Cabeceras de seguridad, `poweredByHeader: false`, base de datos sin exposición, contenedor sin privilegios (usuario `app`), sin lista de IP en producción no entra nadie del personal. |
 | **A06 – Componentes vulnerables** | Dependencias fijadas en `package-lock.json`; `npm audit` en cada entrega. Estado actual: la única alerta (`deepmerge-ts`, vía la CLI de Prisma 6) afecta solo la herramienta de migraciones en el servidor de compilación, no la aplicación en ejecución; se resolverá al migrar a Prisma 7. Next.js actualizado a 16.4 para corregir la alerta de PostCSS. |
 | **A07 – Fallas de identificación y autenticación** | Bloqueo por intentos, límites por IP/usuario, doble factor, sesión única, inactividad, mensajes genéricos, tiempo constante cuando el usuario no existe. |
-| **A08 – Integridad de software y datos** | Hash SHA-256 de documentos, borradores y plantillas; auditoría encadenada; imagen Docker construida desde el lockfile (`npm ci`). |
+| **A08 – Integridad de software y datos** | Hash SHA-256 de documentos, borradores y plantillas; auditoría encadenada; compilación en Vercel desde el lockfile (`npm ci`). |
 | **A09 – Registro y monitoreo** | Auditoría de toda acción (ingresos, fallos, cambios de datos, descargas, aprobaciones, configuración); alertas; verificación de la cadena. |
-| **A10 – SSRF** | La app solo hace peticiones salientes a la API de Anthropic y a Gotenberg (red interna); ninguna URL proviene del usuario. |
+| **A10 – SSRF** | La app solo hace peticiones salientes a la API de Anthropic y a Supabase Storage (y a Gotenberg, si se configura); ninguna URL proviene del usuario. |
 
 ## 3. Datos personales (Ley 1581 de 2012)
 
@@ -69,17 +69,16 @@ Fuentes oficiales: [API and data retention](https://platform.claude.com/docs/en/
 
 ## 5. Mejora opcional documentada: certificado de cliente (mTLS)
 
-Para un control de equipos más fuerte, el proxy puede exigir un certificado de cliente emitido por la notaría e instalado en cada computador:
+Para un control de equipos más fuerte, se puede exigir un certificado de cliente emitido por la notaría e instalado en cada computador. Vercel no lo ofrece en sus planes estándar: requiere un proxy propio delante (p. ej. Caddy o Cloudflare):
 
 1. Crear una CA interna (p. ej. `step-ca` u OpenSSL) y emitir un certificado por equipo.
-2. En `despliegue/Caddyfile`, agregar `tls { client_auth { mode require_and_verify trusted_ca_cert_file /ruta/ca.crt } }`.
+2. En el proxy (p. ej. Caddy), agregar `tls { client_auth { mode require_and_verify trusted_ca_cert_file /ruta/ca.crt } }`.
 3. Para el acceso remoto del administrador, emitir su certificado aparte o usar un subdominio sin mTLS restringido al rol administrador.
 4. Revocar un equipo = revocar su certificado (CRL) además de desactivarlo en el panel.
 
 ## 6. Custodia de claves
 
-- `CLAVE_MAESTRA` cifra documentos, borradores y secretos TOTP. **Si se pierde, no se pueden recuperar.** Guardar una copia fuera del servidor (gestor de secretos o sobre sellado bajo custodia del notario).
-- `CLAVE_RESPALDO` cifra las copias de seguridad: debe guardarse **separada** de las copias.
+- `CLAVE_MAESTRA` cifra documentos, borradores y secretos TOTP. **Si se pierde, no se pueden recuperar.** Guardar una copia fuera de Vercel (gestor de secretos o sobre sellado bajo custodia del notario).
 - Rotación: cambiar `CLAVE_FIRMA` invalida todas las sesiones y obliga a registrar de nuevo los equipos.
 
 ## 7. Pruebas de seguridad automatizadas

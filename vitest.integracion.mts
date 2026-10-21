@@ -1,6 +1,6 @@
 // Pruebas de integración contra PostgreSQL. Usan una base de datos EXCLUSIVA de pruebas
 // (DATABASE_URL_PRUEBA) que se borra y recrea en cada ejecución; nunca la base de trabajo.
-// Requisito: docker compose -f docker-compose.dev.yml up -d
+// Requisito: un PostgreSQL de pruebas (p. ej. un proyecto Supabase aparte, nunca el de producción)
 import { defineConfig, loadEnv } from 'vite';
 import { fileURLToPath } from 'node:url';
 

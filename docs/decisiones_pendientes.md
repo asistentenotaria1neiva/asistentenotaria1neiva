@@ -25,9 +25,9 @@ Puntos que requieren aprobación del notario o información de la notaría. Mien
 | 12 | IP pública fija de la oficina (y si hay varias sedes). | Se registra en Configuración el día de la instalación. |
 | 13 | Antigüedad máxima aceptable del certificado de tradición y del certificado de existencia. | 30 días (advertencia), configurable. |
 | 14 | Horario permitido de acceso del personal. | Desactivado. |
-| 15 | Proveedor de nube, región y ubicación de las copias de seguridad. | Pendiente; el despliegue es portable (Docker). |
+| 15 | Proveedor de nube, región y ubicación de las copias de seguridad. | Elegido: Vercel (`iad1`) + Supabase (`us-east-1`, EE. UU.). Pendiente: aceptar la transferencia internacional de datos (Ley 1581) y contratar copias (plan Pro de Supabase o copia propia). |
 | 16 | **Acuerdo de retención cero (ZDR) y DPA con Anthropic** antes de cargar casos reales; ajuste de la política de tratamiento de datos de la notaría y de la autorización de los comparecientes (transmisión a un encargado en el exterior). | Retención estándar de la API (ver `docs/seguridad.md` §4). |
-| 17 | Custodia de `CLAVE_MAESTRA` y `CLAVE_RESPALDO` (¿quién guarda el sobre sellado?). | Pendiente. |
+| 17 | Custodia de `CLAVE_MAESTRA` (¿quién guarda el sobre sellado?). | Pendiente. |
 | 18 | ¿El revisor puede descartar observaciones críticas de la IA como falsas alarmas? | Sí, con justificación registrada; las críticas de las reglas fijas solo se cierran corrigiendo el dato. |
 | 19 | Modelo de IA: se usa `claude-opus-5-5` para extracción y revisión (máxima precisión). Si el costo mensual lo amerita, puede probarse un modelo más económico para la extracción. | Opus 5.5, esfuerzo `high`, cambiable por variable de entorno. |
 

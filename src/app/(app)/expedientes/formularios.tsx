@@ -68,15 +68,42 @@ export function FormularioNuevo({ accion, actos }: { accion: (r: Resultado, f: F
   );
 }
 
-export function FormularioCarga({ accion, tipos }: { accion: (r: Resultado, f: FormData) => Promise<Resultado>; tipos: [string, string][] }) {
-  const [r, enviar, pendiente] = useActionState(accion, {});
+/**
+ * Carga de documentos: se envía un archivo por petición, para no superar el límite de tamaño
+ * por petición del servidor (en Vercel, 4,5 MB). Los archivos que superan limiteMb se rechazan
+ * antes de enviarlos.
+ */
+export function FormularioCarga({ accion, tipos, limiteMb }: { accion: (r: Resultado, f: FormData) => Promise<Resultado>; tipos: [string, string][]; limiteMb: number }) {
+  const [r, setR] = useState<Resultado>();
+  const [pendiente, iniciar] = useTransition();
   return (
-    <form action={enviar}>
+    <form onSubmit={(ev) => {
+      ev.preventDefault();
+      const formulario = ev.currentTarget;
+      const datos = new FormData(formulario);
+      const tipo = String(datos.get('tipo') ?? 'OTRO');
+      const archivos = datos.getAll('archivo').filter((x): x is File => x instanceof File && x.size > 0);
+      const grandes = archivos.filter((a) => a.size > limiteMb * 1024 * 1024);
+      if (grandes.length) { setR({ error: `Superan ${limiteMb} MB: ${grandes.map((a) => a.name).join(', ')}. Reduzca su tamaño (p. ej. escanee a menor resolución) e intente de nuevo.` }); return; }
+      iniciar(async () => {
+        let cargados = 0;
+        for (const a of archivos) {
+          const f = new FormData();
+          f.set('tipo', tipo);
+          f.set('archivo', a);
+          const res = await accion({}, f);
+          if (res.error) { setR({ error: cargados ? `${cargados} documento(s) cargado(s). Falló «${a.name}»: ${res.error}` : res.error }); return; }
+          cargados++;
+        }
+        formulario.reset();
+        setR({ ok: `${cargados} documento(s) cargado(s) y cifrado(s).` });
+      });
+    }}>
       <Mensaje r={r} />
       <div className="rejilla tres">
         <div className="campo"><label htmlFor="tipo">Tipo de documento</label>
           <select id="tipo" name="tipo" required>{tipos.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-        <div className="campo"><label htmlFor="archivo">Archivo(s) PDF o imagen</label><input id="archivo" name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple required /></div>
+        <div className="campo"><label htmlFor="archivo">Archivo(s) PDF o imagen (máx. {limiteMb} MB c/u)</label><input id="archivo" name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple required /></div>
         <div className="campo"><label>&nbsp;</label><button type="submit" disabled={pendiente}>{pendiente ? 'Cargando y cifrando…' : 'Cargar'}</button></div>
       </div>
     </form>

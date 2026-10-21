@@ -15,7 +15,9 @@ import { llamarEstructurado, bloqueDocumento, ErrorIA } from '../ia/cliente';
 import { sugerenciasDesdeHechos } from '../ia/sugerencias';
 import { obtenerExpediente, puedeEditar, ErrorNegocio } from './expedientes';
 
-const TAMANO_MAXIMO = 25 * 1024 * 1024;
+/** Tamaño máximo por archivo. En Vercel debe ser 4 (límite de 4,5 MB por petición). */
+export const LIMITE_CARGA_MB = Math.min(25, Number(process.env.LIMITE_CARGA_MB) || 25);
+const TAMANO_MAXIMO = LIMITE_CARGA_MB * 1024 * 1024;
 
 /** Tipo real del archivo por su firma (no se confía en la extensión ni en el tipo declarado) */
 export function tipoPorFirma(b: Buffer): string | null {
@@ -31,7 +33,7 @@ export async function subirDocumento(s: SesionActiva, expedienteId: string, arch
   if (!puedeEditar(s, e)) throw new ErrorNegocio('No se pueden cargar documentos en el estado actual del expediente.');
   if (!(tipo in TIPOS_DOCUMENTALES)) throw new ErrorNegocio('Tipo de documento no válido.');
   if (!(await consumirLimite(`carga:${s.usuario.id}`, 60, 3600)).permitido) throw new ErrorNegocio('Demasiadas cargas en la última hora.');
-  if (archivo.size === 0 || archivo.size > TAMANO_MAXIMO) throw new ErrorNegocio('El archivo debe pesar entre 1 byte y 25 MB.');
+  if (archivo.size === 0 || archivo.size > TAMANO_MAXIMO) throw new ErrorNegocio(`El archivo debe pesar entre 1 byte y ${LIMITE_CARGA_MB} MB.`);
   const bytes = Buffer.from(await archivo.arrayBuffer());
   const mime = tipoPorFirma(bytes);
   if (!mime) throw new ErrorNegocio('Solo se aceptan PDF o imágenes (JPG, PNG, WEBP).');

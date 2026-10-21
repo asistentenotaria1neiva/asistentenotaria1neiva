@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { obtenerExpediente, puedeEditar, actosDe } from '@/lib/servicios/expedientes';
+import { LIMITE_CARGA_MB } from '@/lib/servicios/documentos';
 import { TIPOS_DOCUMENTALES, type DatoConFuente } from '@/lib/ia/documentos';
 import { ESQUEMAS } from '@/lib/escritura/esquemas';
 import { accionSubirDocumento, accionAnalizarDocumento, accionAnalizarPendientes } from '../../acciones';
@@ -55,7 +56,7 @@ export default async function Documentos({ params }: { params: Promise<{ id: str
         <section className="tarjeta">
           <h2 style={{ marginTop: 0 }}>Cargar documentos</h2>
           <p className="suave">Los archivos se cifran al guardarse y solo el servidor puede leerlos. Para el análisis se envían a la API de Claude (ver docs/seguridad.md).</p>
-          <FormularioCarga accion={accionSubirDocumento.bind(null, id)} tipos={Object.entries(TIPOS_DOCUMENTALES)} />
+          <FormularioCarga accion={accionSubirDocumento.bind(null, id)} tipos={Object.entries(TIPOS_DOCUMENTALES)} limiteMb={LIMITE_CARGA_MB} />
           {!iaDisponible && <div className="aviso alerta">El análisis con IA no está disponible: falta configurar la clave de la API en el servidor.</div>}
           {iaDisponible && pendientes > 0 && <BotonAccion accion={accionAnalizarPendientes.bind(null, id)} texto={`Analizar con IA los ${pendientes} documento(s) pendiente(s)`} textoPendiente="Analizando… (puede tardar varios minutos)" />}
         </section>
