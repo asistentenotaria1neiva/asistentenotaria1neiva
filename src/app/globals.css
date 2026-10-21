@@ -333,6 +333,9 @@ details.tarjeta { padding: 0.85rem 1.25rem; }
   .rejilla.cuatro { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
   .cifra { font-size: 1.5rem; }
   .filtros .ancho { grid-column: auto; }
+  /* Filtros con varios selectores: dos por fila; la búsqueda y los botones a todo el ancho */
+  .filtros.compactos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filtros.compactos .ancho, .filtros.compactos .acciones-filtro { grid-column: 1 / -1; }
   .filtros .acciones-filtro > * { flex: 1; }
   .fila.entre > .fila { width: 100%; }
   .barra-filtros > * { width: 100%; }

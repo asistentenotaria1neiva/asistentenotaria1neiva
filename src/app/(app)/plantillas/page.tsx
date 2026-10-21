@@ -6,6 +6,7 @@ import { accionCargarPlantilla } from './acciones';
 import { FormAdmin } from '../admin/formularios';
 import { Tabla, fecha } from '../componentes';
 import { EtiquetaVeredicto } from './componentes';
+import { FiltrosPlantillas } from './filtros';
 
 // La carga incluye la revisión de la IA, que puede tardar uno o dos minutos
 export const maxDuration = 300;
@@ -16,32 +17,55 @@ const sinTildes = (x: string) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLo
 const PRIORIDAD = { Alta: 0, Media: 1, Baja: 2 } as Record<string, number>;
 const clasePrioridad = (p: string) => (p === 'Alta' ? 'critica' : p === 'Media' ? 'advertencia' : '');
 
-export default async function Plantillas({ searchParams }: { searchParams: Promise<{ q?: string; estado?: string; nuevo?: string }> }) {
+type Parametros = { q?: string; estado?: string; categoria?: string; prioridad?: string; ia?: string; orden?: string; nuevo?: string };
+
+export default async function Plantillas({ searchParams }: { searchParams: Promise<Parametros> }) {
   const s = await requerirSesion({ roles: ['ADMINISTRADOR', 'REVISOR'] });
-  const { q = '', estado = '', nuevo } = await searchParams;
+  const { q = '', estado = '', categoria = '', prioridad = '', ia = '', orden = '', nuevo } = await searchParams;
   const filtro: Filtro = estado in PESTANAS ? (estado as Filtro) : '';
   const tipos = await db.tipoEscritura.findMany({
     orderBy: [{ categoria: 'asc' }, { nombre: 'asc' }],
     include: { plantillas: { select: { id: true, version: true, estado: true, creadaEn: true, revision: true }, orderBy: { version: 'desc' } } },
   });
+  type Tipo = (typeof tipos)[number];
+  // La versión que representa al tipo en la lista: la pendiente, si no la vigente, si no la última
+  const principalDe = (t: Tipo) => t.plantillas.find((p) => p.estado === 'PENDIENTE_APROBACION') ?? t.plantillas.find((p) => p.estado === 'APROBADA') ?? t.plantillas[0];
 
-  const cumple = (t: (typeof tipos)[number], f: Filtro) =>
+  const cumple = (t: Tipo, f: Filtro) =>
     f === '' ? true
       : f === 'sin_plantilla' ? !t.plantillas.length
       : f === 'pendiente' ? t.plantillas.some((p) => p.estado === 'PENDIENTE_APROBACION')
       : t.plantillas.some((p) => p.estado === 'APROBADA');
+  const veredicto = (t: Tipo) => {
+    const p = principalDe(t);
+    if (!p) return 'sin_plantilla';
+    const r = p.revision as RevisionPlantilla | null;
+    return !r?.ia ? 'sin_revisar' : r.ia.veredicto === 'APTA' ? 'apta' : r.ia.veredicto === 'NO_APTA' ? 'no_apta' : 'observaciones';
+  };
   const busqueda = sinTildes(q.trim());
-  const filas = tipos.filter((t) => cumple(t, filtro) && (!busqueda || sinTildes(`${t.nombre} ${t.categoria} ${t.esBloque ? 'bloque parte comun' : ''}`).includes(busqueda)));
-  // Sin plantilla: primero lo más urgente para la notaría
-  if (filtro === 'sin_plantilla') filas.sort((a, b) => PRIORIDAD[a.prioridad] - PRIORIDAD[b.prioridad] || a.nombre.localeCompare(b.nombre));
-  const grupos = [
-    { titulo: 'Escrituras', filas: filas.filter((t) => !t.esBloque) },
-    { titulo: 'Partes comunes de todas las escrituras (carátula, cierre, oficios)', filas: filas.filter((t) => t.esBloque) },
-  ].filter((g) => g.filas.length);
+  // Todos los filtros salvo el de estado: así cada pestaña muestra cuántas quedan con los demás filtros aplicados
+  const pasaFiltros = (t: Tipo) =>
+    (!busqueda || sinTildes(`${t.nombre} ${t.categoria} ${t.descripcion ?? ''} ${t.esBloque ? 'bloque parte comun' : ''}`).includes(busqueda))
+    && (!categoria || t.categoria === categoria)
+    && (!prioridad || t.prioridad === prioridad)
+    && (!ia || veredicto(t) === ia);
+  const filas = tipos.filter((t) => cumple(t, filtro) && pasaFiltros(t));
+
+  const ultimaCarga = (t: Tipo) => principalDe(t)?.creadaEn.getTime() ?? 0;
+  const porPrioridad = (a: Tipo, b: Tipo) => PRIORIDAD[a.prioridad] - PRIORIDAD[b.prioridad] || a.nombre.localeCompare(b.nombre);
+  if (orden === 'nombre') filas.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  else if (orden === 'reciente') filas.sort((a, b) => ultimaCarga(b) - ultimaCarga(a) || a.nombre.localeCompare(b.nombre));
+  else if (orden === 'prioridad' || filtro === 'sin_plantilla') filas.sort(porPrioridad); // sin plantilla: primero lo más urgente
+  // Por categoría se agrupa; con otro orden la lista es una sola
+  const categorias = [...new Set(tipos.map((t) => t.categoria))];
+  const grupos = orden && orden !== 'categoria'
+    ? [{ titulo: 'Resultados', filas }].filter((g) => g.filas.length)
+    : categorias.map((c) => ({ titulo: c === 'Bloques comunes' ? 'Partes comunes de todas las escrituras (carátula, cierre, oficios)' : c, filas: filas.filter((t) => t.categoria === c) })).filter((g) => g.filas.length);
+  const filtrosActivos = !!(q || categoria || prioridad || ia || orden);
 
   // Las nuevas versiones de una plantilla existente se cargan dentro de ella; aquí solo las que faltan
   const cargables = tipos.filter((t) => !t.plantillas.length).sort((a, b) => Number(b.esBloque) - Number(a.esBloque) || PRIORIDAD[a.prioridad] - PRIORIDAD[b.prioridad] || a.nombre.localeCompare(b.nombre));
-  const enlace = (f: Filtro) => `/plantillas?${new URLSearchParams({ ...(f ? { estado: f } : {}), ...(q ? { q } : {}) })}`;
+  const enlace = (f: Filtro) => `/plantillas?${new URLSearchParams(Object.entries({ estado: f, q, categoria, prioridad, ia, orden }).filter(([, v]) => v))}`;
 
   return (
     <>
@@ -71,23 +95,26 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
         </details>
       )}
 
+      <FiltrosPlantillas valores={{ q, estado: filtro, categoria, prioridad, ia, orden }} activos={filtrosActivos}
+        categorias={categorias.map((c) => [c, c === 'Bloques comunes' ? 'Partes comunes' : c])} />
+
       <div className="fila entre barra-filtros">
         <nav className="pestanas" aria-label="Filtrar por estado">
           {(Object.keys(PESTANAS) as Filtro[]).map((f) => (
             <Link key={f} href={enlace(f)} aria-current={f === filtro ? 'page' : undefined}>
-              {PESTANAS[f]} <span className="conteo">{tipos.filter((t) => cumple(t, f)).length}</span>
+              {PESTANAS[f]} <span className="conteo">{tipos.filter((t) => cumple(t, f) && pasaFiltros(t)).length}</span>
             </Link>
           ))}
         </nav>
-        <form className="fila buscador" method="get">
-          {filtro && <input type="hidden" name="estado" value={filtro} />}
-          <input name="q" type="search" defaultValue={q} placeholder="Buscar (p. ej. compraventa)" aria-label="Buscar tipo de escritura" />
-          <button type="submit" className="secundario pequeno">Buscar</button>
-          {q && <Link className="pequeno" href={enlace(filtro).replace(/[?&]q=[^&]*/, '')}>Limpiar</Link>}
-        </form>
+        <span className="suave">{filas.length === tipos.length ? `${tipos.length} tipos de escritura` : `${filas.length} de ${tipos.length} tipos de escritura`}</span>
       </div>
 
-      {!grupos.length ? <section className="tarjeta suave vacio">Ninguna plantilla coincide{q ? ` con «${q}»` : ''}.</section> : (
+      {!grupos.length ? (
+        <section className="tarjeta suave vacio">
+          Ninguna plantilla coincide{q ? ` con «${q}»` : ''} con los filtros elegidos.{' '}
+          {(filtrosActivos || filtro) && <Link href="/plantillas">Ver todas</Link>}
+        </section>
+      ) : (
         <Tabla className="tabla-plantillas">
           <thead><tr><th>Plantilla</th><th>Estado</th><th>Revisión IA</th><th>Última carga</th><th aria-label="Acciones" /></tr></thead>
           {grupos.map((g) => (
@@ -101,7 +128,7 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
                   <tr key={t.id}>
                     <td className="principal-celda">
                       {principal ? <Link href={`/plantillas/${principal.id}`}><strong>{t.nombre}</strong></Link> : <strong>{t.nombre}</strong>}
-                      <div className="suave">{t.esBloque ? 'Parte común' : t.categoria}</div>
+                      <div className="suave">{t.esBloque ? 'Parte común' : t.categoria} · prioridad {t.prioridad.toLowerCase()}</div>
                     </td>
                     <td data-etiqueta="Estado">
                       <div className="fila" style={{ gap: '0.3rem' }}>
