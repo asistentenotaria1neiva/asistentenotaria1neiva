@@ -17,8 +17,10 @@ function Mensaje({ r }: { r?: ResultadoAdmin }) {
 }
 
 /** Formulario genérico: campos ocultos fijos + campos visibles + botones de operación */
-export function FormAdmin({ accion, ocultos = {}, campos = [], botones, confirmar, mensajePendiente }: {
+export function FormAdmin({ accion, ocultos = {}, campos = [], botones, confirmar, mensajePendiente, columnas }: {
   accion: Accion;
+  /** Distribuye los campos en columnas cuando hay espacio (en móvil queda una sola) */
+  columnas?: boolean;
   ocultos?: Record<string, string>;
   campos?: { nombre: string; etiqueta: string; tipo?: 'texto' | 'area' | 'select' | 'archivo'; opciones?: [string, string][]; valor?: string; ayuda?: string }[];
   botones: { operacion?: string; texto: string; clase?: string }[];
@@ -34,7 +36,7 @@ export function FormAdmin({ accion, ocultos = {}, campos = [], botones, confirma
     }}>
       {pendiente && mensajePendiente ? <div className="aviso info" role="status">{mensajePendiente}</div> : <Mensaje r={r} />}
       {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-      {campos.map((c) => (
+      <div className={columnas ? 'campos-columnas' : undefined}>{campos.map((c) => (
         <div className="campo" key={c.nombre}>
           <label htmlFor={`f-${c.nombre}-${ocultos.id ?? ''}`}>{c.etiqueta}</label>
           {c.tipo === 'area' ? <textarea id={`f-${c.nombre}-${ocultos.id ?? ''}`} name={c.nombre} defaultValue={c.valor} />
@@ -43,12 +45,18 @@ export function FormAdmin({ accion, ocultos = {}, campos = [], botones, confirma
             : <input id={`f-${c.nombre}-${ocultos.id ?? ''}`} name={c.nombre} type="text" defaultValue={c.valor} />}
           {c.ayuda && <div className="ayuda">{c.ayuda}</div>}
         </div>
-      ))}
-      <div className="fila">
-        {botones.map((b) => <button key={b.texto} type="submit" name="operacion" value={b.operacion ?? ''} className={`pequeno ${b.clase ?? ''}`} disabled={pendiente}>{b.texto}</button>)}
+      ))}</div>
+      <div className="fila" style={{ gap: '0.5rem' }}>
+        {botones.map((b) => <button key={b.texto} type="submit" name="operacion" value={b.operacion ?? ''} className={`pequeno ${b.clase ?? ''}`} disabled={pendiente} aria-busy={pendiente}>{b.texto}</button>)}
+        {pendiente && !mensajePendiente && <span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} />}
       </div>
     </form>
   );
+}
+
+/** Abre el cuadro de impresión del navegador (desde ahí se guarda como PDF) */
+export function BotonImprimir() {
+  return <button type="button" className="secundario no-imprimir" onClick={() => window.print()}>Imprimir o guardar como PDF</button>;
 }
 
 export function BotonVerificar({ accion }: { accion: () => Promise<ResultadoAdmin> }) {

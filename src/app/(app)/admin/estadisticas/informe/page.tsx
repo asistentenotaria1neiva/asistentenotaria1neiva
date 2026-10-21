@@ -1,7 +1,9 @@
+import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion, datosAuditoria } from '@/lib/sesion';
 import { auditar } from '@/lib/auditoria';
 import { indicadoresMes } from '@/lib/servicios/aprendizaje';
+import { BotonImprimir } from '../../formularios';
 
 /** Informe mensual para el notario (página pensada para imprimir o guardar como PDF desde el navegador) */
 export default async function InformeMensual({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
@@ -15,6 +17,10 @@ export default async function InformeMensual({ searchParams }: { searchParams: P
   const nombre = (id: string) => tipos.find((t) => t.id === id)?.nombre ?? id;
   return (
     <article className="tarjeta">
+      <div className="fila entre no-imprimir" style={{ marginBottom: '1rem' }}>
+        <Link href={`/admin/estadisticas?mes=${ind.periodo}`}>← Estadísticas</Link>
+        <BotonImprimir />
+      </div>
       <h1>Informe mensual de entrenamiento y calidad – {ind.periodo}</h1>
       <p className="suave">Notaría Primera del Círculo de Neiva · Asistente de escrituración · Generado el {hoy.toLocaleDateString('es-CO')} por {s.usuario.nombre}. Contiene solo cifras agregadas y casos anonimizados.</p>
       <h2>1. Indicadores</h2>
@@ -36,7 +42,7 @@ export default async function InformeMensual({ searchParams }: { searchParams: P
         <li>Validar las referencias normativas pendientes en las fichas de cada tipo de escritura.</li>
         <li>Entregar las plantillas faltantes de prioridad alta (ver Plantillas → checklist).</li>
       </ul>
-      <p className="suave">Para guardar este informe: Imprimir → Guardar como PDF.</p>
+      <p className="suave no-imprimir">Para guardar este informe use «Imprimir o guardar como PDF».</p>
     </article>
   );
 }

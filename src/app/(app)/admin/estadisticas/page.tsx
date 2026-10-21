@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { indicadoresMes } from '@/lib/servicios/aprendizaje';
+import { EtiquetaNivel, Tabla } from '../../componentes';
 
 export default async function Estadisticas({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
   await requerirSesion({ roles: ['ADMINISTRADOR'] });
@@ -19,10 +20,13 @@ export default async function Estadisticas({ searchParams }: { searchParams: Pro
   const periodo = `${anio}-${String(m).padStart(2, '0')}`;
   return (
     <>
-      <div className="fila entre">
+      <div className="fila entre encabezado">
         <h1>Estadísticas e indicadores</h1>
-        <form className="fila" method="get"><input type="text" name="mes" defaultValue={periodo} pattern="\d{4}-\d{2}" aria-label="Mes (AAAA-MM)" style={{ width: 110 }} /><button type="submit" className="secundario">Ver mes</button>
-          <Link className="boton" href={`/admin/estadisticas/informe?mes=${periodo}`}>Informe mensual para el notario</Link></form>
+        <form className="fila" method="get" style={{ gap: '0.5rem' }}>
+          <input type="month" name="mes" defaultValue={periodo} aria-label="Mes" style={{ width: 'auto' }} />
+          <button type="submit" className="secundario">Ver mes</button>
+          <Link className="boton" href={`/admin/estadisticas/informe?mes=${periodo}`}>Informe mensual</Link>
+        </form>
       </div>
       <div className="rejilla cuatro">
         <div className="tarjeta"><div className="cifra">{ind.datosExtraidos.porcentajeSinCorreccion ?? '—'}{ind.datosExtraidos.porcentajeSinCorreccion !== null && '%'}</div><div className="suave">datos extraídos sin corrección ({ind.datosExtraidos.revisados} revisados)</div></div>
@@ -31,13 +35,13 @@ export default async function Estadisticas({ searchParams }: { searchParams: Pro
         <div className="tarjeta"><div className="cifra">{ind.escrituras.devueltas}</div><div className="suave">escrituras devueltas por el revisor</div></div>
       </div>
       <div className="rejilla dos">
-        <section className="tarjeta"><h2 style={{ marginTop: 0 }}>Escrituras por tipo (acto principal)</h2>
-          <table><tbody>{porTipo.map((t) => <tr key={t.tipoId}><td>{tipos.find((x) => x.id === t.tipoId)?.nombre}</td><td>{t._count}</td></tr>)}</tbody></table></section>
-        <section className="tarjeta"><h2 style={{ marginTop: 0 }}>Escrituras por responsable</h2>
-          <table><tbody>{porUsuario.map((u) => <tr key={u.responsableId}><td>{usuarios.find((x) => x.id === u.responsableId)?.nombreCompleto}</td><td>{u._count}</td></tr>)}</tbody></table></section>
-        <section className="tarjeta"><h2 style={{ marginTop: 0 }}>Observaciones más frecuentes</h2>
-          <table><tbody>{frecuentes.map((o) => <tr key={`${o.codigo}${o.nivel}`}><td>{o.codigo}</td><td>{o.nivel.toLowerCase()}</td><td>{o._count}</td></tr>)}</tbody></table></section>
-        <section className="tarjeta"><h2 style={{ marginTop: 0 }}>Consumo de la API de Claude ({periodo})</h2>
+        <section className="tarjeta"><h2>Escrituras por tipo (acto principal)</h2>
+          {!porTipo.length ? <p className="suave">Sin datos.</p> : <Tabla apilable={false}><tbody>{porTipo.map((t) => <tr key={t.tipoId}><td>{tipos.find((x) => x.id === t.tipoId)?.nombre}</td><td className="numero"><strong>{t._count}</strong></td></tr>)}</tbody></Tabla>}</section>
+        <section className="tarjeta"><h2>Escrituras por responsable</h2>
+          {!porUsuario.length ? <p className="suave">Sin datos.</p> : <Tabla apilable={false}><tbody>{porUsuario.map((u) => <tr key={u.responsableId}><td>{usuarios.find((x) => x.id === u.responsableId)?.nombreCompleto}</td><td className="numero"><strong>{u._count}</strong></td></tr>)}</tbody></Tabla>}</section>
+        <section className="tarjeta"><h2>Observaciones más frecuentes</h2>
+          {!frecuentes.length ? <p className="suave">Sin datos.</p> : <Tabla apilable={false}><tbody>{frecuentes.map((o) => <tr key={`${o.codigo}${o.nivel}`}><td>{o.codigo}</td><td><EtiquetaNivel nivel={o.nivel} /></td><td className="numero"><strong>{o._count}</strong></td></tr>)}</tbody></Tabla>}</section>
+        <section className="tarjeta"><h2>Consumo de la API de Claude ({periodo})</h2>
           <p>{ind.api.llamadas} llamadas · {ind.api.tokensEntrada.toLocaleString('es-CO')} tokens de entrada · {ind.api.tokensSalida.toLocaleString('es-CO')} de salida</p>
           <p className="cifra">US$ {ind.api.costoUSD.toFixed(2)}</p><p className="suave">Costo estimado con precios de referencia por millón de tokens; la factura real está en la consola de Anthropic.</p></section>
       </div>

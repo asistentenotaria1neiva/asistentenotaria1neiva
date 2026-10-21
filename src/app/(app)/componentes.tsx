@@ -30,23 +30,31 @@ export function fecha(d: Date | null | undefined, conHora = true): string {
   return d.toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'medium', ...(conHora ? { timeStyle: 'short' } : {}) });
 }
 
+/**
+ * Contenedor de tabla: en escritorio se desplaza a lo ancho si no cabe; con apilable (por defecto),
+ * en móvil cada fila se muestra como una tarjeta y cada celda con su data-etiqueta.
+ */
+export function Tabla({ children, apilable = true, className = '' }: { children: React.ReactNode; apilable?: boolean; className?: string }) {
+  return <div className="tabla"><table className={`${apilable ? 'tabla-apilable' : ''} ${className}`.trim() || undefined}>{children}</table></div>;
+}
+
 export function TablaExpedientes({ filas }: { filas: { id: string; numeroInterno: string; estado: string; actualizadoEn: Date; tipo: { nombre: string }; responsable: { nombreCompleto: string }; actos: unknown; _count?: { observaciones: number } }[] }) {
-  if (!filas.length) return <p className="suave">No hay expedientes.</p>;
+  if (!filas.length) return <p className="suave vacio">No hay expedientes.</p>;
   return (
-    <table>
-      <thead><tr><th>Número</th><th>Actos</th><th>Estado</th><th>Responsable</th><th>Observaciones abiertas</th><th>Actualizado</th></tr></thead>
+    <Tabla>
+      <thead><tr><th>Número</th><th>Actos</th><th>Estado</th><th>Responsable</th><th className="numero">Obs. abiertas</th><th>Actualizado</th></tr></thead>
       <tbody>
         {filas.map((e) => (
           <tr key={e.id}>
-            <td><Link href={`/expedientes/${e.id}`}>{e.numeroInterno}</Link></td>
-            <td>{Array.isArray(e.actos) ? (e.actos as string[]).map((a) => a.replace(/_/g, ' ')).join(' + ') : e.tipo.nombre}</td>
-            <td><EtiquetaEstado estado={e.estado} /></td>
-            <td>{e.responsable.nombreCompleto}</td>
-            <td>{e._count?.observaciones ?? '—'}</td>
-            <td>{fecha(e.actualizadoEn)}</td>
+            <td className="principal-celda"><Link href={`/expedientes/${e.id}`}><strong>{e.numeroInterno}</strong></Link></td>
+            <td data-etiqueta="Actos">{Array.isArray(e.actos) ? (e.actos as string[]).map((a) => a.replace(/_/g, ' ')).join(' + ') : e.tipo.nombre}</td>
+            <td data-etiqueta="Estado"><EtiquetaEstado estado={e.estado} /></td>
+            <td data-etiqueta="Responsable">{e.responsable.nombreCompleto}</td>
+            <td data-etiqueta="Obs. abiertas" className="numero">{e._count?.observaciones ? <span className="etiqueta advertencia">{e._count.observaciones}</span> : e._count ? '0' : '—'}</td>
+            <td data-etiqueta="Actualizado" className="suave">{fecha(e.actualizadoEn)}</td>
           </tr>
         ))}
       </tbody>
-    </table>
+    </Tabla>
   );
 }

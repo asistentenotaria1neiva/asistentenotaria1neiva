@@ -5,7 +5,7 @@
  *  - Muestra los valores en letras generados automáticamente.
  *  - Muestra las sugerencias de la IA con su fuente (documento, página, fragmento) y confianza.
  */
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Campo, Paso } from '@/lib/escritura/esquemas';
 import type { DatosExpediente, Persona, Inmueble } from '@/lib/escritura/tipos';
@@ -225,6 +225,28 @@ export default function FormularioPasos({ expedienteId, pasoInicial, pasos, dato
   const [sucio, setSucio] = useState(false);
   const [pendiente, iniciar] = useTransition();
   const { paso, acto } = pasos[indice];
+  const seccion = useRef<HTMLElement>(null);
+  const listaPasos = useRef<HTMLOListElement>(null);
+  const indiceMostrado = useRef(indice);
+
+  // Al cambiar de paso se vuelve al inicio del paso y el paso activo queda visible en la lista (en móvil se desplaza a lo ancho)
+  useEffect(() => {
+    if (indiceMostrado.current === indice) return;
+    indiceMostrado.current = indice;
+    const s = seccion.current;
+    if (s && s.getBoundingClientRect().top < 0) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const lista = listaPasos.current;
+    const activo = lista?.querySelector<HTMLElement>('[aria-current="step"]');
+    if (lista && activo && lista.scrollWidth > lista.clientWidth) lista.scrollBy({ left: activo.getBoundingClientRect().left - lista.getBoundingClientRect().left - 16, behavior: 'smooth' });
+  }, [indice]);
+
+  // Advierte antes de cerrar o recargar la página con cambios sin guardar
+  useEffect(() => {
+    if (!sucio || !editable) return;
+    const alSalir = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', alSalir);
+    return () => window.removeEventListener('beforeunload', alSalir);
+  }, [sucio, editable]);
 
   const valorPaso = useMemo(() => {
     if (paso.id === 'escritura') return datos.escritura;
@@ -278,17 +300,20 @@ export default function FormularioPasos({ expedienteId, pasoInicial, pasos, dato
   });
 
   return (
-    <div className="rejilla" style={{ gridTemplateColumns: '220px 1fr' }}>
+    <div className="formulario-pasos">
       <nav aria-label="Pasos del formulario">
-        <ul className="pasos" style={{ flexDirection: 'column' }}>
+        <ol className="pasos-formulario" ref={listaPasos}>
           {pasos.map((p, i) => (
             <li key={`${p.acto ?? ''}${p.paso.id}`}>
-              <button type="button" className={`paso ${i === indice ? 'activo' : ''}`} aria-current={i === indice ? 'step' : undefined} onClick={() => { if (sucio && editable) guardarPaso(0); setIndice(i); }}>{i + 1}. {p.paso.titulo}</button>
+              <button type="button" className={`paso ${i === indice ? 'activo' : ''}`} aria-current={i === indice ? 'step' : undefined} onClick={() => { if (i === indice) return; if (sucio && editable) guardarPaso(0); setIndice(i); }}>
+                <span className="numero-paso" aria-hidden="true">{i + 1}</span><span className="solo-lectores">{`${i + 1}. `}</span>{p.paso.titulo}
+              </button>
             </li>
           ))}
-        </ul>
+        </ol>
       </nav>
-      <section className="tarjeta">
+      <section className="tarjeta" ref={seccion} style={{ scrollMarginTop: 'calc(var(--alto-barra) + 1rem)' }}>
+        <p className="suave" style={{ marginBottom: '0.15rem' }}>Paso {indice + 1} de {pasos.length}</p>
         <h2 style={{ marginTop: 0 }}>{paso.titulo}</h2>
         {paso.descripcion && <p className="suave">{paso.descripcion}</p>}
         {!editable && <div className="aviso info">Solo lectura: el expediente no está en elaboración.</div>}
@@ -311,7 +336,7 @@ export default function FormularioPasos({ expedienteId, pasoInicial, pasos, dato
             {(paso.id === 'personas' ? datos.personas : datos.inmuebles).map((item, i) => {
               const titulo = paso.id === 'personas' ? ((item as Persona).nombre || `Persona ${i + 1}`) : ((item as Inmueble).matricula || `Inmueble ${i + 1}`);
               return (
-                <details key={item.id} open={Object.keys(errores).some((k) => k.startsWith(`${paso.id}.${i}.`)) || !titulo || i === (paso.id === 'personas' ? datos.personas.length : datos.inmuebles.length) - 1}>
+                <details key={item.id} className="persona-inmueble" open={Object.keys(errores).some((k) => k.startsWith(`${paso.id}.${i}.`)) || !titulo || i === (paso.id === 'personas' ? datos.personas.length : datos.inmuebles.length) - 1}>
                   <summary>{titulo}</summary>
                   <Grupo campos={paso.campos} valores={item as unknown as Record<string, unknown>} errores={errores} prefijo={`${paso.id}.${i}.`} datos={datos} propioId={item.id} deshabilitado={!editable}
                     sugerenciasDe={(sub) => sugerenciasPara(sugerencias, paso.id === 'personas' ? 'persona' : 'inmueble', item, sub)}
@@ -343,13 +368,13 @@ export default function FormularioPasos({ expedienteId, pasoInicial, pasos, dato
             onAplicar={onAplicar} onDescartar={onDescartar} />
         )}
 
-        <div className="fila" style={{ marginTop: '1rem' }}>
-          <button type="button" className="secundario" disabled={pendiente || indice === 0} onClick={() => guardarPaso(-1)}>← Anterior</button>
+        <div className="barra-acciones">
+          {sucio && editable && <span className="sin-guardar" role="status">● Hay cambios sin guardar</span>}
+          <button type="button" className="secundario compacto" aria-label="Anterior" disabled={pendiente || indice === 0} onClick={() => guardarPaso(-1)}>←<span className="texto-largo"> Anterior</span></button>
           {editable && <button type="button" className="secundario" disabled={pendiente} onClick={() => guardarPaso(0)}>{pendiente ? 'Guardando…' : 'Guardar'}</button>}
           {indice < pasos.length - 1
-            ? <button type="button" disabled={pendiente} onClick={() => guardarPaso(1)}>Guardar y continuar →</button>
+            ? <button type="button" disabled={pendiente} onClick={() => guardarPaso(1)}>{editable ? 'Guardar y continuar →' : 'Siguiente →'}</button>
             : <a className="boton" href={`/expedientes/${expedienteId}/observaciones`}>Ir a la revisión →</a>}
-          {sucio && <span className="suave">Hay cambios sin guardar.</span>}
         </div>
       </section>
     </div>

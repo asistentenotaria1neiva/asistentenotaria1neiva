@@ -4,6 +4,7 @@ import { requerirSesion } from '@/lib/sesion';
 import { obtenerExpediente, ErrorNegocio } from '@/lib/servicios/expedientes';
 import { db } from '@/lib/db';
 import { EtiquetaEstado } from '../../componentes';
+import { PestanasExpediente } from '../../navegacion';
 
 export default async function ExpedienteLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,18 +20,21 @@ export default async function ExpedienteLayout({ children, params }: { children:
     { href: '', texto: 'Resumen y flujo' },
     { href: '/documentos', texto: `1–3 · Documentos (${docs})` },
     { href: '/formulario', texto: '4 · Formulario' },
-    { href: '/observaciones', texto: `5 · Observaciones (${abiertas} abiertas)` },
+    { href: '/observaciones', texto: `5 · Observaciones (${abiertas} abierta${abiertas === 1 ? '' : 's'})` },
     { href: '/borrador', texto: `6 · Borrador (${borradores})` },
   ];
   return (
     <>
-      <div className="fila entre">
+      <p className="suave" style={{ marginBottom: '0.35rem' }}><Link href="/expedientes">← Expedientes</Link></p>
+      <div className="encabezado">
         <h1>{e.numeroInterno} <EtiquetaEstado estado={e.estado} /></h1>
-        <span className="suave">Responsable: {e.responsable.nombreCompleto}{e.revisor ? ` · Revisor: ${e.revisor.nombreCompleto}` : ''}</span>
+        <p className="suave">
+          {(e.actos as string[]).map((a) => a.replace(/_/g, ' ')).join(' + ')}
+          <br />Responsable: {e.responsable.nombreCompleto}{e.revisor ? ` · Revisor: ${e.revisor.nombreCompleto}` : ''}
+        </p>
       </div>
-      <p className="suave">{(e.actos as string[]).map((a) => a.replace(/_/g, ' ')).join(' + ')}</p>
       {e.estado === 'DEVUELTO' && e.comentarioRevision && <div className="aviso alerta"><strong>Devuelto por el revisor:</strong> {e.comentarioRevision}</div>}
-      <ul className="pasos">{pestanas.map((p) => <li key={p.href}><Link href={`/expedientes/${id}${p.href}`}>{p.texto}</Link></li>)}</ul>
+      <PestanasExpediente base={`/expedientes/${id}`} pestanas={pestanas} />
       {children}
     </>
   );

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { connection } from 'next/server';
 import './globals.css';
 
@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   title: 'Escrituración – Notaría Primera de Neiva',
   description: 'Asistente de escrituración con verificación por IA. Uso interno de la Notaría Primera del Círculo de Neiva.',
   robots: { index: false, follow: false },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#1f3864',
 };
 
 export default async function RaizLayout({ children }: { children: React.ReactNode }) {

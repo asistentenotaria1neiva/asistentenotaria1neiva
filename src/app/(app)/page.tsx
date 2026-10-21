@@ -18,15 +18,18 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<{
   const equiposPendientes = rol === 'ADMINISTRADOR' ? await db.dispositivo.count({ where: { estado: 'PENDIENTE' } }) : 0;
   return (
     <>
-      <div className="fila entre"><h1>Inicio</h1><Link className="boton" href="/expedientes/nuevo">Nuevo expediente</Link></div>
+      <div className="fila entre encabezado">
+        <div><h1>Inicio</h1><p className="suave">Bienvenido(a), {s.usuario.nombre}. Aquí están sus expedientes en curso{rol !== 'DIGITADOR' ? ' y los que esperan revisión' : ''}.</p></div>
+        <Link className="boton" href="/expedientes/nuevo">+ Nuevo expediente</Link>
+      </div>
       {error === 'permiso' && <div className="aviso error">No tiene permiso para esa sección.</div>}
       {devueltos > 0 && <div className="aviso alerta">Tiene {devueltos} expediente(s) devuelto(s) por el revisor.</div>}
       {alertas > 0 && <div className="aviso alerta">Hay {alertas} alerta(s) de seguridad sin atender. <Link href="/admin/alertas">Ver alertas</Link></div>}
       {equiposPendientes > 0 && <div className="aviso info">Hay {equiposPendientes} equipo(s) pendiente(s) de aprobación. <Link href="/admin/dispositivos">Revisar</Link></div>}
       {rol !== 'DIGITADOR' && (
-        <section className="tarjeta"><h2 style={{ marginTop: 0 }}>Pendientes de revisión</h2><TablaExpedientes filas={enRevision} /></section>
+        <section className="tarjeta"><h2>Pendientes de revisión <span className="etiqueta informativa">{enRevision.length}</span></h2><TablaExpedientes filas={enRevision} /></section>
       )}
-      <section className="tarjeta"><h2 style={{ marginTop: 0 }}>Mis expedientes en curso</h2><TablaExpedientes filas={mios} /></section>
+      <section className="tarjeta"><h2>Mis expedientes en curso <span className="etiqueta">{mios.length}</span></h2><TablaExpedientes filas={mios} /></section>
       <p className="suave">La aplicación prepara, verifica y advierte. La firma, el control de legalidad y la responsabilidad son del notario.</p>
     </>
   );

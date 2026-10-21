@@ -4,7 +4,7 @@ import { requerirSesion } from '@/lib/sesion';
 import { obtenerExpediente, puedeEditar } from '@/lib/servicios/expedientes';
 import { accionRevisar, accionResolverObservacion } from '../../acciones';
 import { BotonAccion, FormularioResolver } from '../../formularios';
-import { EtiquetaNivel, fecha } from '../../../componentes';
+import { EtiquetaNivel, Tabla, fecha } from '../../../componentes';
 
 const ORDEN = { CRITICA: 0, ADVERTENCIA: 1, INFORMATIVA: 2 } as const;
 
@@ -22,9 +22,9 @@ export default async function Observaciones({ params }: { params: Promise<{ id: 
   return (
     <>
       <section className="tarjeta">
-        <div className="fila entre">
-          <div>
-            <h2 style={{ marginTop: 0 }}>Revisión</h2>
+        <div className="fila entre" style={{ alignItems: 'flex-start' }}>
+          <div style={{ flex: '1 1 320px' }}>
+            <h2>Revisión</h2>
             <p className="suave">Las reglas fijas cruzan lo digitado con los documentos. La IA revisa el conjunto y advierte; la persona decide. {ultima && `Última revisión de IA: ${fecha(ultima.creadoEn)} (${ultima.estado.toLowerCase()}).`}</p>
           </div>
           {puedeRevisar && (
@@ -34,7 +34,7 @@ export default async function Observaciones({ params }: { params: Promise<{ id: 
             </div>
           )}
         </div>
-        <div className="rejilla tres">
+        <div className="rejilla tres conteos" style={{ marginTop: '1rem' }}>
           <div><span className="cifra">{conteo('CRITICA')}</span><div><EtiquetaNivel nivel="CRITICA" /> bloquean el avance</div></div>
           <div><span className="cifra">{conteo('ADVERTENCIA')}</span><div><EtiquetaNivel nivel="ADVERTENCIA" /> exigen corrección o justificación</div></div>
           <div><span className="cifra">{conteo('INFORMATIVA')}</span><div><EtiquetaNivel nivel="INFORMATIVA" /> sugerencias</div></div>
@@ -63,12 +63,18 @@ export default async function Observaciones({ params }: { params: Promise<{ id: 
 
       {resueltas.length > 0 && (
         <details className="tarjeta"><summary>Observaciones resueltas ({resueltas.length})</summary>
-          <table>
+          <Tabla>
             <thead><tr><th>Nivel</th><th>Observación</th><th>Decisión</th><th>Justificación</th><th>Quién / cuándo</th></tr></thead>
             <tbody>{resueltas.map((o) => (
-              <tr key={o.id}><td><EtiquetaNivel nivel={o.nivel} /></td><td>{o.mensaje}</td><td>{o.estado.toLowerCase()}{o.falsaAlarma ? ' (falsa alarma)' : ''}</td><td>{o.justificacion}</td><td className="suave">{o.resueltaPor?.nombreCompleto ?? 'reglas'} · {fecha(o.resueltaEn)}</td></tr>
+              <tr key={o.id}>
+                <td data-etiqueta="Nivel"><EtiquetaNivel nivel={o.nivel} /></td>
+                <td data-etiqueta="Observación">{o.mensaje}</td>
+                <td data-etiqueta="Decisión">{o.estado.toLowerCase()}{o.falsaAlarma ? ' (falsa alarma)' : ''}</td>
+                <td data-etiqueta="Justificación">{o.justificacion}</td>
+                <td data-etiqueta="Quién / cuándo" className="suave">{o.resueltaPor?.nombreCompleto ?? 'reglas'} · {fecha(o.resueltaEn)}</td>
+              </tr>
             ))}</tbody>
-          </table>
+          </Tabla>
         </details>
       )}
     </>

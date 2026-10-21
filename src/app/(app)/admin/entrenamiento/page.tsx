@@ -4,7 +4,7 @@ import { SISTEMA_EXTRACCION, SISTEMA_REVISION } from '@/lib/ia/instrucciones';
 import { configuracionModelo } from '@/lib/ia/cliente';
 import { accionInstruccion } from '../acciones';
 import { FormAdmin } from '../formularios';
-import { fecha } from '../../componentes';
+import { Tabla, fecha } from '../../componentes';
 
 export default async function Entrenamiento() {
   await requerirSesion({ roles: ['ADMINISTRADOR'] });
@@ -24,21 +24,40 @@ export default async function Entrenamiento() {
       <div className="aviso info">El modelo de Anthropic <strong>no se reentrena</strong>. El ajuste se hace aquí: instrucciones adicionales por tipo de escritura (versionadas y aprobadas), reglas, formularios y plantillas. Modelos en uso: extracción <code>{ext.modelo}</code> (esfuerzo {ext.esfuerzo}), revisión <code>{rev.modelo}</code> (esfuerzo {rev.esfuerzo}) — configurables por variables de entorno.</div>
 
       <section className="tarjeta">
-        <h2 style={{ marginTop: 0 }}>Patrones de error (últimos 90 días)</h2>
+        <h2>Patrones de error (últimos 90 días)</h2>
         {!patrones.length ? <p className="suave">Aún no hay casos de aprendizaje.</p> : (
-          <table><thead><tr><th>Tipo de escritura</th><th>Categoría</th><th>Campo / regla</th><th>Casos</th></tr></thead>
-            <tbody>{patrones.map((p, i) => <tr key={i}><td>{nombre(p.tipoId)}</td><td>{p.categoria.toLowerCase()}</td><td>{p.campo ?? '—'}</td><td>{p._count}</td></tr>)}</tbody></table>
+          <Tabla><thead><tr><th>Tipo de escritura</th><th>Categoría</th><th>Campo / regla</th><th className="numero">Casos</th></tr></thead>
+            <tbody>{patrones.map((p, i) => (
+              <tr key={i}>
+                <td className="principal-celda">{nombre(p.tipoId)}</td>
+                <td data-etiqueta="Categoría">{p.categoria.toLowerCase()}</td>
+                <td data-etiqueta="Campo / regla">{p.campo ?? '—'}</td>
+                <td data-etiqueta="Casos" className="numero">{p._count}</td>
+              </tr>
+            ))}</tbody></Tabla>
         )}
       </section>
 
       <section className="tarjeta">
-        <h2 style={{ marginTop: 0 }}>Casos de aprendizaje recientes (anonimizados)</h2>
-        <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Campo</th><th>IA</th><th>Corregido</th><th>Motivo</th></tr></thead>
-          <tbody>{recientes.map((c) => <tr key={c.id}><td className="suave">{fecha(c.creadoEn)}</td><td>{nombre(c.tipoId)}</td><td>{c.categoria.toLowerCase()}</td><td>{c.campo}</td><td><code>{c.valorIA}</code></td><td><code>{c.valorCorregido}</code></td><td className="suave">{c.motivo}</td></tr>)}</tbody></table>
+        <h2>Casos de aprendizaje recientes (anonimizados)</h2>
+        {!recientes.length ? <p className="suave">Aún no hay casos de aprendizaje.</p> : (
+          <Tabla><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Campo</th><th>IA</th><th>Corregido</th><th>Motivo</th></tr></thead>
+            <tbody>{recientes.map((c) => (
+              <tr key={c.id}>
+                <td data-etiqueta="Fecha" className="suave">{fecha(c.creadoEn)}</td>
+                <td data-etiqueta="Tipo">{nombre(c.tipoId)}</td>
+                <td data-etiqueta="Categoría">{c.categoria.toLowerCase()}</td>
+                <td data-etiqueta="Campo">{c.campo}</td>
+                <td data-etiqueta="IA"><code>{c.valorIA}</code></td>
+                <td data-etiqueta="Corregido"><code>{c.valorCorregido}</code></td>
+                <td data-etiqueta="Motivo" className="suave">{c.motivo}</td>
+              </tr>
+            ))}</tbody></Tabla>
+        )}
       </section>
 
       <section className="tarjeta">
-        <h2 style={{ marginTop: 0 }}>Nueva instrucción (queda pendiente de aprobación)</h2>
+        <h2>Nueva instrucción (queda pendiente de aprobación)</h2>
         <FormAdmin accion={accionInstruccion} ocultos={{ operacion: 'crear' }} campos={[
           { nombre: 'proposito', etiqueta: 'Para', tipo: 'select', opciones: [['EXTRACCION', 'Extracción de datos de documentos'], ['REVISION', 'Revisión y observaciones']] },
           { nombre: 'tipoId', etiqueta: 'Tipo de escritura', tipo: 'select', opciones: [['', 'Todas'], ...tipos.map((t) => [t.id, t.nombre] as [string, string])] },
@@ -48,18 +67,24 @@ export default async function Entrenamiento() {
       </section>
 
       <section className="tarjeta">
-        <h2 style={{ marginTop: 0 }}>Instrucciones versionadas</h2>
+        <h2>Instrucciones versionadas</h2>
         <details><summary>Instrucciones base (versión fija del código)</summary>
           <h3>Extracción</h3><pre className="vista-previa">{SISTEMA_EXTRACCION}</pre>
           <h3>Revisión</h3><pre className="vista-previa">{SISTEMA_REVISION}</pre>
         </details>
-        <table><thead><tr><th>Para</th><th>Tipo</th><th>Versión</th><th>Estado</th><th>Contenido</th><th></th></tr></thead>
-          <tbody>{instrucciones.map((i) => (
-            <tr key={i.id}><td>{i.proposito.toLowerCase()}</td><td>{nombre(i.tipoId)}</td><td>v{i.version}</td>
-              <td><span className={`etiqueta ${i.estado === 'APROBADA' ? 'ok' : i.estado === 'RETIRADA' ? '' : 'advertencia'}`}>{i.estado.toLowerCase().replace('_', ' ')}</span></td>
-              <td className="suave">{i.contenido.slice(0, 200)}{i.motivo ? ` · Motivo: ${i.motivo.slice(0, 100)}` : ''}</td>
-              <td>{i.estado !== 'RETIRADA' && <FormAdmin accion={accionInstruccion} ocultos={{ id: i.id }} botones={[...(i.estado !== 'APROBADA' ? [{ operacion: 'aprobar', texto: 'Aprobar', clase: 'exito' }] : []), { operacion: 'retirar', texto: 'Retirar', clase: 'secundario' }]} />}</td></tr>
-          ))}</tbody></table>
+        {!instrucciones.length ? <p className="suave">Aún no hay instrucciones adicionales.</p> : (
+          <Tabla><thead><tr><th>Para</th><th>Tipo</th><th>Versión</th><th>Estado</th><th>Contenido</th><th aria-label="Acciones" /></tr></thead>
+            <tbody>{instrucciones.map((i) => (
+              <tr key={i.id}>
+                <td className="principal-celda">{i.proposito === 'EXTRACCION' ? 'Extracción' : 'Revisión'}</td>
+                <td data-etiqueta="Tipo">{nombre(i.tipoId)}</td>
+                <td data-etiqueta="Versión">v{i.version}</td>
+                <td data-etiqueta="Estado"><span className={`etiqueta ${i.estado === 'APROBADA' ? 'ok' : i.estado === 'RETIRADA' ? '' : 'advertencia'}`}>{i.estado.toLowerCase().replace('_', ' ')}</span></td>
+                <td data-etiqueta="Contenido" className="suave">{i.contenido.slice(0, 200)}{i.motivo ? ` · Motivo: ${i.motivo.slice(0, 100)}` : ''}</td>
+                <td className="acciones">{i.estado !== 'RETIRADA' && <FormAdmin accion={accionInstruccion} ocultos={{ id: i.id }} botones={[...(i.estado !== 'APROBADA' ? [{ operacion: 'aprobar', texto: 'Aprobar', clase: 'exito' }] : []), { operacion: 'retirar', texto: 'Retirar', clase: 'secundario' }]} />}</td>
+              </tr>
+            ))}</tbody></Tabla>
+        )}
       </section>
     </>
   );

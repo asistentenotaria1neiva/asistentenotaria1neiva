@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { fecha } from '../componentes';
+import { Tabla, fecha } from '../componentes';
 
 export default async function PanelAdmin() {
   await requerirSesion({ roles: ['ADMINISTRADOR'] });
@@ -22,24 +22,30 @@ export default async function PanelAdmin() {
     <>
       <h1>Panel del administrador</h1>
       <div className="rejilla cuatro">
-        <Link className="tarjeta" href="/admin/usuarios"><div className="cifra">{usuarios}</div><div className="suave">usuarios activos · {sesiones} sesiones activas</div></Link>
-        <Link className="tarjeta" href="/admin/dispositivos"><div className="cifra">{equiposOk}</div><div className="suave">equipos aprobados · {equiposPend} pendientes</div></Link>
-        <Link className="tarjeta" href="/admin/alertas"><div className="cifra">{alertas}</div><div className="suave">alertas sin atender</div></Link>
-        <Link className="tarjeta" href="/admin/plantillas"><div className="cifra">{plantillasPend}</div><div className="suave">plantillas pendientes de aprobación · {tiposSinPlantilla} tipos sin plantilla</div></Link>
+        <Link className="tarjeta" href="/admin/usuarios"><div className="suave">Usuarios activos</div><div className="cifra">{usuarios}</div><div className="suave">{sesiones} sesiones activas</div></Link>
+        <Link className="tarjeta" href="/admin/dispositivos"><div className="suave">Equipos aprobados</div><div className="cifra">{equiposOk}</div><div className="suave">{equiposPend > 0 ? <span className="etiqueta advertencia">{equiposPend} pendientes</span> : 'ninguno pendiente'}</div></Link>
+        <Link className="tarjeta" href="/admin/alertas"><div className="suave">Alertas sin atender</div><div className="cifra" style={alertas ? { color: 'var(--peligro)' } : undefined}>{alertas}</div><div className="suave">ver alertas de seguridad</div></Link>
+        <Link className="tarjeta" href="/plantillas"><div className="suave">Plantillas por aprobar</div><div className="cifra">{plantillasPend}</div><div className="suave">{tiposSinPlantilla} tipos sin plantilla</div></Link>
       </div>
       <div className="rejilla dos">
         <section className="tarjeta">
-          <h2 style={{ marginTop: 0 }}>Expedientes</h2>
-          <table><tbody>
+          <h2>Expedientes por estado</h2>
+          <Tabla apilable={false}><tbody>
             {[['BORRADOR', 'En elaboración'], ['DEVUELTO', 'Devueltos'], ['EN_REVISION', 'En revisión'], ['APROBADA', 'Listos para firma'], ['FIRMADA', 'Firmados'], ['ARCHIVADA', 'Archivados']].map(([k, v]) => (
-              <tr key={k}><td>{v}</td><td><strong>{cuenta(k)}</strong></td></tr>
+              <tr key={k}><td><Link href={`/expedientes?estado=${k}`}>{v}</Link></td><td className="numero"><strong>{cuenta(k)}</strong></td></tr>
             ))}
-          </tbody></table>
+          </tbody></Tabla>
         </section>
         <section className="tarjeta">
-          <h2 style={{ marginTop: 0 }}>Alertas recientes</h2>
+          <h2>Alertas recientes</h2>
           {!ultimasAlertas.length && <p className="suave">Sin alertas pendientes.</p>}
-          <ul>{ultimasAlertas.map((a) => <li key={a.id}><span className={`etiqueta ${a.severidad === 'ALTA' ? 'critica' : a.severidad === 'MEDIA' ? 'advertencia' : 'informativa'}`}>{a.severidad}</span> {a.mensaje} <span className="suave">· {fecha(a.creadaEn)}</span></li>)}</ul>
+          <ul className="historial">{ultimasAlertas.map((a) => (
+            <li key={a.id}>
+              <span>{a.mensaje}</span>
+              <span className={`etiqueta ${a.severidad === 'ALTA' ? 'critica' : a.severidad === 'MEDIA' ? 'advertencia' : 'informativa'}`}>{a.severidad.toLowerCase()}</span>
+              <time className="suave">{fecha(a.creadaEn)}</time>
+            </li>
+          ))}</ul>
         </section>
       </div>
     </>

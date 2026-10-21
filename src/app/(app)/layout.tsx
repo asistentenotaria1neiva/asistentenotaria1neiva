@@ -1,41 +1,39 @@
-import Link from 'next/link';
 import { requerirSesion } from '@/lib/sesion';
 import { accionCerrarSesion } from '../(acceso)/acciones';
+import { MenuLateral, type EnlaceMenu } from './navegacion';
 
 const ROL: Record<string, string> = { ADMINISTRADOR: 'Administrador', REVISOR: 'Revisor', DIGITADOR: 'Digitador' };
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const s = await requerirSesion();
   const admin = s.usuario.rol === 'ADMINISTRADOR';
+  const enlaces: EnlaceMenu[] = [
+    { href: '/', texto: 'Inicio' },
+    { href: '/expedientes', texto: 'Expedientes' },
+    { href: '/expedientes/nuevo', texto: 'Nuevo expediente' },
+    ...(admin || s.usuario.rol === 'REVISOR' ? [{ href: '/plantillas', texto: 'Plantillas' }] : []),
+    ...(admin ? [
+      { href: '/admin', texto: 'Panel', seccion: 'Administración' },
+      { href: '/admin/dispositivos', texto: 'Dispositivos' },
+      { href: '/admin/usuarios', texto: 'Usuarios' },
+      { href: '/admin/auditoria', texto: 'Auditoría' },
+      { href: '/admin/estadisticas', texto: 'Estadísticas' },
+      { href: '/admin/entrenamiento', texto: 'Entrenamiento IA' },
+      { href: '/admin/alertas', texto: 'Alertas' },
+      { href: '/admin/configuracion', texto: 'Configuración' },
+    ] : []),
+  ];
   return (
     <div className="app">
-      <nav className="lateral" aria-label="Menú principal">
-        <div className="marca">Escrituración<small>Notaría Primera de Neiva</small></div>
-        <Link href="/">Inicio</Link>
-        <Link href="/expedientes">Expedientes</Link>
-        <Link href="/expedientes/nuevo">Nuevo expediente</Link>
-        {(admin || s.usuario.rol === 'REVISOR') && <Link href="/plantillas">Plantillas</Link>}
-        {admin && (
-          <>
-            <div className="seccion">Administración</div>
-            <Link href="/admin">Panel</Link>
-            <Link href="/admin/dispositivos">Dispositivos</Link>
-            <Link href="/admin/usuarios">Usuarios</Link>
-            <Link href="/admin/auditoria">Auditoría</Link>
-            <Link href="/admin/estadisticas">Estadísticas</Link>
-            <Link href="/admin/entrenamiento">Entrenamiento IA</Link>
-            <Link href="/admin/alertas">Alertas</Link>
-            <Link href="/admin/configuracion">Configuración</Link>
-          </>
-        )}
+      <MenuLateral enlaces={enlaces}>
         <div className="pie">
           <div><strong>{s.usuario.nombre}</strong></div>
-          <div className="suave" style={{ color: '#dbe4f3' }}>{ROL[s.usuario.rol]}{s.remota ? ' · acceso remoto' : ''}</div>
-          <form action={accionCerrarSesion} style={{ marginTop: '0.5rem' }}>
+          <div className="suave">{ROL[s.usuario.rol]}{s.remota ? ' · acceso remoto' : ''}</div>
+          <form action={accionCerrarSesion}>
             <button type="submit" className="secundario pequeno">Cerrar sesión</button>
           </form>
         </div>
-      </nav>
+      </MenuLateral>
       <main className="principal">{children}</main>
     </div>
   );

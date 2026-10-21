@@ -4,7 +4,7 @@ import { requerirSesion } from '@/lib/sesion';
 import type { RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import { accionCargarPlantilla } from './acciones';
 import { FormAdmin } from '../admin/formularios';
-import { fecha } from '../componentes';
+import { Tabla, fecha } from '../componentes';
 import { EtiquetaVeredicto } from './componentes';
 
 // La carga incluye la revisión de la IA, que puede tardar uno o dos minutos
@@ -45,10 +45,10 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
 
   return (
     <>
-      <div className="fila entre">
+      <div className="encabezado">
         <div>
-          <h1 style={{ marginBottom: '0.25rem' }}>Plantillas</h1>
-          <p className="suave" style={{ marginTop: 0 }}>
+          <h1>Plantillas</h1>
+          <p className="suave">
             Abra una plantilla para ver su diseño, probarla con datos de ejemplo, leer la revisión de la IA o cargar una nueva versión.
             Solo las versiones aprobadas se usan para generar borradores{s.usuario.rol === 'REVISOR' ? '; las aprueba el administrador por indicación del notario' : ''}.
           </p>
@@ -87,8 +87,8 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
         </form>
       </div>
 
-      {!grupos.length ? <section className="tarjeta suave">Ninguna plantilla coincide{q ? ` con «${q}»` : ''}.</section> : (
-        <table className="tabla-plantillas">
+      {!grupos.length ? <section className="tarjeta suave vacio">Ninguna plantilla coincide{q ? ` con «${q}»` : ''}.</section> : (
+        <Tabla className="tabla-plantillas">
           <thead><tr><th>Plantilla</th><th>Estado</th><th>Revisión IA</th><th>Última carga</th><th aria-label="Acciones" /></tr></thead>
           {grupos.map((g) => (
             <tbody key={g.titulo}>
@@ -99,18 +99,20 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
                 const principal = pendiente ?? vigente ?? t.plantillas[0];
                 return (
                   <tr key={t.id}>
-                    <td>
+                    <td className="principal-celda">
                       {principal ? <Link href={`/plantillas/${principal.id}`}><strong>{t.nombre}</strong></Link> : <strong>{t.nombre}</strong>}
                       <div className="suave">{t.esBloque ? 'Parte común' : t.categoria}</div>
                     </td>
-                    <td>
-                      {!principal && <span className={`etiqueta ${clasePrioridad(t.prioridad)}`}>Sin plantilla · prioridad {t.prioridad.toLowerCase()}</span>}
-                      {vigente && <div><span className="etiqueta ok">Aprobada v{vigente.version}</span></div>}
-                      {pendiente && <div><span className="etiqueta advertencia">Pendiente v{pendiente.version}</span></div>}
-                      {principal && !vigente && !pendiente && <span className="etiqueta">No aprobada</span>}
+                    <td data-etiqueta="Estado">
+                      <div className="fila" style={{ gap: '0.3rem' }}>
+                        {!principal && <span className={`etiqueta ${clasePrioridad(t.prioridad)}`}>Sin plantilla · prioridad {t.prioridad.toLowerCase()}</span>}
+                        {vigente && <span className="etiqueta ok">Aprobada v{vigente.version}</span>}
+                        {pendiente && <span className="etiqueta advertencia">Pendiente v{pendiente.version}</span>}
+                        {principal && !vigente && !pendiente && <span className="etiqueta">No aprobada</span>}
+                      </div>
                     </td>
-                    <td>{principal ? <EtiquetaVeredicto revision={principal.revision as RevisionPlantilla | null} /> : <span className="suave">—</span>}</td>
-                    <td className="suave">{principal ? fecha(principal.creadaEn, false) : '—'}</td>
+                    <td data-etiqueta="Revisión IA">{principal ? <EtiquetaVeredicto revision={principal.revision as RevisionPlantilla | null} /> : <span className="suave">—</span>}</td>
+                    <td data-etiqueta="Última carga" className="suave">{principal ? fecha(principal.creadaEn, false) : '—'}</td>
                     <td className="acciones">
                       {principal ? (
                         <>
@@ -124,7 +126,7 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
               })}
             </tbody>
           ))}
-        </table>
+        </Tabla>
       )}
     </>
   );

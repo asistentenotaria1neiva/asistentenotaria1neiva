@@ -35,8 +35,13 @@ export default async function ResumenExpediente({ params }: { params: Promise<{ 
   return (
     <div className="rejilla dos">
       <section className="tarjeta">
-        <h2 style={{ marginTop: 0 }}>Flujo de la escritura</h2>
-        <ol>{pasos.map((p) => <li key={p.t}>{p.hecho ? '✔ ' : ''}{p.t}</li>)}</ol>
+        <h2>Flujo de la escritura</h2>
+        <ol className="lista-estado">{pasos.map((p, i) => (
+          <li key={p.t} className={p.hecho ? 'hecho' : 'pendiente'}>
+            <span className="marca-estado" aria-hidden="true">{p.hecho ? '✓' : i + 1}</span>
+            <span>{p.t}<span className="solo-lectores"> {p.hecho ? '(hecho)' : '(pendiente)'}</span></span>
+          </li>
+        ))}</ol>
         {(b.criticas.length > 0 || b.advertencias.length > 0) && (
           <div className="aviso alerta">Observaciones abiertas: {b.criticas.length} crítica(s) y {b.advertencias.length} advertencia(s). Las críticas impiden avanzar.</div>
         )}
@@ -58,8 +63,15 @@ export default async function ResumenExpediente({ params }: { params: Promise<{ 
         {!editable && !revisor && <p className="suave">El expediente no se puede editar en su estado actual.</p>}
       </section>
       <section className="tarjeta">
-        <h2 style={{ marginTop: 0 }}>Historial</h2>
-        <table><tbody>{historial.map((h) => <tr key={String(h.id)}><td className="suave">{fecha(h.fecha)}</td><td>{h.accion.replace(/_/g, ' ').toLowerCase()}</td><td>{h.usuarioNombre}</td></tr>)}</tbody></table>
+        <h2>Historial</h2>
+        {!historial.length && <p className="suave">Sin movimientos registrados.</p>}
+        <ul className="historial">{historial.map((h) => (
+          <li key={String(h.id)}>
+            <span>{h.accion.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase())}</span>
+            <span className="suave">{h.usuarioNombre}</span>
+            <time className="suave">{fecha(h.fecha)}</time>
+          </li>
+        ))}</ul>
         <p className="suave">Creado: {fecha(e.creadoEn)} · Último cambio: {fecha(e.actualizadoEn)}</p>
       </section>
     </div>

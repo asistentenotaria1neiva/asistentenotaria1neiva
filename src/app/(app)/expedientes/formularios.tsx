@@ -20,13 +20,13 @@ export function BotonAccion({ accion, texto, textoPendiente, clase, confirmar }:
   const [r, setR] = useState<Resultado>();
   const [pendiente, iniciar] = useTransition();
   return (
-    <span>
-      <button type="button" className={clase} disabled={pendiente} onClick={() => {
+    <div className="accion">
+      <button type="button" className={clase} disabled={pendiente} aria-busy={pendiente} onClick={() => {
         if (confirmar && !window.confirm(confirmar)) return;
         iniciar(async () => setR(await accion()));
-      }}>{pendiente ? (textoPendiente ?? 'Procesando…') : texto}</button>
+      }}>{pendiente && <span className="girador pequeno" aria-hidden="true" />}{pendiente ? (textoPendiente ?? 'Procesando…') : texto}</button>
       <Mensaje r={r} />
-    </span>
+    </div>
   );
 }
 
@@ -40,28 +40,32 @@ export function FormularioNuevo({ accion, actos }: { accion: (r: Resultado, f: F
       <input type="hidden" name="actos" value={seleccion.join(',')} />
       <div className="rejilla dos">
         <div className="tarjeta">
-          <h2 style={{ marginTop: 0 }}>Actos disponibles</h2>
+          <h2>1. Actos disponibles</h2>
           <p className="suave">Seleccione los actos de la escritura. Si la escritura combina varios (p. ej. cancelación de patrimonio + compraventa), agréguelos en el orden en que deben aparecer.</p>
           {actos.map((a) => (
-            <label key={a.id} className="casilla">
+            <label key={a.id} className="casilla opcion">
               <input type="checkbox" checked={seleccion.includes(a.id)} onChange={(e) => setSeleccion((s) => e.target.checked ? [...s, a.id] : s.filter((x) => x !== a.id))} />
-              {a.nombre} {a.estadoPlantilla !== 'APROBADA' && <span className="etiqueta advertencia">plantilla pendiente de aprobación</span>}
+              <span>{a.nombre}</span> {a.estadoPlantilla !== 'APROBADA' && <span className="etiqueta advertencia">plantilla pendiente de aprobación</span>}
             </label>
           ))}
         </div>
-        <div className="tarjeta">
-          <h2 style={{ marginTop: 0 }}>Orden en la escritura</h2>
+        <div className="tarjeta" style={{ alignSelf: 'start', position: 'sticky', top: '1rem' }}>
+          <h2>2. Orden en la escritura</h2>
           {!seleccion.length && <p className="suave">Aún no ha seleccionado actos.</p>}
-          <ol>
+          <ol className="lista-orden">
             {seleccion.map((id, i) => (
-              <li key={id} className="fila" style={{ marginBottom: '0.4rem' }}>
-                <span>{actos.find((a) => a.id === id)?.nombre}</span>
-                <button type="button" className="secundario pequeno" disabled={i === 0} onClick={() => mover(i, -1)} aria-label="Subir">↑</button>
-                <button type="button" className="secundario pequeno" disabled={i === seleccion.length - 1} onClick={() => mover(i, 1)} aria-label="Bajar">↓</button>
+              <li key={id}>
+                <div className="fila">
+                  <span>{actos.find((a) => a.id === id)?.nombre}</span>
+                  <span className="botones-orden">
+                    <button type="button" className="secundario pequeno" disabled={i === 0} onClick={() => mover(i, -1)} aria-label="Subir" title="Subir">↑</button>
+                    <button type="button" className="secundario pequeno" disabled={i === seleccion.length - 1} onClick={() => mover(i, 1)} aria-label="Bajar" title="Bajar">↓</button>
+                  </span>
+                </div>
               </li>
             ))}
           </ol>
-          <button type="submit" disabled={pendiente || !seleccion.length}>Crear expediente</button>
+          <button type="submit" disabled={pendiente || !seleccion.length} style={{ width: '100%' }}>{pendiente ? 'Creando…' : 'Crear expediente'}</button>
         </div>
       </div>
     </form>
@@ -100,11 +104,11 @@ export function FormularioCarga({ accion, tipos, limiteMb }: { accion: (r: Resul
       });
     }}>
       <Mensaje r={r} />
-      <div className="rejilla tres">
-        <div className="campo"><label htmlFor="tipo">Tipo de documento</label>
+      <div className="filtros">
+        <div><label htmlFor="tipo">Tipo de documento</label>
           <select id="tipo" name="tipo" required>{tipos.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-        <div className="campo"><label htmlFor="archivo">Archivo(s) PDF o imagen (máx. {limiteMb} MB c/u)</label><input id="archivo" name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple required /></div>
-        <div className="campo"><label>&nbsp;</label><button type="submit" disabled={pendiente}>{pendiente ? 'Cargando y cifrando…' : 'Cargar'}</button></div>
+        <div className="ancho"><label htmlFor="archivo">Archivo(s) PDF o imagen (máx. {limiteMb} MB c/u)</label><input id="archivo" name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple required /></div>
+        <div className="acciones-filtro"><button type="submit" disabled={pendiente} aria-busy={pendiente}>{pendiente && <span className="girador pequeno" aria-hidden="true" />}{pendiente ? 'Cargando y cifrando…' : 'Cargar'}</button></div>
       </div>
     </form>
   );

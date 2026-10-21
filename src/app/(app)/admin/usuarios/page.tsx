@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { accionCrearUsuario, accionUsuario } from '../acciones';
 import { FormAdmin } from '../formularios';
-import { fecha } from '../../componentes';
+import { Tabla, fecha } from '../../componentes';
 
 const ROLES: [string, string][] = [['DIGITADOR', 'Digitador / auxiliar'], ['REVISOR', 'Revisor'], ['ADMINISTRADOR', 'Administrador']];
 
@@ -13,27 +13,27 @@ export default async function Usuarios() {
     <>
       <h1>Usuarios</h1>
       <section className="tarjeta">
-        <h2 style={{ marginTop: 0 }}>Crear usuario</h2>
-        <FormAdmin accion={accionCrearUsuario} campos={[
+        <h2>Crear usuario</h2>
+        <FormAdmin accion={accionCrearUsuario} columnas campos={[
           { nombre: 'nombre', etiqueta: 'Nombre completo' },
           { nombre: 'usuario', etiqueta: 'Usuario', ayuda: 'Minúsculas, sin espacios.' },
           { nombre: 'correo', etiqueta: 'Correo (opcional)' },
           { nombre: 'rol', etiqueta: 'Rol', tipo: 'select', opciones: ROLES },
         ]} botones={[{ texto: 'Crear con contraseña temporal' }]} />
       </section>
-      <table>
+      <Tabla>
         <thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Doble factor</th><th>Último acceso</th><th>Acciones</th></tr></thead>
         <tbody>{usuarios.map((u) => {
           const bloqueado = u.bloqueadoHasta && u.bloqueadoHasta > new Date();
           const propio = u.id === s.usuario.id;
           return (
             <tr key={u.id}>
-              <td><strong>{u.nombreCompleto}</strong><div className="suave">{u.usuario}{u.debeCambiarContrasena ? ' · debe cambiar contraseña' : ''}</div></td>
-              <td>{ROLES.find(([k]) => k === u.rol)?.[1]}</td>
-              <td><span className={`etiqueta ${u.estado === 'ACTIVO' ? 'ok' : 'critica'}`}>{u.estado.toLowerCase()}</span>{bloqueado && <div><span className="etiqueta critica">bloqueado</span></div>}</td>
-              <td>{u.totpActivo ? 'Activo' : u.rol === 'ADMINISTRADOR' ? 'Pendiente' : '—'}</td>
-              <td className="suave">{fecha(u.ultimoAcceso)}<br />{u._count.sesiones} sesión(es)</td>
-              <td>
+              <td className="principal-celda"><strong>{u.nombreCompleto}</strong>{propio && <> <span className="etiqueta informativa">usted</span></>}<div className="suave">{u.usuario}{u.debeCambiarContrasena ? ' · debe cambiar contraseña' : ''}</div></td>
+              <td data-etiqueta="Rol">{ROLES.find(([k]) => k === u.rol)?.[1]}</td>
+              <td data-etiqueta="Estado"><span><span className={`etiqueta ${u.estado === 'ACTIVO' ? 'ok' : 'critica'}`}>{u.estado.toLowerCase()}</span>{bloqueado && <> <span className="etiqueta critica">bloqueado</span></>}</span></td>
+              <td data-etiqueta="Doble factor">{u.totpActivo ? <span className="etiqueta ok">activo</span> : u.rol === 'ADMINISTRADOR' ? <span className="etiqueta advertencia">pendiente</span> : '—'}</td>
+              <td data-etiqueta="Último acceso" className="suave">{fecha(u.ultimoAcceso)}<br />{u._count.sesiones} sesión(es)</td>
+              <td className="acciones">
                 <details><summary>Gestionar</summary>
                   <FormAdmin accion={accionUsuario} ocultos={{ id: u.id }} campos={propio ? [] : [{ nombre: 'rol', etiqueta: 'Rol', tipo: 'select', opciones: ROLES, valor: u.rol }]}
                     botones={[
@@ -52,7 +52,7 @@ export default async function Usuarios() {
             </tr>
           );
         })}</tbody>
-      </table>
+      </Tabla>
     </>
   );
 }
