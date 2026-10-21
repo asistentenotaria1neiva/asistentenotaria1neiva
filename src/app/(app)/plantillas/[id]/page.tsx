@@ -5,7 +5,7 @@ import { requerirSesion } from '@/lib/sesion';
 import { ESQUEMAS } from '@/lib/escritura/esquemas';
 import { vistaPreviaDocx, etiquetasDe } from '@/lib/escritura/vista-previa';
 import { probarConEjemplo, tieneEjemplo, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
-import { accionPlantilla, accionRevisarPlantilla } from '../acciones';
+import { accionCargarPlantilla, accionPlantilla, accionRevisarPlantilla } from '../acciones';
 import { FormAdmin } from '../../admin/formularios';
 import { fecha } from '../../componentes';
 import { ESTADO_PLANTILLA, LeyendaPlantilla, PanelRevision, VistaDocumento } from '../componentes';
@@ -136,9 +136,16 @@ export default async function VersionPlantilla({ params, searchParams }: { param
             {p.notas && <p>{p.notas}</p>}
             {esquema && <p className="suave">Fuente: {esquema.plantillaFuente} · Reglas de cruce: {esquema.reglas.join(', ') || 'ninguna'}</p>}
             {p.tipo.normas && <p className="suave">{p.tipo.normas}</p>}
-            <div className="fila">
-              <Link className="boton secundario pequeno" href={`/plantillas?tipo=${p.tipoId}`}>Cargar otra versión</Link>
-            </div>
+          </section>
+
+          <section className="tarjeta">
+            <h2 style={{ marginTop: 0 }}>Cargar nueva versión</h2>
+            <p className="suave">Será la v{Math.max(...p.tipo.plantillas.map((v) => v.version)) + 1} de esta plantilla y quedará pendiente de aprobación. El sistema la prueba con datos de ejemplo y la IA la revisa.</p>
+            <FormAdmin accion={accionCargarPlantilla} ocultos={{ tipoId: p.tipoId }} campos={[
+              { nombre: 'archivo', etiqueta: 'Archivo .docx con variables', tipo: 'archivo' },
+              { nombre: 'notas', etiqueta: 'Notas de la versión', tipo: 'area', ayuda: 'Qué cambió y por qué (la IA también lo lee).' },
+            ]} botones={[{ texto: 'Cargar y revisar con IA' }]}
+            mensajePendiente="Cargando la versión y revisándola con la IA. Puede tardar uno o dos minutos; no cierre esta página." />
           </section>
 
           {p.estado !== 'RETIRADA' && (

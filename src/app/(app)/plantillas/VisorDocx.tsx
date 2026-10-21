@@ -2,6 +2,7 @@
 /**
  * Muestra un .docx como se ve en Word (páginas, márgenes, encabezados, pies, imágenes y tablas)
  * con docx-preview, y resalta las variables {{…}} y las marcas «FALTA: …».
+ * Las páginas se reducen para caber en el ancho disponible (nunca se amplían).
  */
 import { useEffect, useRef, useState } from 'react';
 
@@ -34,7 +35,13 @@ function resaltarEtiquetas(raiz: HTMLElement) {
   }
 }
 
+/** Reduce el documento para que la página quepa a lo ancho del visor */
+function ajustarAncho(contenedor: HTMLElement, envoltura: HTMLElement, anchoPagina: number) {
+  envoltura.style.zoom = String(Math.min(1, (contenedor.clientWidth - 2) / anchoPagina));
+}
+
 export function VisorDocx({ url }: { url: string }) {
+  const contenedor = useRef<HTMLDivElement>(null);
   const cuerpo = useRef<HTMLDivElement>(null);
   const estilos = useRef<HTMLDivElement>(null);
   const [estado, setEstado] = useState<'cargando' | 'listo' | 'error'>('cargando');
@@ -42,6 +49,7 @@ export function VisorDocx({ url }: { url: string }) {
 
   useEffect(() => {
     const controlador = new AbortController();
+    let observador: ResizeObserver | undefined;
     setEstado('cargando');
     (async () => {
       try {
@@ -54,9 +62,18 @@ export function VisorDocx({ url }: { url: string }) {
         estilos.current.innerHTML = '';
         await renderAsync(datos, cuerpo.current, estilos.current, {
           inWrapper: true, breakPages: true, renderHeaders: true, renderFooters: true, renderFootnotes: true,
-          experimental: true, useBase64URL: true, className: 'docx',
+          useBase64URL: true, className: 'docx',
         });
         resaltarEtiquetas(cuerpo.current);
+        const envoltura = cuerpo.current.querySelector<HTMLElement>('.docx-wrapper');
+        const pagina = envoltura?.querySelector<HTMLElement>('section.docx');
+        if (envoltura && pagina && contenedor.current) {
+          const anchoPagina = pagina.offsetWidth + 48; // página + margen gris a los lados
+          const c = contenedor.current;
+          ajustarAncho(c, envoltura, anchoPagina);
+          observador = new ResizeObserver(() => ajustarAncho(c, envoltura, anchoPagina));
+          observador.observe(c);
+        }
         setEstado('listo');
       } catch (e) {
         if (controlador.signal.aborted) return;
@@ -64,11 +81,11 @@ export function VisorDocx({ url }: { url: string }) {
         setEstado('error');
       }
     })();
-    return () => controlador.abort();
+    return () => { controlador.abort(); observador?.disconnect(); };
   }, [url]);
 
   return (
-    <div className="visor-docx">
+    <div className="visor-docx" ref={contenedor}>
       {estado === 'cargando' && <p className="suave" style={{ padding: '1rem' }}>Cargando el documento…</p>}
       {estado === 'error' && <div className="aviso error" style={{ margin: '1rem' }}>No se pudo mostrar el documento: {error}. Descárguelo para revisarlo en Word.</div>}
       <div ref={estilos} />

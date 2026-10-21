@@ -1,95 +1,131 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { ESQUEMAS } from '@/lib/escritura/esquemas';
 import type { RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import { accionCargarPlantilla } from './acciones';
 import { FormAdmin } from '../admin/formularios';
 import { fecha } from '../componentes';
-import { ESTADO_PLANTILLA, EtiquetaVeredicto } from './componentes';
+import { EtiquetaVeredicto } from './componentes';
 
 // La carga incluye la revisión de la IA, que puede tardar uno o dos minutos
 export const maxDuration = 300;
 
-export default async function Plantillas({ searchParams }: { searchParams: Promise<{ tipo?: string }> }) {
+const PESTANAS = { '': 'Todas', pendiente: 'Pendientes de aprobación', aprobada: 'Aprobadas', sin_plantilla: 'Sin plantilla' } as const;
+type Filtro = keyof typeof PESTANAS;
+const sinTildes = (x: string) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const PRIORIDAD = { Alta: 0, Media: 1, Baja: 2 } as Record<string, number>;
+const clasePrioridad = (p: string) => (p === 'Alta' ? 'critica' : p === 'Media' ? 'advertencia' : '');
+
+export default async function Plantillas({ searchParams }: { searchParams: Promise<{ q?: string; estado?: string; nuevo?: string }> }) {
   const s = await requerirSesion({ roles: ['ADMINISTRADOR', 'REVISOR'] });
-  const { tipo } = await searchParams;
+  const { q = '', estado = '', nuevo } = await searchParams;
+  const filtro: Filtro = estado in PESTANAS ? (estado as Filtro) : '';
   const tipos = await db.tipoEscritura.findMany({
-    orderBy: [{ esBloque: 'desc' }, { categoria: 'asc' }, { nombre: 'asc' }],
+    orderBy: [{ categoria: 'asc' }, { nombre: 'asc' }],
     include: { plantillas: { select: { id: true, version: true, estado: true, creadaEn: true, revision: true }, orderBy: { version: 'desc' } } },
   });
-  const conPlantilla = tipos.filter((t) => !t.esBloque && t.plantillas.length);
-  const sinPlantilla = tipos.filter((t) => !t.esBloque && !t.plantillas.length);
-  const pendientes = tipos.flatMap((t) => t.plantillas.filter((p) => p.estado === 'PENDIENTE_APROBACION').map((p) => ({ ...p, tipo: t })));
-  const PRIORIDAD = { Alta: 0, Media: 1, Baja: 2 } as Record<string, number>;
+
+  const cumple = (t: (typeof tipos)[number], f: Filtro) =>
+    f === '' ? true
+      : f === 'sin_plantilla' ? !t.plantillas.length
+      : f === 'pendiente' ? t.plantillas.some((p) => p.estado === 'PENDIENTE_APROBACION')
+      : t.plantillas.some((p) => p.estado === 'APROBADA');
+  const busqueda = sinTildes(q.trim());
+  const filas = tipos.filter((t) => cumple(t, filtro) && (!busqueda || sinTildes(`${t.nombre} ${t.categoria} ${t.esBloque ? 'bloque parte comun' : ''}`).includes(busqueda)));
+  // Sin plantilla: primero lo más urgente para la notaría
+  if (filtro === 'sin_plantilla') filas.sort((a, b) => PRIORIDAD[a.prioridad] - PRIORIDAD[b.prioridad] || a.nombre.localeCompare(b.nombre));
+  const grupos = [
+    { titulo: 'Escrituras', filas: filas.filter((t) => !t.esBloque) },
+    { titulo: 'Partes comunes de todas las escrituras (carátula, cierre, oficios)', filas: filas.filter((t) => t.esBloque) },
+  ].filter((g) => g.filas.length);
+
+  // Las nuevas versiones de una plantilla existente se cargan dentro de ella; aquí solo las que faltan
+  const cargables = tipos.filter((t) => !t.plantillas.length).sort((a, b) => Number(b.esBloque) - Number(a.esBloque) || PRIORIDAD[a.prioridad] - PRIORIDAD[b.prioridad] || a.nombre.localeCompare(b.nombre));
+  const enlace = (f: Filtro) => `/plantillas?${new URLSearchParams({ ...(f ? { estado: f } : {}), ...(q ? { q } : {}) })}`;
+
   return (
     <>
-      <h1>Plantillas</h1>
-      <div className="aviso info">
-        Abra cada plantilla para ver su texto con las variables resaltadas, probarla con datos de ejemplo y leer la revisión de la IA.
-        Toda versión cargada queda <strong>pendiente de aprobación del notario</strong>; solo las aprobadas se usan para generar borradores.
-        {s.usuario.rol === 'REVISOR' && ' La aprobación la hace el administrador por indicación del notario.'}
+      <div className="fila entre">
+        <div>
+          <h1 style={{ marginBottom: '0.25rem' }}>Plantillas</h1>
+          <p className="suave" style={{ marginTop: 0 }}>
+            Abra una plantilla para ver su diseño, probarla con datos de ejemplo, leer la revisión de la IA o cargar una nueva versión.
+            Solo las versiones aprobadas se usan para generar borradores{s.usuario.rol === 'REVISOR' ? '; las aprueba el administrador por indicación del notario' : ''}.
+          </p>
+        </div>
       </div>
 
-      <section className="tarjeta">
-        <div className="rejilla tres">
-          <div><span className="cifra">{conPlantilla.filter((t) => t.plantillas.some((p) => p.estado === 'APROBADA')).length}</span><div className="suave">tipos con plantilla aprobada</div></div>
-          <div><span className="cifra">{pendientes.length}</span><div className="suave">versiones pendientes de aprobación</div></div>
-          <div><span className="cifra">{sinPlantilla.length}</span><div className="suave">tipos sin plantilla (la notaría debe entregarlas)</div></div>
-        </div>
-        <details><summary>Faltantes por prioridad ({sinPlantilla.length})</summary>
-          <ul>{[...sinPlantilla].sort((a, b) => PRIORIDAD[a.prioridad] - PRIORIDAD[b.prioridad]).map((t) => <li key={t.id}><span className={`etiqueta ${t.prioridad === 'Alta' ? 'critica' : t.prioridad === 'Media' ? 'advertencia' : ''}`}>{t.prioridad}</span> {t.nombre} <span className="suave">· {t.categoria}</span></li>)}</ul>
+      {cargables.length > 0 && (
+        <details className="tarjeta carga-nueva" id="cargar" open={!!nuevo}>
+          <summary>+ Cargar plantilla nueva <span className="suave">({cargables.length} tipos aún no tienen plantilla)</span></summary>
+          <p className="suave">
+            Use variables <code>{'{{variable}}'}</code> y bloques condicionales <code>{'{{#condicion}} … {{/condicion}}'}</code>.
+            Al cargarla, el sistema la prueba con datos de ejemplo y la IA la revisa; queda pendiente de aprobación.
+          </p>
+          <FormAdmin accion={accionCargarPlantilla} campos={[
+            { nombre: 'tipoId', etiqueta: 'Tipo de escritura', tipo: 'select', valor: nuevo, opciones: cargables.map((t) => [t.id, t.esBloque ? `[Parte común] ${t.nombre}` : `${t.nombre} · prioridad ${t.prioridad.toLowerCase()}`]) },
+            { nombre: 'archivo', etiqueta: 'Archivo .docx con variables', tipo: 'archivo' },
+            { nombre: 'notas', etiqueta: 'Notas', tipo: 'area', ayuda: 'Origen de la plantilla u observaciones (la IA también lo lee).' },
+          ]} botones={[{ texto: 'Cargar y revisar con IA' }]}
+          mensajePendiente="Cargando la plantilla y revisándola con la IA. Puede tardar uno o dos minutos; no cierre esta página." />
         </details>
-      </section>
-
-      {pendientes.length > 0 && (
-        <section className="tarjeta">
-          <h2 style={{ marginTop: 0 }}>Pendientes de aprobación</h2>
-          <table>
-            <thead><tr><th>Plantilla</th><th>Tipo</th><th>Versión</th><th>Cargada</th><th>Revisión</th><th></th></tr></thead>
-            <tbody>{pendientes.map((p) => (
-              <tr key={p.id}>
-                <td><Link href={`/plantillas/${p.id}`}>{p.tipo.nombre}</Link></td>
-                <td>{p.tipo.esBloque ? <span className="etiqueta informativa">Parte común (bloque)</span> : <>Escritura<div className="suave">{p.tipo.categoria}</div></>}</td>
-                <td>v{p.version}</td>
-                <td>{fecha(p.creadaEn)}</td>
-                <td><EtiquetaVeredicto revision={p.revision as RevisionPlantilla | null} /></td>
-                <td><a href={`/api/plantillas/${p.id}`}>Descargar</a></td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </section>
       )}
 
-      <section className="tarjeta">
-        <h2 style={{ marginTop: 0 }}>Cargar nueva versión</h2>
-        <p className="suave">Use variables <code>{'{{variable}}'}</code> y bloques condicionales <code>{'{{#condicion}} … {{/condicion}}'}</code>. Al cargarla, el sistema la prueba con datos de ejemplo y la IA la revisa.</p>
-        <FormAdmin accion={accionCargarPlantilla} campos={[
-          { nombre: 'tipoId', etiqueta: 'Tipo de escritura o bloque', tipo: 'select', opciones: tipos.map((t) => [t.id, `${t.esBloque ? '[Bloque] ' : ''}${t.nombre}`]), valor: tipo },
-          { nombre: 'archivo', etiqueta: 'Archivo .docx con variables', tipo: 'archivo' },
-          { nombre: 'notas', etiqueta: 'Notas de la versión', tipo: 'area', ayuda: 'Qué cambió y por qué (la IA también lo lee).' },
-        ]} botones={[{ texto: 'Cargar y revisar con IA' }]}
-        mensajePendiente="Cargando la plantilla y revisándola con la IA. Puede tardar uno o dos minutos; no cierre esta página." />
-      </section>
+      <div className="fila entre barra-filtros">
+        <nav className="pestanas" aria-label="Filtrar por estado">
+          {(Object.keys(PESTANAS) as Filtro[]).map((f) => (
+            <Link key={f} href={enlace(f)} aria-current={f === filtro ? 'page' : undefined}>
+              {PESTANAS[f]} <span className="conteo">{tipos.filter((t) => cumple(t, f)).length}</span>
+            </Link>
+          ))}
+        </nav>
+        <form className="fila buscador" method="get">
+          {filtro && <input type="hidden" name="estado" value={filtro} />}
+          <input name="q" type="search" defaultValue={q} placeholder="Buscar (p. ej. compraventa)" aria-label="Buscar tipo de escritura" />
+          <button type="submit" className="secundario pequeno">Buscar</button>
+          {q && <Link className="pequeno" href={enlace(filtro).replace(/[?&]q=[^&]*/, '')}>Limpiar</Link>}
+        </form>
+      </div>
 
-      <table>
-        <thead><tr><th>Tipo</th><th>Vigente</th><th>Otras versiones</th><th>Formulario</th></tr></thead>
-        <tbody>{tipos.filter((t) => t.esBloque || t.plantillas.length).map((t) => {
-          const vigente = t.plantillas.find((p) => p.estado === 'APROBADA');
-          return (
-            <tr key={t.id}>
-              <td><strong>{t.nombre}</strong><div className="suave">{t.esBloque ? 'Parte común de todas las escrituras (bloque)' : `${t.categoria} · prioridad ${t.prioridad.toLowerCase()}`}</div></td>
-              <td>{vigente
-                ? <><Link href={`/plantillas/${vigente.id}`}>Ver v{vigente.version}</Link> · <a href={`/api/plantillas/${vigente.id}`}>Descargar</a></>
-                : <span className="etiqueta">No aprobada</span>}</td>
-              <td>{t.plantillas.filter((p) => p !== vigente).map((p) => (
-                <div key={p.id}><Link href={`/plantillas/${p.id}`}>v{p.version}</Link> <span className={`etiqueta ${ESTADO_PLANTILLA[p.estado][0]}`}>{ESTADO_PLANTILLA[p.estado][1]}</span> · <a href={`/api/plantillas/${p.id}`}>Descargar</a></div>
-              ))}</td>
-              <td>{ESQUEMAS[t.id] ? `${ESQUEMAS[t.id].pasos.reduce((n, p) => n + p.campos.length, 0)} campos` : t.esBloque ? '—' : 'sin esquema'}</td>
-            </tr>
-          );
-        })}</tbody>
-      </table>
+      {!grupos.length ? <section className="tarjeta suave">Ninguna plantilla coincide{q ? ` con «${q}»` : ''}.</section> : (
+        <table className="tabla-plantillas">
+          <thead><tr><th>Plantilla</th><th>Estado</th><th>Revisión IA</th><th>Última carga</th><th aria-label="Acciones" /></tr></thead>
+          {grupos.map((g) => (
+            <tbody key={g.titulo}>
+              <tr className="grupo"><th colSpan={5}>{g.titulo} <span className="suave">({g.filas.length})</span></th></tr>
+              {g.filas.map((t) => {
+                const vigente = t.plantillas.find((p) => p.estado === 'APROBADA');
+                const pendiente = t.plantillas.find((p) => p.estado === 'PENDIENTE_APROBACION');
+                const principal = pendiente ?? vigente ?? t.plantillas[0];
+                return (
+                  <tr key={t.id}>
+                    <td>
+                      {principal ? <Link href={`/plantillas/${principal.id}`}><strong>{t.nombre}</strong></Link> : <strong>{t.nombre}</strong>}
+                      <div className="suave">{t.esBloque ? 'Parte común' : t.categoria}</div>
+                    </td>
+                    <td>
+                      {!principal && <span className={`etiqueta ${clasePrioridad(t.prioridad)}`}>Sin plantilla · prioridad {t.prioridad.toLowerCase()}</span>}
+                      {vigente && <div><span className="etiqueta ok">Aprobada v{vigente.version}</span></div>}
+                      {pendiente && <div><span className="etiqueta advertencia">Pendiente v{pendiente.version}</span></div>}
+                      {principal && !vigente && !pendiente && <span className="etiqueta">No aprobada</span>}
+                    </td>
+                    <td>{principal ? <EtiquetaVeredicto revision={principal.revision as RevisionPlantilla | null} /> : <span className="suave">—</span>}</td>
+                    <td className="suave">{principal ? fecha(principal.creadaEn, false) : '—'}</td>
+                    <td className="acciones">
+                      {principal ? (
+                        <>
+                          <Link className="boton pequeno" href={`/plantillas/${principal.id}`}>Abrir</Link>
+                          <a className="boton secundario pequeno" href={`/api/plantillas/${principal.id}`}>Descargar</a>
+                        </>
+                      ) : <Link className="boton secundario pequeno" href={`/plantillas?nuevo=${t.id}#cargar`}>Cargar</Link>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          ))}
+        </table>
+      )}
     </>
   );
 }

@@ -60,7 +60,7 @@ label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25
 .campo { margin-bottom: 0.9rem; }
 .campo .ayuda { font-size: 0.82rem; color: var(--texto-suave); margin-top: 0.2rem; }
 .campo .error { font-size: 0.85rem; color: var(--peligro); margin-top: 0.2rem; }
-input[type='text'], input[type='password'], input[type='number'], input[type='date'], input[type='file'], select, textarea {
+input[type='text'], input[type='search'], input[type='password'], input[type='number'], input[type='date'], input[type='file'], select, textarea {
   width: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--borde); border-radius: var(--radio); font: inherit; background: #fff; color: var(--texto);
 }
 textarea { min-height: 90px; resize: vertical; }
@@ -125,7 +125,9 @@ details summary { cursor: pointer; font-weight: 600; }
 .pestanas { display: flex; gap: 0.25rem; flex-wrap: wrap; margin: 0 0 1rem; }
 .pestanas a { padding: 0.35rem 0.8rem; border-radius: 999px; border: 1px solid var(--borde); background: #fff; color: var(--texto-suave); text-decoration: none; font-size: 0.88rem; }
 .pestanas a[aria-current='page'] { background: var(--primario); color: #fff; border-color: var(--primario); }
-.detalle-plantilla { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 1rem; align-items: start; }
+.detalle-plantilla { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 1rem; align-items: start; }
+/* La vista de una plantilla aprovecha todo el ancho de la pantalla */
+.principal:has(.detalle-plantilla) { max-width: none; }
 .documento { background: #fff; border: 1px solid var(--borde); box-shadow: var(--sombra); padding: 2.5rem 3rem; max-height: 78vh; overflow: auto; font-family: 'Times New Roman', Times, serif; font-size: 1rem; line-height: 1.55; color: #111; }
 .documento p { margin: 0 0 0.55rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .documento p.centro { text-align: center; }
@@ -147,5 +149,18 @@ details summary { cursor: pointer; font-weight: 600; }
 }
 .descargas { margin-bottom: 0.75rem; }
 .visor-docx { background: #e8eaee; border: 1px solid var(--borde); border-radius: var(--radio); max-height: 82vh; overflow: auto; }
-.visor-docx .docx-wrapper { background: transparent; padding: 1.5rem 1rem; }
-.visor-docx .docx-wrapper > section.docx { box-shadow: var(--sombra); margin-bottom: 1.5rem; }
+.visor-docx .docx-wrapper { background: transparent; padding: 1.5rem 0; }
+.visor-docx .docx-wrapper > section.docx { box-shadow: var(--sombra); margin-bottom: 1.5rem; hyphens: manual; }
+/* Dentro del visor el resaltado solo colorea: no cambia la fuente ni el ancho del texto */
+.visor-docx [class^='marca-'] { font: inherit; padding: 0; border-radius: 0; }
+.carga-nueva { padding: 0.75rem 1.25rem; }
+.carga-nueva > summary { color: var(--primario); }
+.carga-nueva[open] > summary { margin-bottom: 0.75rem; }
+.barra-filtros { margin-bottom: 0.75rem; align-items: flex-start; }
+.barra-filtros .pestanas { margin: 0; }
+.pestanas .conteo { display: inline-block; min-width: 1.4em; padding: 0 0.35em; margin-left: 0.25rem; border-radius: 999px; background: rgba(0, 0, 0, 0.08); font-size: 0.8em; text-align: center; }
+.pestanas a[aria-current='page'] .conteo { background: rgba(255, 255, 255, 0.25); }
+.buscador input { width: 240px; padding: 0.3rem 0.6rem; }
+.tabla-plantillas tr.grupo th { background: var(--primario-claro); color: var(--primario); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.tabla-plantillas td.acciones { white-space: nowrap; text-align: right; }
+.tabla-plantillas td.acciones .boton + .boton { margin-left: 0.35rem; }
