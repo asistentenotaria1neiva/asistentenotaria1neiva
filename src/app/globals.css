@@ -60,7 +60,8 @@ a:focus-visible { border-radius: 3px; }
 .lateral .pie { margin-top: auto; font-size: 0.85rem; padding: 0.75rem; border-top: 1px solid rgba(255,255,255,.18); }
 .lateral .pie .suave { color: #dbe4f3; font-size: 0.82rem; }
 .lateral .pie form { margin-top: 0.5rem; }
-.principal { padding: 1.75rem 2rem 2.5rem; max-width: 1280px; width: 100%; min-width: 0; }
+/* El contenido ocupa todo el ancho disponible; el margen lateral crece con la pantalla */
+.principal { padding: 1.75rem clamp(1.5rem, 2.5vw, 3.5rem) 2.5rem; width: 100%; min-width: 0; }
 .velo { display: none; }
 
 /* Tarjetas y tablas */
@@ -231,8 +232,6 @@ details.tarjeta { padding: 0.85rem 1.25rem; }
 .pestanas a:hover { border-color: var(--primario); color: var(--primario); }
 .pestanas a[aria-current='page'] { background: var(--primario); color: #fff; border-color: var(--primario); font-weight: 600; }
 .detalle-plantilla { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 1rem; align-items: start; }
-/* La vista de una plantilla aprovecha todo el ancho de la pantalla */
-.principal:has(.detalle-plantilla) { max-width: none; }
 .documento { background: #fff; border: 1px solid var(--borde); box-shadow: var(--sombra); padding: 2.5rem 3rem; max-height: 78vh; overflow: auto; font-family: 'Times New Roman', Times, serif; font-size: 1rem; line-height: 1.55; color: #111; }
 .documento p { margin: 0 0 0.55rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .documento p.centro { text-align: center; }
