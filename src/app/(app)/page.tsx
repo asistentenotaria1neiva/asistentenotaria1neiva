@@ -18,7 +18,7 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<{
   const equiposPendientes = rol === 'ADMINISTRADOR' ? await db.dispositivo.count({ where: { estado: 'PENDIENTE' } }) : 0;
   return (
     <>
-      <div className="fila entre"><h1>Inicio</h1>{rol !== 'REVISOR' && <Link className="boton" href="/expedientes/nuevo">Nuevo expediente</Link>}</div>
+      <div className="fila entre"><h1>Inicio</h1><Link className="boton" href="/expedientes/nuevo">Nuevo expediente</Link></div>
       {error === 'permiso' && <div className="aviso error">No tiene permiso para esa sección.</div>}
       {devueltos > 0 && <div className="aviso alerta">Tiene {devueltos} expediente(s) devuelto(s) por el revisor.</div>}
       {alertas > 0 && <div className="aviso alerta">Hay {alertas} alerta(s) de seguridad sin atender. <Link href="/admin/alertas">Ver alertas</Link></div>}

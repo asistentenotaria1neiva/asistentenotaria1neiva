@@ -13,14 +13,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="marca">Escrituración<small>Notaría Primera de Neiva</small></div>
         <Link href="/">Inicio</Link>
         <Link href="/expedientes">Expedientes</Link>
-        {s.usuario.rol !== 'REVISOR' && <Link href="/expedientes/nuevo">Nuevo expediente</Link>}
+        <Link href="/expedientes/nuevo">Nuevo expediente</Link>
+        {(admin || s.usuario.rol === 'REVISOR') && <Link href="/plantillas">Plantillas</Link>}
         {admin && (
           <>
             <div className="seccion">Administración</div>
             <Link href="/admin">Panel</Link>
             <Link href="/admin/dispositivos">Dispositivos</Link>
             <Link href="/admin/usuarios">Usuarios</Link>
-            <Link href="/admin/plantillas">Plantillas</Link>
             <Link href="/admin/auditoria">Auditoría</Link>
             <Link href="/admin/estadisticas">Estadísticas</Link>
             <Link href="/admin/entrenamiento">Entrenamiento IA</Link>

@@ -10,7 +10,7 @@ import { db } from '@/lib/db';
 import { requerirSesion, datosAuditoria } from '@/lib/sesion';
 import { auditar, verificarCadena } from '@/lib/auditoria';
 import { hashContrasena } from '@/lib/seguridad/contrasenas';
-import { cargarPlantilla, aprobarPlantilla, retirarPlantilla, ErrorPlantilla } from '@/lib/servicios/plantillas';
+import { ErrorPlantilla } from '@/lib/servicios/plantillas';
 import { POR_DEFECTO, type Configuraciones } from '@/lib/configuracion';
 
 export interface ResultadoAdmin { error?: string; ok?: string; secreto?: string }
@@ -129,40 +129,8 @@ export async function accionUsuario(_: ResultadoAdmin, f: FormData): Promise<Res
   });
 }
 
-// ------------------------------------------------------------------ plantillas e instrucciones de la IA
-
-export async function accionCargarPlantilla(_: ResultadoAdmin, f: FormData): Promise<ResultadoAdmin> {
-  const s = await admin();
-  return hacer('/admin/plantillas', async () => {
-    const archivo = f.get('archivo');
-    if (!(archivo instanceof File) || !archivo.size) throw new ErrorAdmin('Seleccione un archivo .docx.');
-    const tipoId = t(f, 'tipoId');
-    if (!(await db.tipoEscritura.findUnique({ where: { id: tipoId } }))) throw new ErrorAdmin('Tipo de escritura no válido.');
-    const p = await cargarPlantilla(tipoId, archivo.name.slice(0, 120), Buffer.from(await archivo.arrayBuffer()), s.usuario.id, t(f, 'notas') || undefined);
-    await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_CARGADA', entidad: 'plantilla', entidadId: p.id, detalle: { tipoId, version: p.version, sha256: p.hashSha256 } });
-    return `Plantilla ${tipoId} versión ${p.version} cargada. Queda PENDIENTE DE APROBACIÓN.`;
-  });
-}
-
-export async function accionPlantilla(_: ResultadoAdmin, f: FormData): Promise<ResultadoAdmin> {
-  const s = await admin();
-  const id = t(f, 'id');
-  const op = t(f, 'operacion');
-  return hacer('/admin/plantillas', async () => {
-    if (op === 'aprobar') {
-      if (t(f, 'confirmacion') !== 'APROBADA POR EL NOTARIO') throw new ErrorAdmin('Para aprobar escriba exactamente: APROBADA POR EL NOTARIO');
-      const p = await aprobarPlantilla(id, s.usuario.id);
-      await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_APROBADA', entidad: 'plantilla', entidadId: id, detalle: { tipoId: p.tipoId, version: p.version } });
-      return 'Plantilla aprobada; la versión aprobada anterior (si había) quedó retirada.';
-    }
-    if (op === 'retirar') {
-      const p = await retirarPlantilla(id);
-      await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_RETIRADA', entidad: 'plantilla', entidadId: id, detalle: { tipoId: p.tipoId, version: p.version } });
-      return 'Plantilla retirada.';
-    }
-    throw new ErrorAdmin('Operación no válida.');
-  });
-}
+// ------------------------------------------------------------------ instrucciones de la IA
+// (las plantillas se gestionan en src/app/(app)/plantillas/acciones.ts, también abiertas al revisor)
 
 export async function accionInstruccion(_: ResultadoAdmin, f: FormData): Promise<ResultadoAdmin> {
   const s = await admin();

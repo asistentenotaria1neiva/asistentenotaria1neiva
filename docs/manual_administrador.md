@@ -24,7 +24,7 @@ El administrador tiene control total: usuarios, equipos, plantillas, configuraci
 ## 3. Usuarios
 
 - **Crear**: nombre, usuario y rol. La aplicación genera una **contraseña temporal** que se muestra una sola vez; entréguela personalmente. El usuario debe cambiarla al primer ingreso.
-- Roles: **Digitador** (elabora expedientes), **Revisor** (aprueba o devuelve, resuelve observaciones), **Administrador**.
+- Roles: **Digitador** (elabora expedientes), **Revisor** (elabora expedientes como un digitador; además aprueba o devuelve los de otros, resuelve observaciones, y revisa y carga plantillas, sin acceso a la administración), **Administrador**.
 - **Suspender** cierra las sesiones del usuario al instante. Prefiera suspender a eliminar: un usuario con expedientes no se puede eliminar, para conservar la trazabilidad.
 - **Desbloquear** tras 5 intentos fallidos; **restablecer contraseña**; **restablecer doble factor** (si un administrador pierde el teléfono); **cerrar sesiones**.
 
@@ -35,9 +35,12 @@ Desde el resumen de cualquier expediente puede **reasignar** el responsable, **r
 ## 5. Plantillas
 
 - **Checklist**: cuántos tipos tienen plantilla aprobada, cuántos pendientes y cuáles faltan por prioridad (la notaría debe entregarlos). Detalle en `docs/plantillas/`.
-- **Cargar nueva versión**: suba un .docx. Queda **pendiente de aprobación**. La aplicación verifica que las etiquetas estén bien formadas.
-- **Aprobar**: solo después de que el notario haya leído el texto; para confirmar debe escribir `APROBADA POR EL NOTARIO`. La versión aprobada anterior queda retirada automáticamente. Todo queda en la auditoría.
-- **Descargar para revisar** permite abrir la plantilla en Word.
+El panel está en **Plantillas** (menú principal) y lo usan el administrador y los revisores.
+
+- **Cargar nueva versión**: suba un .docx. Queda **pendiente de aprobación**. La aplicación verifica que las etiquetas estén bien formadas, la prueba con datos ficticios y la IA la revisa (variables, datos fijos de un caso real, redacción, partes del acto y cambios frente a la versión aprobada). La revisión puede tardar uno o dos minutos.
+- **Ver cada versión**: pestañas *Plantilla* (texto con las variables y condiciones resaltadas), *Con datos de ejemplo* (cómo queda llenada; en rojo lo que el sistema no supo llenar) y *Variables*. Al lado, el veredicto de la IA (apta, con observaciones, no apta) con cada hallazgo y el fragmento citado. **Revisar de nuevo con IA** repite la revisión.
+- **Aprobar** (solo el administrador): solo después de que el notario haya leído el texto y los hallazgos; para confirmar debe escribir `APROBADA POR EL NOTARIO`. La IA solo advierte: no aprueba. La versión aprobada anterior queda retirada automáticamente. Todo queda en la auditoría.
+- **Descargar .docx** permite abrir la plantilla en Word (márgenes, encabezados y tablas se revisan allí).
 
 ### Cómo escribir una plantilla
 

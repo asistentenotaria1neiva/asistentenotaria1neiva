@@ -54,6 +54,13 @@ function renderizarBloque(plantilla: Buffer, contexto: Record<string, unknown>, 
   return { cuerpo: xml.slice(inicio, finSeccion), zip: doc.getZip() };
 }
 
+/** Renderiza una sola plantilla con un contexto (prueba con datos de ejemplo en el panel de plantillas) */
+export function renderizarPlantilla(plantilla: Buffer, contexto: Record<string, unknown>): { docx: Buffer; faltantes: string[] } {
+  const faltantes: string[] = [];
+  const { zip } = renderizarBloque(plantilla, contexto, faltantes);
+  return { docx: zip.generate({ type: 'nodebuffer' }) as Buffer, faltantes };
+}
+
 const textoPlano = (xml: string) => xml
   .replace(/<w:tab\/>/g, ' ').replace(/<\/w:p>/g, '\n').replace(/<w:br[^>]*\/>/g, '\n').replace(/<[^>]+>/g, '')
   .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")

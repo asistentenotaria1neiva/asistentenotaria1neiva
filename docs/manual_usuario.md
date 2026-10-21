@@ -72,11 +72,13 @@ Recuadros en **rojo** = confianza baja o formato dudoso: **revise el documento o
 
 ## 6. Para el revisor
 
+- Usted también puede crear y elaborar expedientes, igual que un digitador.
 - En **Inicio** aparecen los expedientes pendientes de revisión.
 - Lea el borrador completo y las observaciones resueltas (con sus justificaciones).
 - **Aprobar** lo deja listo para firma. **Devolver** exige un comentario que explique qué corregir.
 - Usted no puede aprobar expedientes que elaboró.
 - Después de la firma del notario, registre el número de escritura con **"Marcar como firmada"**.
+- En **Plantillas** puede ver cada plantilla con sus variables resaltadas, probarla con datos de ejemplo, cargar una versión nueva y leer la revisión de la IA. La aprobación la hace el administrador por indicación del notario.
 
 ## 7. Buenas prácticas
 

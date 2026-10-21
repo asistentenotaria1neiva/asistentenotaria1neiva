@@ -17,12 +17,14 @@ function Mensaje({ r }: { r?: ResultadoAdmin }) {
 }
 
 /** Formulario genérico: campos ocultos fijos + campos visibles + botones de operación */
-export function FormAdmin({ accion, ocultos = {}, campos = [], botones, confirmar }: {
+export function FormAdmin({ accion, ocultos = {}, campos = [], botones, confirmar, mensajePendiente }: {
   accion: Accion;
   ocultos?: Record<string, string>;
   campos?: { nombre: string; etiqueta: string; tipo?: 'texto' | 'area' | 'select' | 'archivo'; opciones?: [string, string][]; valor?: string; ayuda?: string }[];
   botones: { operacion?: string; texto: string; clase?: string }[];
   confirmar?: Record<string, string>;
+  /** Aviso mientras la acción está en curso (p. ej. revisiones de la IA, que tardan) */
+  mensajePendiente?: string;
 }) {
   const [r, enviar, pendiente] = useActionState(accion, {});
   return (
@@ -30,7 +32,7 @@ export function FormAdmin({ accion, ocultos = {}, campos = [], botones, confirma
       const op = ((e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value ?? '';
       if (confirmar?.[op] && !window.confirm(confirmar[op])) e.preventDefault();
     }}>
-      <Mensaje r={r} />
+      {pendiente && mensajePendiente ? <div className="aviso info" role="status">{mensajePendiente}</div> : <Mensaje r={r} />}
       {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
       {campos.map((c) => (
         <div className="campo" key={c.nombre}>

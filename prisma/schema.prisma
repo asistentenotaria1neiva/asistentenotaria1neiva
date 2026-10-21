@@ -143,6 +143,8 @@ model Plantilla {
   aprobadaPor   Usuario?         @relation("aprobadaPor", fields: [aprobadaPorId], references: [id])
   aprobadaPorId String?
   aprobadaEn    DateTime?
+  revision      Json? // verificación automática + revisión de la IA (src/lib/servicios/revision-plantillas.ts)
+  revisadaEn    DateTime?
   creadaEn      DateTime         @default(now())
 
   @@unique([tipoId, version])

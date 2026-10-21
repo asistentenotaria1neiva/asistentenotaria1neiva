@@ -5,7 +5,7 @@ import { accionCrearExpediente } from '../acciones';
 import { FormularioNuevo } from '../formularios';
 
 export default async function NuevoExpediente() {
-  await requerirSesion({ roles: ['ADMINISTRADOR', 'DIGITADOR'] });
+  await requerirSesion({ roles: ['ADMINISTRADOR', 'REVISOR', 'DIGITADOR'] });
   const aprobadas = await db.plantilla.findMany({ where: { estado: 'APROBADA' }, select: { tipoId: true } });
   const actos = Object.values(ESQUEMAS).map((e) => ({ id: e.tipo, nombre: e.titulo, estadoPlantilla: aprobadas.some((a) => a.tipoId === e.tipo) ? 'APROBADA' : 'PENDIENTE' }));
   const faltantes = await db.tipoEscritura.count({ where: { esBloque: false, plantillas: { none: {} } } });

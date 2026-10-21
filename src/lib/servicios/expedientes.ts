@@ -41,7 +41,6 @@ export const actosDe = (e: { actos: Prisma.JsonValue }): string[] => (Array.isAr
 // ------------------------------------------------------------------ creación
 
 export async function crearExpediente(s: SesionActiva, actos: string[]): Promise<string> {
-  if (s.usuario.rol === 'REVISOR') throw new ErrorNegocio('El rol revisor no crea expedientes.');
   const validos = actos.filter((a) => ESQUEMAS[a]);
   if (!validos.length) throw new ErrorNegocio('Seleccione al menos un acto con plantilla disponible.');
   if (new Set(validos).size !== validos.length) throw new ErrorNegocio('Un acto no puede repetirse en la misma escritura.');
@@ -291,7 +290,7 @@ export async function reasignarExpediente(s: SesionActiva, id: string, usuarioId
   if (s.usuario.rol !== 'ADMINISTRADOR') throw new ErrorNegocio('Solo el administrador reasigna.');
   const e = await obtenerExpediente(s, id);
   const u = await db.usuario.findUnique({ where: { id: usuarioId } });
-  if (!u || u.estado !== 'ACTIVO' || u.rol === 'REVISOR') throw new ErrorNegocio('Usuario no válido para ser responsable.');
+  if (!u || u.estado !== 'ACTIVO') throw new ErrorNegocio('Usuario no válido para ser responsable.');
   await db.expediente.update({ where: { id }, data: { responsableId: usuarioId } });
   await auditar({ ...datosAuditoria(s), accion: 'EXPEDIENTE_REASIGNADO', entidad: 'expediente', entidadId: e.id, detalle: { de: e.responsableId, a: usuarioId } });
 }

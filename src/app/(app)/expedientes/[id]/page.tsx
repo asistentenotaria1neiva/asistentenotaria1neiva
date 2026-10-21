@@ -13,7 +13,7 @@ export default async function ResumenExpediente({ params }: { params: Promise<{ 
     bloqueos(id),
     db.borrador.findFirst({ where: { expedienteId: id }, orderBy: { version: 'desc' } }),
     db.auditoria.findMany({ where: { OR: [{ entidadId: id }, { detalle: { path: ['expedienteId'], equals: id } }] }, orderBy: { id: 'desc' }, take: 20 }),
-    s.usuario.rol === 'ADMINISTRADOR' ? db.usuario.findMany({ where: { estado: 'ACTIVO', rol: { not: 'REVISOR' } }, select: { id: true, nombreCompleto: true } }) : Promise.resolve([]),
+    s.usuario.rol === 'ADMINISTRADOR' ? db.usuario.findMany({ where: { estado: 'ACTIVO' }, select: { id: true, nombreCompleto: true } }) : Promise.resolve([]),
     db.documento.count({ where: { expedienteId: id } }),
     db.documento.count({ where: { expedienteId: id, estadoAnalisis: 'COMPLETADO' } }),
     db.analisisIA.count({ where: { expedienteId: id, proposito: 'REVISION', estado: 'COMPLETADO' } }),

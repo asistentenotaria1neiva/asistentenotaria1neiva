@@ -120,3 +120,28 @@ details summary { cursor: pointer; font-weight: 600; }
 /* Pasos del formulario (botones) */
 .pasos button.paso { width: 100%; text-align: left; background: #fff; color: var(--texto-suave); border: 1px solid var(--borde); border-radius: 999px; font-weight: 500; padding: 0.4rem 0.8rem; }
 .pasos button.paso.activo { background: var(--primario); color: #fff; border-color: var(--primario); }
+
+/* Panel de plantillas */
+.pestanas { display: flex; gap: 0.25rem; flex-wrap: wrap; margin: 0 0 1rem; }
+.pestanas a { padding: 0.35rem 0.8rem; border-radius: 999px; border: 1px solid var(--borde); background: #fff; color: var(--texto-suave); text-decoration: none; font-size: 0.88rem; }
+.pestanas a[aria-current='page'] { background: var(--primario); color: #fff; border-color: var(--primario); }
+.detalle-plantilla { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 1rem; align-items: start; }
+.documento { background: #fff; border: 1px solid var(--borde); box-shadow: var(--sombra); padding: 2.5rem 3rem; max-height: 78vh; overflow: auto; font-family: 'Times New Roman', Times, serif; font-size: 1rem; line-height: 1.55; color: #111; }
+.documento p { margin: 0 0 0.55rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.documento p.centro { text-align: center; }
+.documento p.derecha { text-align: right; }
+.documento p.justificado { text-align: justify; }
+.marca-variable, .marca-condicion, .marca-cierre, .marca-faltante { border-radius: 3px; padding: 0 2px; font-family: Consolas, 'Courier New', monospace; font-size: 0.82em; }
+.marca-variable { background: #e3eefb; color: #174a86; }
+.marca-condicion, .marca-cierre { background: #f1e8fa; color: #6a3d9a; }
+.marca-faltante { background: var(--peligro-claro); color: var(--peligro); font-weight: 700; }
+.leyenda { margin-bottom: 0.5rem; font-size: 0.82rem; }
+.hallazgos { list-style: none; padding: 0; margin: 0 0 0.75rem; }
+.hallazgos li { border-top: 1px solid var(--borde); padding: 0.6rem 0; }
+.hallazgos blockquote { margin: 0.35rem 0 0; padding-left: 0.5rem; border-left: 3px solid var(--borde); color: var(--texto-suave); font-style: italic; font-size: 0.88rem; }
+.lista-codigo { padding-left: 1.1rem; font-size: 0.88rem; }
+.texto-peligro { color: var(--peligro); }
+@media (max-width: 1100px) {
+  .detalle-plantilla { grid-template-columns: minmax(0, 1fr); }
+  .documento { padding: 1.25rem; }
+}

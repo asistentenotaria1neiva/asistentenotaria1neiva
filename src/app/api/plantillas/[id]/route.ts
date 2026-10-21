@@ -1,4 +1,4 @@
-/** Descarga de una versión de plantilla para revisión (solo administrador, auditada) */
+/** Descarga de una versión de plantilla para revisión (administrador y revisor, auditada) */
 import { NextResponse } from 'next/server';
 import { leerSesion, datosAuditoria } from '@/lib/sesion';
 import { db } from '@/lib/db';
@@ -6,7 +6,7 @@ import { auditar } from '@/lib/auditoria';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const s = await leerSesion();
-  if (!s || s.usuario.rol !== 'ADMINISTRADOR' || !s.segundoFactorOk) return new NextResponse('No autorizado', { status: 401 });
+  if (!s || !['ADMINISTRADOR', 'REVISOR'].includes(s.usuario.rol) || (s.usuario.rol === 'ADMINISTRADOR' && !s.segundoFactorOk)) return new NextResponse('No autorizado', { status: 401 });
   const { id } = await params;
   const p = await db.plantilla.findUnique({ where: { id } });
   if (!p) return new NextResponse('No encontrada', { status: 404 });
