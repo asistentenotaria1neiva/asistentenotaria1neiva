@@ -46,13 +46,15 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
         <section className="tarjeta">
           <h2 style={{ marginTop: 0 }}>Pendientes de aprobación</h2>
           <table>
-            <thead><tr><th>Plantilla</th><th>Versión</th><th>Cargada</th><th>Revisión</th></tr></thead>
+            <thead><tr><th>Plantilla</th><th>Tipo</th><th>Versión</th><th>Cargada</th><th>Revisión</th><th></th></tr></thead>
             <tbody>{pendientes.map((p) => (
               <tr key={p.id}>
                 <td><Link href={`/plantillas/${p.id}`}>{p.tipo.nombre}</Link></td>
+                <td>{p.tipo.esBloque ? <span className="etiqueta informativa">Parte común (bloque)</span> : <>Escritura<div className="suave">{p.tipo.categoria}</div></>}</td>
                 <td>v{p.version}</td>
                 <td>{fecha(p.creadaEn)}</td>
                 <td><EtiquetaVeredicto revision={p.revision as RevisionPlantilla | null} /></td>
+                <td><a href={`/api/plantillas/${p.id}`}>Descargar</a></td>
               </tr>
             ))}</tbody>
           </table>
@@ -76,10 +78,12 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
           const vigente = t.plantillas.find((p) => p.estado === 'APROBADA');
           return (
             <tr key={t.id}>
-              <td><strong>{t.nombre}</strong><div className="suave">{t.esBloque ? 'Bloque común' : `${t.categoria} · prioridad ${t.prioridad.toLowerCase()}`}</div></td>
-              <td>{vigente ? <Link href={`/plantillas/${vigente.id}`}>Ver v{vigente.version}</Link> : <span className="etiqueta critica">sin aprobada</span>}</td>
+              <td><strong>{t.nombre}</strong><div className="suave">{t.esBloque ? 'Parte común de todas las escrituras (bloque)' : `${t.categoria} · prioridad ${t.prioridad.toLowerCase()}`}</div></td>
+              <td>{vigente
+                ? <><Link href={`/plantillas/${vigente.id}`}>Ver v{vigente.version}</Link> · <a href={`/api/plantillas/${vigente.id}`}>Descargar</a></>
+                : <span className="etiqueta">No aprobada</span>}</td>
               <td>{t.plantillas.filter((p) => p !== vigente).map((p) => (
-                <div key={p.id}><Link href={`/plantillas/${p.id}`}>v{p.version}</Link> <span className={`etiqueta ${ESTADO_PLANTILLA[p.estado][0]}`}>{ESTADO_PLANTILLA[p.estado][1]}</span></div>
+                <div key={p.id}><Link href={`/plantillas/${p.id}`}>v{p.version}</Link> <span className={`etiqueta ${ESTADO_PLANTILLA[p.estado][0]}`}>{ESTADO_PLANTILLA[p.estado][1]}</span> · <a href={`/api/plantillas/${p.id}`}>Descargar</a></div>
               ))}</td>
               <td>{ESQUEMAS[t.id] ? `${ESQUEMAS[t.id].pasos.reduce((n, p) => n + p.campos.length, 0)} campos` : t.esBloque ? '—' : 'sin esquema'}</td>
             </tr>

@@ -4,22 +4,23 @@ import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { ESQUEMAS } from '@/lib/escritura/esquemas';
 import { vistaPreviaDocx, etiquetasDe } from '@/lib/escritura/vista-previa';
-import { probarConEjemplo, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
+import { probarConEjemplo, tieneEjemplo, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import { accionPlantilla, accionRevisarPlantilla } from '../acciones';
 import { FormAdmin } from '../../admin/formularios';
 import { fecha } from '../../componentes';
 import { ESTADO_PLANTILLA, LeyendaPlantilla, PanelRevision, VistaDocumento } from '../componentes';
+import { VisorDocx } from '../VisorDocx';
 
 // La revisión de la IA puede tardar uno o dos minutos
 export const maxDuration = 300;
 
-const VISTAS = [['plantilla', 'Plantilla'], ['ejemplo', 'Con datos de ejemplo'], ['variables', 'Variables']] as const;
+const VISTAS = [['diseno', 'Diseño (como en Word)'], ['ejemplo', 'Con datos de ejemplo'], ['texto', 'Solo texto'], ['variables', 'Variables']] as const;
 
 export default async function VersionPlantilla({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ vista?: string }> }) {
   const s = await requerirSesion({ roles: ['ADMINISTRADOR', 'REVISOR'] });
   const { id } = await params;
   const pedida = (await searchParams).vista;
-  const vista = VISTAS.find(([v]) => v === pedida)?.[0] ?? 'plantilla';
+  const vista = VISTAS.find(([v]) => v === pedida)?.[0] ?? 'diseno';
   const p = await db.plantilla.findUnique({
     where: { id },
     include: {
@@ -35,6 +36,7 @@ export default async function VersionPlantilla({ params, searchParams }: { param
   const etiquetas = etiquetasDe(parrafos);
   const ejemplo = vista === 'ejemplo' ? await probarConEjemplo(p.tipoId, archivo) : null;
   const admin = s.usuario.rol === 'ADMINISTRADOR';
+  const conEjemplo = tieneEjemplo(p.tipoId);
   const esquema = ESQUEMAS[p.tipoId];
 
   return (
@@ -49,7 +51,7 @@ export default async function VersionPlantilla({ params, searchParams }: { param
       {p.tipo.plantillas.length > 1 && (
         <nav className="pestanas" aria-label="Versiones">
           {p.tipo.plantillas.map((v) => (
-            <Link key={v.id} href={`/plantillas/${v.id}${vista !== 'plantilla' ? `?vista=${vista}` : ''}`} aria-current={v.id === p.id ? 'page' : undefined}>
+            <Link key={v.id} href={`/plantillas/${v.id}${vista !== 'diseno' ? `?vista=${vista}` : ''}`} aria-current={v.id === p.id ? 'page' : undefined}>
               v{v.version} · {ESTADO_PLANTILLA[v.estado][1]}
             </Link>
           ))}
@@ -59,26 +61,39 @@ export default async function VersionPlantilla({ params, searchParams }: { param
       <div className="detalle-plantilla">
         <div>
           <nav className="pestanas" aria-label="Vista">
-            {VISTAS.map(([v, texto]) => <Link key={v} href={`/plantillas/${p.id}${v === 'plantilla' ? '' : `?vista=${v}`}`} aria-current={v === vista ? 'page' : undefined}>{texto}</Link>)}
+            {VISTAS.map(([v, texto]) => <Link key={v} href={`/plantillas/${p.id}${v === 'diseno' ? '' : `?vista=${v}`}`} aria-current={v === vista ? 'page' : undefined}>{texto}</Link>)}
           </nav>
 
-          {vista === 'plantilla' && (
+          <div className="fila descargas">
+            <a className="boton pequeno" href={`/api/plantillas/${p.id}`}>Descargar plantilla (.docx)</a>
+            {conEjemplo && <a className="boton secundario pequeno" href={`/api/plantillas/${p.id}?ejemplo=1`}>Descargar ejemplo llenado (.docx)</a>}
+            <span className="suave">Ábralos en Word para confirmar márgenes, fuentes y saltos de página exactos.</span>
+          </div>
+
+          {vista === 'diseno' && (
+            <>
+              <LeyendaPlantilla />
+              <VisorDocx url={`/api/plantillas/${p.id}?vista=1`} />
+            </>
+          )}
+
+          {vista === 'texto' && (
             <>
               <LeyendaPlantilla />
               <VistaDocumento parrafos={parrafos} />
-              <p className="suave">Vista aproximada del texto: márgenes, encabezados y tablas se revisan en el .docx descargado.</p>
+              <p className="suave">Solo el texto del cuerpo, con todas las variables resaltadas. El diseño completo está en la pestaña «Diseño».</p>
             </>
           )}
 
           {vista === 'ejemplo' && (!ejemplo
-            ? <div className="aviso alerta">Aún no hay un caso de datos de ejemplo para este tipo de escritura, así que no se puede probar el llenado. Revise la plantilla en la pestaña «Plantilla».</div>
+            ? <div className="aviso alerta">Aún no hay un caso de datos de ejemplo para este tipo de escritura, así que no se puede probar el llenado. Revise el diseño en la pestaña «Diseño».</div>
             : 'error' in ejemplo
               ? <div className="aviso error">{ejemplo.error}</div>
               : (
                 <>
                   <div className="aviso info">Datos <strong>ficticios</strong> del caso «{ejemplo.caso.descripcion}». Se muestra solo esta parte de la escritura, llenada como lo haría el sistema.</div>
                   {ejemplo.faltantes.length > 0 && <div className="aviso error">El sistema no supo llenar: <code>{ejemplo.faltantes.join(', ')}</code>. Revise que esas variables estén bien escritas; si son nuevas, el sistema aún no las conoce.</div>}
-                  <VistaDocumento parrafos={ejemplo.parrafos} />
+                  <VisorDocx url={`/api/plantillas/${p.id}?ejemplo=1&vista=1`} />
                 </>
               ))}
 
@@ -122,7 +137,6 @@ export default async function VersionPlantilla({ params, searchParams }: { param
             {esquema && <p className="suave">Fuente: {esquema.plantillaFuente} · Reglas de cruce: {esquema.reglas.join(', ') || 'ninguna'}</p>}
             {p.tipo.normas && <p className="suave">{p.tipo.normas}</p>}
             <div className="fila">
-              <a className="boton secundario pequeno" href={`/api/plantillas/${p.id}`}>Descargar .docx</a>
               <Link className="boton secundario pequeno" href={`/plantillas?tipo=${p.tipoId}`}>Cargar otra versión</Link>
             </div>
           </section>

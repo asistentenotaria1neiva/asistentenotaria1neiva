@@ -145,3 +145,7 @@ details summary { cursor: pointer; font-weight: 600; }
   .detalle-plantilla { grid-template-columns: minmax(0, 1fr); }
   .documento { padding: 1.25rem; }
 }
+.descargas { margin-bottom: 0.75rem; }
+.visor-docx { background: #e8eaee; border: 1px solid var(--borde); border-radius: var(--radio); max-height: 82vh; overflow: auto; }
+.visor-docx .docx-wrapper { background: transparent; padding: 1.5rem 1rem; }
+.visor-docx .docx-wrapper > section.docx { box-shadow: var(--sombra); margin-bottom: 1.5rem; }

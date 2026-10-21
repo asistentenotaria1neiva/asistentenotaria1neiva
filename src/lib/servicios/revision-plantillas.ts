@@ -65,8 +65,11 @@ function casoPara(tipoId: string): CasoEjemplo | undefined {
   return CASOS.find((c) => c.actos.includes(tipoId) || c.actos.some((a) => ACTOS[a]?.anexo === tipoId));
 }
 
+/** Hay un caso de datos ficticios para probar este tipo de plantilla */
+export const tieneEjemplo = (tipoId: string) => !!casoPara(tipoId);
+
 export type PruebaEjemplo =
-  | { caso: CasoEjemplo; parrafos: Parrafo[]; faltantes: string[] }
+  | { caso: CasoEjemplo; docx: Buffer; parrafos: Parrafo[]; faltantes: string[] }
   | { caso: CasoEjemplo; error: string };
 
 /** Llena la plantilla con un caso ficticio. null si aún no hay caso de ejemplo para el tipo. */
@@ -77,7 +80,7 @@ export async function probarConEjemplo(tipoId: string, archivo: Buffer): Promise
     const ctx = prepararContexto(caso.datos, caso.actos, await obtenerConfig('notaria'));
     const contexto = ctx.actos.find((a) => a.plantilla === tipoId)?.contexto ?? ctx.global;
     const r = renderizarPlantilla(archivo, contexto);
-    return { caso, parrafos: vistaPreviaDocx(r.docx, { marcarFaltantes: true }), faltantes: r.faltantes };
+    return { caso, docx: r.docx, parrafos: vistaPreviaDocx(r.docx, { marcarFaltantes: true }), faltantes: r.faltantes };
   } catch (e) {
     if (e instanceof ErrorDatos) return { caso, error: `El caso de ejemplo no tiene: ${e.faltantes.join(', ')}` };
     return { caso, error: `La plantilla no se pudo llenar: ${mensajeError(e)}` };
