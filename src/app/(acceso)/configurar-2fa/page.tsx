@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { nuevoSecreto, codigoQR } from '@/lib/seguridad/totp';
 import { descifrarTexto } from '@/lib/seguridad/cifrado';
-import { accionConfirmar2FA } from '../acciones';
+import { accionConfirmar2FA, accionCerrarSesion } from '../acciones';
 import { FormularioCodigo } from '../componentes';
 
 export default async function Configurar2FA() {
@@ -13,7 +13,14 @@ export default async function Configurar2FA() {
   if (s.remota) {
     return (
       <main className="acceso"><div className="tarjeta"><h1>Doble factor pendiente</h1>
-        <div className="aviso error">El doble factor solo se puede configurar por primera vez desde la red de la oficina.</div></div></main>
+        <div className="aviso error">Por seguridad, el doble factor solo se puede configurar por primera vez desde la red de la oficina.</div>
+        <p className="suave">Está conectado desde la IP <code>{s.ip}</code>, que no está registrada como red de la oficina. Para continuar puede:</p>
+        <ul className="suave">
+          <li>Ingresar una vez desde la oficina y configurar el doble factor. Después podrá entrar desde cualquier lugar.</li>
+          <li>O pedirle al administrador que agregue temporalmente esta IP en <strong>Configuración → red.ips_oficina</strong> y la retire cuando termine.</li>
+        </ul>
+        <form action={accionCerrarSesion}><button type="submit" className="secundario">Cerrar sesión</button></form>
+      </div></main>
     );
   }
   // Solo un usuario sin doble factor activo puede generar su secreto inicial
