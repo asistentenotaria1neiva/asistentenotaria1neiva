@@ -5,6 +5,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { after } from 'next/server';
 import { requerirSesion } from '@/lib/sesion';
 import {
   crearExpediente, guardarPaso, aplicarSugerencia, descartarSugerencia, enviarARevision, aprobarExpediente,
@@ -12,6 +13,7 @@ import {
 } from '@/lib/servicios/expedientes';
 import { subirDocumento, analizarDocumento } from '@/lib/servicios/documentos';
 import { ejecutarRevision, resolverObservacion } from '@/lib/servicios/revision';
+import { proponerCorrecciones, aplicarCorrecciones } from '@/lib/servicios/correccion-ia';
 import { generarBorradorExpediente } from '@/lib/servicios/borradores';
 import { db } from '@/lib/db';
 import type { Errores } from '@/lib/escritura/validar-formulario';
@@ -99,9 +101,11 @@ export async function accionRevisar(expedienteId: string, conIA: boolean): Promi
   const s = await requerirSesion();
   return ejecutar(async () => {
     const r = await ejecutarRevision(s, expedienteId, conIA);
-    const base = `Revisión ejecutada: ${r.hallazgos} hallazgo(s) de las reglas (${r.nuevasReglas} nuevo(s))${conIA ? `, ${r.nuevasIA} observación(es) de la IA` : ''}.`;
-    if (r.errorIA) throw new ErrorNegocio(`${base} La revisión de la IA no se completó: ${r.errorIA}`);
-    return base;
+    const base = `Revisión ejecutada: ${r.hallazgos} hallazgo(s) de las reglas (${r.nuevasReglas} nuevo(s)).`;
+    if (!r.tareaIA) return base;
+    // La IA sigue después de responder: la persona puede salir de la página
+    after(r.tareaIA);
+    return `${base} La IA está revisando el expediente en segundo plano; puede salir y volver más tarde.`;
   }, `/expedientes/${expedienteId}`);
 }
 
@@ -109,6 +113,27 @@ export async function accionResolverObservacion(expedienteId: string, _: Resulta
   const s = await requerirSesion();
   const decision = String(f.get('decision')) as 'CORREGIDA' | 'JUSTIFICADA' | 'DESCARTADA';
   return ejecutar(() => resolverObservacion(s, String(f.get('observacionId')), decision, String(f.get('justificacion') ?? ''), f.get('falsaAlarma') === 'on').then(() => 'Observación resuelta.'), `/expedientes/${expedienteId}`);
+}
+
+export async function accionProponerCorrecciones(expedienteId: string, observacionIds: string[]): Promise<Resultado> {
+  const s = await requerirSesion();
+  return ejecutar(async () => {
+    const r = await proponerCorrecciones(s, expedienteId, observacionIds);
+    // La IA sigue después de responder: la persona puede salir de la página
+    after(r.tarea);
+    return `La IA está preparando las correcciones de ${r.observaciones} observación(es) en segundo plano; aparecerán aquí al terminar.`;
+  }, `/expedientes/${expedienteId}`);
+}
+
+export async function accionAplicarCorrecciones(expedienteId: string, analisisId: string, indices: number[]): Promise<Resultado> {
+  const s = await requerirSesion();
+  return ejecutar(async () => {
+    const r = await aplicarCorrecciones(s, expedienteId, analisisId, indices);
+    if (!r.aplicadas && !r.omitidas.length) return 'Propuesta descartada: no se cambió ningún dato.';
+    const omitidas = r.omitidas.length ? ` No se aplicaron ${r.omitidas.length} porque el dato cambió después de la propuesta: ${r.omitidas.join(', ')}.` : '';
+    const errores = r.errores ? ` El formulario quedó con ${r.errores} dato(s) por completar o corregir.` : '';
+    return `${r.aplicadas} cambio(s) aplicado(s) y reglas ejecutadas de nuevo.${omitidas}${errores}`;
+  }, `/expedientes/${expedienteId}`);
 }
 
 export async function accionGenerarBorrador(expedienteId: string): Promise<Resultado> {

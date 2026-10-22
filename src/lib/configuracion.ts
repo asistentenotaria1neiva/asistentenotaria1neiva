@@ -17,6 +17,7 @@ export interface Configuraciones {
   'reglas.dias_aviso_paz_salvo': number;
   'reglas.dias_vigencia_cert_existencia': number;
   notaria: ConfigNotaria;
+  'ia.creditos': { saldoUSD: number; fecha: string };
 }
 
 export const POR_DEFECTO: Configuraciones = {
@@ -30,6 +31,7 @@ export const POR_DEFECTO: Configuraciones = {
   'reglas.dias_aviso_paz_salvo': 5,
   'reglas.dias_vigencia_cert_existencia': 30,
   notaria: NOTARIA_POR_DEFECTO,
+  'ia.creditos': { saldoUSD: 0, fecha: '' },
 };
 
 export const DESCRIPCIONES: Record<keyof Configuraciones, string> = {
@@ -43,6 +45,7 @@ export const DESCRIPCIONES: Record<keyof Configuraciones, string> = {
   'reglas.dias_aviso_paz_salvo': 'Días antes del vencimiento del paz y salvo para avisar.',
   'reglas.dias_vigencia_cert_existencia': 'Antigüedad máxima del certificado de existencia y representación antes de advertir.',
   notaria: 'Datos fijos de la notaría usados en las plantillas (código, notario titular, resolución de tarifas del año).',
+  'ia.creditos': 'Saldo de créditos de la API de Claude (US$) tal como aparece en la consola de Anthropic (Billing) y la fecha en que se tomó (AAAA-MM-DD). Actualícelo cada vez que recargue. El saldo restante se calcula restando el costo real desde esa fecha.',
 };
 
 export async function obtenerConfig<K extends keyof Configuraciones>(clave: K): Promise<Configuraciones[K]> {

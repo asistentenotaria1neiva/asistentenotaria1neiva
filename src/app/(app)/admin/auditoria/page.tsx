@@ -34,7 +34,7 @@ export default async function Auditoria({ searchParams }: { searchParams: Promis
         </div>
         <BotonVerificar accion={accionVerificarAuditoria} />
       </div>
-      <form className="tarjeta filtros" method="get">
+      <form className="tarjeta filtros compactos" method="get">
         <div><label htmlFor="usuario">Usuario</label><input id="usuario" name="usuario" type="search" defaultValue={q.usuario} /></div>
         <div><label htmlFor="equipo">Equipo</label><select id="equipo" name="equipo" defaultValue={q.equipo ?? ''}><option value="">Todos</option>{equipos.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
         <div><label htmlFor="accion">Acción</label><select id="accion" name="accion" defaultValue={q.accion ?? ''}><option value="">Todas</option>{acciones.map((a) => <option key={a.accion} value={a.accion}>{a.accion.replace(/_/g, ' ').toLowerCase()}</option>)}</select></div>

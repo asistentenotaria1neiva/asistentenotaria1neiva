@@ -193,6 +193,11 @@ export async function accionConfiguracion(_: ResultadoAdmin, f: FormData): Promi
     if (typeof def === 'number' && (typeof valor !== 'number' || valor <= 0)) throw new ErrorAdmin('Debe ser un número mayor que cero.');
     if (Array.isArray(def) && (!Array.isArray(valor) || valor.some((x) => typeof x !== 'string'))) throw new ErrorAdmin('Debe ser una lista de textos, p. ej. ["190.0.0.1"].');
     if (typeof def === 'object' && !Array.isArray(def) && (typeof valor !== 'object' || valor === null || Array.isArray(valor))) throw new ErrorAdmin('Debe ser un objeto con la misma estructura.');
+    if (clave === 'ia.creditos') {
+      const c = valor as { saldoUSD?: unknown; fecha?: unknown };
+      if (typeof c.saldoUSD !== 'number' || c.saldoUSD < 0) throw new ErrorAdmin('saldoUSD debe ser un número (US$), p. ej. 25.40.');
+      if (typeof c.fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(c.fecha) || isNaN(Date.parse(c.fecha))) throw new ErrorAdmin('fecha debe tener el formato AAAA-MM-DD, p. ej. "2026-10-21".');
+    }
     if (clave === 'red.ips_oficina' && Array.isArray(valor) && !valor.length) throw new ErrorAdmin('Debe haber al menos una IP de la oficina (si no, el personal no podría ingresar).');
     const anterior = await db.configuracion.findUnique({ where: { clave } });
     await db.configuracion.upsert({ where: { clave }, create: { clave, valor: valor as object, actualizadoPor: s.usuario.id }, update: { valor: valor as object, actualizadoPor: s.usuario.id } });

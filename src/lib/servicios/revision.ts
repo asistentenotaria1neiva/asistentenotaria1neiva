@@ -87,14 +87,40 @@ async function sincronizarReglas(expedienteId: string, hallazgos: Hallazgo[]) {
   return nuevas;
 }
 
+/** Una revisión EN_CURSO más antigua que esto se da por interrumpida (p. ej., el servidor se reinició) */
+const LIMITE_REVISION_MS = 30 * 60 * 1000;
+
+/** Revisión de la IA que se está ejecutando en segundo plano para el expediente, si la hay */
+export async function revisionIAEnCurso(expedienteId: string) {
+  const a = await db.analisisIA.findFirst({ where: { expedienteId, proposito: 'REVISION', estado: 'EN_CURSO' }, orderBy: { creadoEn: 'desc' } });
+  if (!a) return null;
+  if (Date.now() - a.creadoEn.getTime() > LIMITE_REVISION_MS) {
+    await db.analisisIA.update({ where: { id: a.id }, data: { estado: 'ERROR', error: 'La revisión se interrumpió antes de terminar. Ejecútela de nuevo.' } });
+    return null;
+  }
+  return a;
+}
+
+/**
+ * Ejecuta las reglas de inmediato. Si se pide la IA, deja el análisis EN_CURSO y devuelve
+ * `tareaIA`, que la acción programa para después de responder: así la persona puede salir
+ * de la página y, al volver, ver que la revisión sigue en curso.
+ */
 export async function ejecutarRevision(s: SesionActiva, expedienteId: string, conIA: boolean) {
+  if (conIA && await revisionIAEnCurso(expedienteId)) throw new ErrorNegocio('Ya hay una revisión de la IA en curso para este expediente. Espere a que termine.');
   const { e, datos, actos, documentos, hallazgos, borradorTexto } = await evaluarExpediente(expedienteId, s);
   const nuevasReglas = await sincronizarReglas(expedienteId, hallazgos);
-  let nuevasIA = 0;
-  let errorIA: string | undefined;
-  if (conIA) {
-    const instr = await instruccionesAprobadas('REVISION', actos);
-    const analisis = await db.analisisIA.create({ data: { expedienteId, proposito: 'REVISION', modelo: process.env.CLAUDE_MODELO_REVISION || 'claude-opus-5-5', estado: 'EN_CURSO', versionInstruccion: instr.version } });
+  const registrar = (nuevasIA: number, errorIA?: string) =>
+    auditar({ ...datosAuditoria(s), accion: 'REVISION_EJECUTADA', entidad: 'expediente', entidadId: e.id, detalle: { reglas: hallazgos.length, nuevasReglas, nuevasIA, conIA, errorIA } });
+  if (!conIA) {
+    await registrar(0);
+    return { hallazgos: hallazgos.length, nuevasReglas };
+  }
+  const instr = await instruccionesAprobadas('REVISION', actos);
+  const analisis = await db.analisisIA.create({ data: { expedienteId, proposito: 'REVISION', modelo: process.env.CLAUDE_MODELO_REVISION || 'claude-opus-5-5', estado: 'EN_CURSO', versionInstruccion: instr.version } });
+  const tareaIA = async () => {
+    let nuevasIA = 0;
+    let errorIA: string | undefined;
     try {
       const entrada = {
         actos,
@@ -121,9 +147,9 @@ export async function ejecutarRevision(s: SesionActiva, expedienteId: string, co
       if (!(err instanceof ErrorIA)) console.error('[ejecutarRevision]', err);
       await db.analisisIA.update({ where: { id: analisis.id }, data: { estado: 'ERROR', error: errorIA } });
     }
-  }
-  await auditar({ ...datosAuditoria(s), accion: 'REVISION_EJECUTADA', entidad: 'expediente', entidadId: e.id, detalle: { reglas: hallazgos.length, nuevasReglas, nuevasIA, conIA, errorIA } });
-  return { hallazgos: hallazgos.length, nuevasReglas, nuevasIA, errorIA };
+    await registrar(nuevasIA, errorIA).catch((err) => console.error('[ejecutarRevision] auditoría', err));
+  };
+  return { hallazgos: hallazgos.length, nuevasReglas, tareaIA };
 }
 
 export async function resolverObservacion(s: SesionActiva, observacionId: string, decision: 'CORREGIDA' | 'JUSTIFICADA' | 'DESCARTADA', justificacion: string, falsaAlarma: boolean) {

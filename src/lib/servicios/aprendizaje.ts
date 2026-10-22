@@ -69,7 +69,7 @@ export async function indicadoresMes(anio: number, mes: number) {
     db.observacion.findMany({ where: { resueltaEn: rango }, select: { origen: true, estado: true, falsaAlarma: true, nivel: true, codigo: true } }),
     db.expediente.findMany({ where: { aprobadoEn: rango }, select: { creadoEn: true, aprobadoEn: true, tipoId: true } }),
     db.auditoria.count({ where: { accion: 'EXPEDIENTE_DEVUELTO', fecha: rango } }),
-    db.analisisIA.findMany({ where: { creadoEn: rango }, select: { modelo: true, tokensEntrada: true, tokensSalida: true, tokensCacheLectura: true, proposito: true } }),
+    db.analisisIA.findMany({ where: { creadoEn: rango, estado: 'COMPLETADO' }, select: { modelo: true, tokensEntrada: true, tokensSalida: true, tokensCacheLectura: true, proposito: true } }),
     db.correccion.groupBy({ by: ['tipoId', 'categoria', 'campo'], where: { creadoEn: rango }, _count: true, orderBy: { _count: { campo: 'desc' } }, take: 30 }),
   ]);
   const cuenta = (e: string) => datos.find((d) => d.estado === e)?._count ?? 0;

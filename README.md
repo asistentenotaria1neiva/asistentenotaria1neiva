@@ -67,6 +67,8 @@ La primera vez, la aplicación abre **/instalacion** para crear el administrador
 | `CLAVE_MAESTRA` | Cifra documentos, borradores y secretos TOTP (AES-256-GCM). **Si se pierde, no se recuperan los documentos.** |
 | `CLAVE_FIRMA` | Firma de los tokens de sesión y de equipo |
 | `ANTHROPIC_API_KEY` | Clave de la API de Claude. **Solo en el servidor** |
+| `ANTHROPIC_WORKSPACE_ID` | Opcional. ID del workspace (`wrkspc_...`) cuando la clave no está asignada a uno |
+| `ANTHROPIC_ADMIN_KEY` | Opcional. Clave de administrador (`sk-ant-admin...`) para mostrar el costo real y los créditos restantes en Estadísticas |
 | `CLAUDE_MODELO_EXTRACCION`, `CLAUDE_MODELO_REVISION` | Modelo por tarea (predeterminado `claude-opus-5-5`) |
 | `CLAUDE_ESFUERZO_EXTRACCION`, `CLAUDE_ESFUERZO_REVISION` | `low` · `medium` · `high` · `xhigh` · `max` (predeterminado `high`) |
 | `CLAUDE_FALLBACKS` | `default` activa el respaldo del servidor de Anthropic ante rechazos por política; vacío lo desactiva |

@@ -1,6 +1,6 @@
 'use client';
 /** Navegación de la aplicación (cliente): marca la página activa y, en pantallas pequeñas, abre el menú como panel lateral */
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -57,9 +57,17 @@ export function MenuLateral({ enlaces, children }: { enlaces: EnlaceMenu[]; chil
 /** Pestañas del expediente: la activa es la que coincide exactamente con la página */
 export function PestanasExpediente({ base, pestanas }: { base: string; pestanas: { href: string; texto: string }[] }) {
   const ruta = usePathname();
+  const lista = useRef<HTMLUListElement>(null);
+  // En móvil las pestañas se desplazan a lo ancho: la activa se lleva a la vista
+  useEffect(() => {
+    const l = lista.current;
+    const activa = l?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!l || !activa || l.scrollWidth <= l.clientWidth) return;
+    l.scrollLeft += activa.getBoundingClientRect().left - l.getBoundingClientRect().left - 16;
+  }, [ruta]);
   return (
     <nav aria-label="Secciones del expediente">
-      <ul className="pasos">
+      <ul className="pasos" ref={lista}>
         {pestanas.map((p) => {
           const href = `${base}${p.href}`;
           return <li key={p.href}><Link href={href} aria-current={ruta === href ? 'page' : undefined}>{p.texto}</Link></li>;

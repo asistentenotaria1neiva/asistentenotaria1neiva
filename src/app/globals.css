@@ -118,6 +118,8 @@ input:disabled, select:disabled, textarea:disabled { background: #f1f3f6; color:
 .opcion:has(input:checked) { border-color: var(--primario); background: var(--primario-claro); }
 .campos-columnas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); column-gap: 1rem; }
 fieldset.tarjeta { min-width: 0; }
+/* Valores JSON de la configuración: letra monoespaciada y el campo crece con el contenido */
+.valor-json textarea { font-family: Consolas, 'Courier New', monospace; field-sizing: content; max-height: 60vh; }
 fieldset.tarjeta > legend { padding: 0 0.35rem; }
 /* Barra de filtros: los botones quedan alineados con los campos sin etiquetas vacías */
 .filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem 1rem; align-items: end; }
@@ -180,12 +182,29 @@ h1 .etiqueta { font-size: 0.8rem; letter-spacing: 0; }
 .historial li:last-child { border-bottom: 0; }
 .historial .suave { font-size: 0.82rem; }
 .historial time { grid-column: 1 / -1; }
+/* La etiqueta no se estira a la altura del mensaje cuando este ocupa varias líneas */
+.historial .etiqueta { align-self: start; }
 
 /* Sugerencias de la IA */
 .sugerencia { border: 1px dashed #b5d1f0; background: var(--info-claro); border-radius: var(--radio); padding: 0.55rem 0.75rem; margin-top: 0.4rem; font-size: 0.86rem; }
 .sugerencia.revision { border-color: #f3b8b2; background: var(--peligro-claro); }
 .sugerencia blockquote { margin: 0.25rem 0; padding-left: 0.5rem; border-left: 3px solid #b5d1f0; color: var(--texto-suave); font-style: italic; overflow-wrap: anywhere; }
 .sugerencia .fila { gap: 0.5rem; margin-top: 0.35rem; }
+
+/* Corrección con IA: observaciones elegidas y propuestas (antes → después) */
+.lista-seleccion { list-style: none; padding: 0; margin: 0 0 0.85rem; }
+.lista-seleccion li { padding: 0.5rem 0; border-top: 1px solid var(--borde-suave); }
+.lista-seleccion li:first-child { border-top: 0; }
+.lista-seleccion .casilla { align-items: flex-start; font-weight: 400; }
+.lista-seleccion .casilla input { margin-top: 0.2rem; }
+.lista-seleccion .casilla > span { min-width: 0; overflow-wrap: anywhere; }
+.propuestas .casilla > span { display: flex; flex-direction: column; gap: 0.2rem; }
+.propuestas .suave { font-size: 0.85rem; }
+.cambio del { background: var(--peligro-claro); color: var(--peligro); text-decoration-thickness: 1px; padding: 0 3px; border-radius: 3px; }
+.cambio ins { background: var(--exito-claro); color: var(--exito); text-decoration: none; font-weight: 600; padding: 0 3px; border-radius: 3px; }
+.sin-correccion { margin-top: 0.85rem; }
+.sin-correccion ul { padding-left: 1.1rem; margin: 0 0 0.6rem; }
+.sin-correccion li { margin-bottom: 0.45rem; }
 
 /* Pantallas de acceso */
 .acceso { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 1.5rem 1rem; background: linear-gradient(160deg, #1f3864 0%, #2c4f86 100%); }
@@ -341,6 +360,8 @@ details.tarjeta { padding: 0.85rem 1.25rem; }
   .barra-filtros > * { width: 100%; }
   .buscador input { width: auto; flex: 1; min-width: 0; }
   .pestanas { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 0.35rem; scrollbar-width: thin; }
+  /* Opciones con casilla: el nombre largo queda junto a la casilla y la etiqueta baja a la línea siguiente */
+  .opcion > input + span { flex: 1 1 0; min-width: 8rem; }
   .documento { padding: 1rem; font-size: 0.95rem; }
   .vista-previa { padding: 1rem; }
   .acceso .tarjeta { padding: 1.5rem 1.25rem; }
@@ -356,7 +377,9 @@ details.tarjeta { padding: 0.85rem 1.25rem; }
   .tabla-apilable td { border: 0; padding: 0.3rem 0; text-align: left; }
   .tabla-apilable td[data-etiqueta] { display: grid; grid-template-columns: minmax(6.5rem, 34%) minmax(0, 1fr); gap: 0.75rem; align-items: baseline; }
   .tabla-apilable td[data-etiqueta]::before { content: attr(data-etiqueta); font-size: 0.74rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--texto-suave); }
-  .tabla-apilable td:empty { display: none; }
+  .tabla-apilable td:empty, .tabla-apilable td.sin-dato { display: none; }
+  /* Una etiqueta sola en la celda conserva su ancho en lugar de ocupar toda la columna */
+  .tabla-apilable td[data-etiqueta] > .etiqueta { justify-self: start; }
   .tabla-apilable td.principal-celda { font-size: 1.02rem; padding-bottom: 0.45rem; margin-bottom: 0.2rem; border-bottom: 1px solid var(--borde-suave); }
   .tabla-apilable td.acciones { text-align: left; white-space: normal; padding-top: 0.55rem; }
   .tabla-apilable tr.grupo { background: transparent; border: 0; box-shadow: none; padding: 0.75rem 0 0.25rem; margin: 0; }

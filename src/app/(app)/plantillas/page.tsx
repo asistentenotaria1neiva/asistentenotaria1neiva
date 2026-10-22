@@ -140,8 +140,8 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
                         {principal && !vigente && !pendiente && <span className="etiqueta">No aprobada</span>}
                       </div>
                     </td>
-                    <td data-etiqueta="Revisión IA">{principal ? <EtiquetaVeredicto revision={principal.revision as RevisionPlantilla | null} /> : <span className="suave">—</span>}</td>
-                    <td data-etiqueta="Última carga" className="suave">{principal ? fecha(principal.creadaEn, false) : '—'}</td>
+                    <td data-etiqueta="Revisión IA" className={principal ? undefined : 'sin-dato'}>{principal ? <EtiquetaVeredicto revision={principal.revision as RevisionPlantilla | null} /> : <span className="suave">—</span>}</td>
+                    <td data-etiqueta="Última carga" className={principal ? 'suave' : 'suave sin-dato'}>{principal ? fecha(principal.creadaEn, false) : '—'}</td>
                     <td className="acciones">
                       {principal ? (
                         <>

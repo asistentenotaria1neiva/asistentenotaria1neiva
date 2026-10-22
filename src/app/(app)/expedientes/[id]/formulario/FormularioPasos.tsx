@@ -213,13 +213,7 @@ function ListaSimple({ campo, valor, onCambio, errores, prefijo, datos, deshabil
 export default function FormularioPasos({ expedienteId, pasoInicial, pasos, datosIniciales, sugerencias, editable, guardar, aplicar, descartar }: Props) {
   const router = useRouter();
   const [datos, setDatos] = useState<DatosExpediente>(datosIniciales);
-  const [indice, setIndiceEstado] = useState(Math.min(pasoInicial, pasos.length - 1));
-  // El paso actual queda en la URL para no perderlo al recargar
-  const setIndice = (n: number | ((i: number) => number)) => setIndiceEstado((actual) => {
-    const nuevo = typeof n === 'function' ? n(actual) : n;
-    window.history.replaceState(null, '', `?paso=${nuevo}`);
-    return nuevo;
-  });
+  const [indice, setIndice] = useState(Math.min(pasoInicial, pasos.length - 1));
   const [errores, setErrores] = useState<Errores>({});
   const [mensaje, setMensaje] = useState<Resultado>();
   const [sucio, setSucio] = useState(false);
@@ -229,10 +223,12 @@ export default function FormularioPasos({ expedienteId, pasoInicial, pasos, dato
   const listaPasos = useRef<HTMLOListElement>(null);
   const indiceMostrado = useRef(indice);
 
-  // Al cambiar de paso se vuelve al inicio del paso y el paso activo queda visible en la lista (en móvil se desplaza a lo ancho)
+  // Al cambiar de paso se vuelve al inicio del paso y el paso activo queda visible en la lista (en móvil se desplaza a lo ancho).
+  // El paso actual queda en la URL para no perderlo al recargar (fuera del render: Next escucha replaceState)
   useEffect(() => {
     if (indiceMostrado.current === indice) return;
     indiceMostrado.current = indice;
+    window.history.replaceState(null, '', `?paso=${indice}`);
     const s = seccion.current;
     if (s && s.getBoundingClientRect().top < 0) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
     const lista = listaPasos.current;

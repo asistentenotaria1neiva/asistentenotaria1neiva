@@ -19,7 +19,13 @@ export function configuracionModelo(proposito: Proposito): { modelo: string; esf
 let cliente: Anthropic | undefined;
 function obtenerCliente(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) throw new ErrorIA('La clave de la API de Claude no está configurada en el servidor (ANTHROPIC_API_KEY).', 'CONFIGURACION');
-  cliente ??= new Anthropic({ maxRetries: 3, timeout: 10 * 60 * 1000 });
+  // Las claves sin workspace asignado exigen indicar el workspace en cada solicitud.
+  const workspace = process.env.ANTHROPIC_WORKSPACE_ID?.trim();
+  cliente ??= new Anthropic({
+    maxRetries: 3,
+    timeout: 10 * 60 * 1000,
+    defaultHeaders: workspace ? { 'anthropic-workspace-id': workspace } : undefined,
+  });
   return cliente;
 }
 
