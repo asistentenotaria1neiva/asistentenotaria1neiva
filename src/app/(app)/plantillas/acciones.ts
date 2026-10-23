@@ -7,11 +7,13 @@
  */
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { after } from 'next/server';
 import { db } from '@/lib/db';
 import { requerirSesion, datosAuditoria } from '@/lib/sesion';
 import { auditar } from '@/lib/auditoria';
 import { cargarPlantilla, aprobarPlantilla, retirarPlantilla, ErrorPlantilla } from '@/lib/servicios/plantillas';
 import { revisarPlantilla } from '@/lib/servicios/revision-plantillas';
+import { proponerCorreccionesPlantilla, aplicarCorreccionesPlantilla } from '@/lib/servicios/correccion-plantillas';
 import type { ResultadoAdmin } from '../admin/acciones';
 
 const revisores = () => requerirSesion({ roles: ['ADMINISTRADOR', 'REVISOR'] });
@@ -50,6 +52,38 @@ export async function accionRevisarPlantilla(_: ResultadoAdmin, f: FormData): Pr
     console.error('[plantillas]', e);
     return { error: 'No se pudo revisar la plantilla.' };
   }
+}
+
+/** Pide a la IA las correcciones de los hallazgos elegidos (se preparan en segundo plano) */
+export async function accionProponerCorreccionesPlantilla(id: string, hallazgos: string[]): Promise<ResultadoAdmin> {
+  const s = await revisores();
+  try {
+    const r = await proponerCorreccionesPlantilla(s, id, hallazgos.map(Number));
+    after(r.tarea);
+    revalidatePath(`/plantillas/${id}`);
+    return { ok: `La IA está preparando las correcciones de ${r.hallazgos} hallazgo(s).` };
+  } catch (e) {
+    if (e instanceof ErrorPlantilla) return { error: e.message };
+    console.error('[plantillas]', e);
+    return { error: 'No se pudieron pedir las correcciones.' };
+  }
+}
+
+/** Aplica las correcciones elegidas en una nueva versión y lleva a ella; sin índices, descarta la propuesta */
+export async function accionAplicarCorreccionesPlantilla(id: string, indices: number[]): Promise<ResultadoAdmin> {
+  const s = await revisores();
+  let nuevaId: string | null;
+  try {
+    const r = await aplicarCorreccionesPlantilla(s, id, indices);
+    nuevaId = r.nuevaId;
+    revalidatePath('/plantillas', 'layout');
+    if (!nuevaId) return r.fallidas.length ? { error: `No se pudo aplicar ningún cambio: ${r.fallidas.join('; ')}` } : { ok: 'Propuesta descartada: la plantilla no cambió.' };
+  } catch (e) {
+    if (e instanceof ErrorPlantilla) return { error: e.message };
+    console.error('[plantillas]', e);
+    return { error: 'No se pudieron aplicar las correcciones.' };
+  }
+  redirect(`/plantillas/${nuevaId}?corregida=1`);
 }
 
 export async function accionPlantilla(_: ResultadoAdmin, f: FormData): Promise<ResultadoAdmin> {

@@ -5,10 +5,18 @@ import { requerirSesion } from '@/lib/sesion';
 import { ESQUEMAS } from '@/lib/escritura/esquemas';
 import { vistaPreviaDocx, etiquetasDe } from '@/lib/escritura/vista-previa';
 import { probarConEjemplo, tieneEjemplo, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
-import { accionCargarPlantilla, accionPlantilla, accionRevisarPlantilla } from '../acciones';
+import { estadoCorreccionPlantilla } from '@/lib/servicios/correccion-plantillas';
+import { accionCargarPlantilla, accionPlantilla, accionRevisarPlantilla, accionProponerCorreccionesPlantilla, accionAplicarCorreccionesPlantilla } from '../acciones';
 import { FormAdmin } from '../../admin/formularios';
+import { PanelCorreccionIA, RefrescoAutomatico } from '../../expedientes/formularios';
 import { fecha } from '../../componentes';
-import { ESTADO_PLANTILLA, LeyendaPlantilla, PanelRevision, VistaDocumento } from '../componentes';
+import { CATEGORIA, ESTADO_PLANTILLA, LeyendaPlantilla, PanelRevision, VistaDocumento, hallazgosOrdenados } from '../componentes';
+
+const TEXTOS_CORRECCION = {
+  seleccion: 'Elija los hallazgos que quiere arreglar. La IA propone cada cambio de texto; usted decide cuáles aplicar. Se crea una versión nueva, pendiente de aprobación: esta no cambia.',
+  propuesta: 'Al aplicar se crea una versión nueva de la plantilla, pendiente de aprobación del notario; esta versión no cambia.',
+  sinCorreccion: 'Se corrigen a mano en Word',
+};
 import { VisorDocx } from '../VisorDocx';
 
 // La revisión de la IA puede tardar uno o dos minutos
@@ -16,10 +24,10 @@ export const maxDuration = 300;
 
 const VISTAS = [['diseno', 'Diseño (como en Word)'], ['ejemplo', 'Con datos de ejemplo'], ['texto', 'Solo texto'], ['variables', 'Variables']] as const;
 
-export default async function VersionPlantilla({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ vista?: string }> }) {
+export default async function VersionPlantilla({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ vista?: string; corregida?: string }> }) {
   const s = await requerirSesion({ roles: ['ADMINISTRADOR', 'REVISOR'] });
   const { id } = await params;
-  const pedida = (await searchParams).vista;
+  const { vista: pedida, corregida } = await searchParams;
   const vista = VISTAS.find(([v]) => v === pedida)?.[0] ?? 'diseno';
   const p = await db.plantilla.findUnique({
     where: { id },
@@ -38,6 +46,15 @@ export default async function VersionPlantilla({ params, searchParams }: { param
   const admin = s.usuario.rol === 'ADMINISTRADOR';
   const conEjemplo = tieneEjemplo(p.tipoId);
   const esquema = ESQUEMAS[p.tipoId];
+
+  // Corrección con IA de los hallazgos: elegir → la IA propone (en segundo plano) → aplicar en una versión nueva
+  const hallazgos = hallazgosOrdenados(revision);
+  const corregible = !!process.env.ANTHROPIC_API_KEY && p.estado !== 'RETIRADA' && hallazgos.length > 0;
+  const correccion = corregible ? await estadoCorreccionPlantilla(p.id) : null;
+  const propuesta = correccion?.estado === 'COMPLETADA' && (correccion.propuestas.some((x) => x.estado === 'PENDIENTE') || correccion.sinCorreccion.length > 0) ? correccion : null;
+  const enCurso = correccion?.estado === 'EN_CURSO';
+  const mensajeHallazgo = (i: number) => revision?.ia?.hallazgos[i]?.mensaje ?? 'Hallazgo';
+  const nuevaVersion = correccion?.nuevaVersionId ? p.tipo.plantillas.find((v) => v.id === correccion.nuevaVersionId) : undefined;
 
   return (
     <>
@@ -120,10 +137,37 @@ export default async function VersionPlantilla({ params, searchParams }: { param
         <aside>
           <section className="tarjeta">
             <h2 style={{ marginTop: 0 }}>Revisión</h2>
-            <PanelRevision revision={revision} revisadaEn={fecha(p.revisadaEn)} />
+            {corregida && <div className="aviso info">Esta versión se creó con las correcciones de la IA (ver notas abajo). Revísela con la IA y en Word antes de aprobarla.</div>}
+            <PanelRevision revision={revision} revisadaEn={fecha(p.revisadaEn)} ocultarHallazgos={corregible && !propuesta && !enCurso} />
             <FormAdmin accion={accionRevisarPlantilla} ocultos={{ id: p.id }} botones={[{ texto: revision ? 'Revisar de nuevo con IA' : 'Revisar con IA', clase: 'secundario' }]}
               mensajePendiente="La IA está revisando la plantilla. Puede tardar uno o dos minutos." />
           </section>
+
+          {corregible && (
+            <section className="tarjeta">
+              {enCurso && <RefrescoAutomatico />}
+              {nuevaVersion && !propuesta && !enCurso && (
+                <div className="aviso exito">Las últimas correcciones se aplicaron en la <Link href={`/plantillas/${nuevaVersion.id}`}>versión {nuevaVersion.version}</Link>.</div>
+              )}
+              <PanelCorreccionIA textos={TEXTOS_CORRECCION}
+                proponer={accionProponerCorreccionesPlantilla.bind(null, p.id)}
+                observaciones={hallazgos.map((h) => ({ id: String(h.indice), nivel: h.nivel, mensaje: h.mensaje, categoria: CATEGORIA[h.categoria] ?? h.categoria, detalle: h.fragmento ?? undefined }))}
+                enCurso={enCurso ? fecha(new Date(correccion!.iniciadaEn)) : undefined}
+                error={correccion?.estado === 'ERROR' ? correccion.error : undefined}
+                {...(propuesta ? {
+                  aplicar: accionAplicarCorreccionesPlantilla.bind(null, p.id),
+                  propuesta: {
+                    id: propuesta.iniciadaEn,
+                    fecha: fecha(new Date(propuesta.iniciadaEn)),
+                    propuestas: propuesta.propuestas.flatMap((x, indice) => (x.estado === 'PENDIENTE' ? [{
+                      indice, observacion: mensajeHallazgo(x.hallazgo), etiqueta: CATEGORIA[revision?.ia?.hallazgos[x.hallazgo]?.categoria ?? ''] ?? 'Cambio de texto',
+                      antes: x.original, despues: x.corregido, explicacion: x.explicacion, fuente: '',
+                    }] : [])),
+                    sinCorreccion: propuesta.sinCorreccion.map((x) => ({ observacion: mensajeHallazgo(x.hallazgo), motivo: x.motivo })),
+                  },
+                } : {})} />
+            </section>
+          )}
 
           <section className="tarjeta">
             <h2 style={{ marginTop: 0 }}>Versión {p.version}</h2>

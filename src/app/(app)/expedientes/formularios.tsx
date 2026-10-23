@@ -179,30 +179,40 @@ export interface PropuestaVista { indice: number; observacion: string; etiqueta:
  * responde, se eligen las propuestas que se aplican. El mensaje de resultado vive aquí para que
  * no se pierda al pasar de un paso al otro (la página se vuelve a renderizar en el servidor).
  */
-export function PanelCorreccionIA({ proponer, aplicar, observaciones, propuesta, enCurso, error }: {
+export interface ElementoCorregible { id: string; nivel: string; mensaje: string; categoria?: string; detalle?: string }
+
+const TEXTOS_EXPEDIENTE = {
+  seleccion: 'Elija las observaciones que quiere arreglar. La IA propone los cambios de datos con su fuente; usted decide cuáles aplicar.',
+  propuesta: 'Al aplicar, los datos se guardan en el formulario y las reglas se ejecutan de nuevo.',
+  sinCorreccion: 'No se corrigen con datos',
+};
+
+export function PanelCorreccionIA({ proponer, aplicar, observaciones, propuesta, enCurso, error, textos = TEXTOS_EXPEDIENTE }: {
   proponer: (ids: string[]) => Promise<Resultado>;
   aplicar?: (indices: number[]) => Promise<Resultado>;
-  observaciones: { id: string; nivel: string; mensaje: string }[];
+  observaciones: ElementoCorregible[];
   propuesta?: { id: string; fecha: string; propuestas: PropuestaVista[]; sinCorreccion: { observacion: string; motivo: string }[] };
   /** Fecha de inicio si la IA está preparando una propuesta en segundo plano */
   enCurso?: string;
   /** Error del último intento, si falló */
   error?: string;
+  /** Textos propios de cada pantalla (expediente o plantilla) */
+  textos?: typeof TEXTOS_EXPEDIENTE;
 }) {
   const [r, setR] = useState<Resultado>();
   return (
     <>
       <h2 style={{ marginTop: 0 }}>{propuesta ? 'Correcciones propuestas por la IA' : 'Arreglar con IA'}</h2>
       <p className="suave">{propuesta
-        ? `Revise cada cambio antes de aplicarlo (propuesta del ${propuesta.fecha}): la IA puede equivocarse. Al aplicar, los datos se guardan en el formulario y las reglas se ejecutan de nuevo.`
-        : 'Elija las observaciones que quiere arreglar. La IA propone los cambios de datos con su fuente; usted decide cuáles aplicar.'}</p>
+        ? `Revise cada cambio antes de aplicarlo (propuesta del ${propuesta.fecha}): la IA puede equivocarse. ${textos.propuesta}`
+        : textos.seleccion}</p>
       <Mensaje r={r} />
       {enCurso ? (
         <div className="aviso info" role="status">
           <span className="girador pequeno" aria-hidden="true" /> La IA está preparando las correcciones (iniciada {enCurso}). Puede salir de esta página; la propuesta aparecerá aquí al terminar.
         </div>
       ) : propuesta && aplicar ? (
-        <PropuestasCorreccion key={propuesta.id} accion={aplicar} propuestas={propuesta.propuestas} sinCorreccion={propuesta.sinCorreccion} alResultado={setR} />
+        <PropuestasCorreccion key={propuesta.id} accion={aplicar} propuestas={propuesta.propuestas} sinCorreccion={propuesta.sinCorreccion} tituloSinCorreccion={textos.sinCorreccion} alResultado={setR} />
       ) : observaciones.length > 0 && (
         <>
           {error && !r && <div className="aviso error">El último intento no se completó: {error}</div>}
@@ -215,7 +225,7 @@ export function PanelCorreccionIA({ proponer, aplicar, observaciones, propuesta,
 
 /** Elige las observaciones abiertas que la IA intentará corregir (por defecto, todas las advertencias) */
 function SeleccionCorreccionIA({ accion, observaciones, alResultado }: {
-  accion: (ids: string[]) => Promise<Resultado>; observaciones: { id: string; nivel: string; mensaje: string }[]; alResultado: (r?: Resultado) => void;
+  accion: (ids: string[]) => Promise<Resultado>; observaciones: ElementoCorregible[]; alResultado: (r?: Resultado) => void;
 }) {
   const [marcadas, setElegidas] = useState<string[]>(() => observaciones.filter((o) => o.nivel === 'ADVERTENCIA').map((o) => o.id));
   // Solo cuentan las que siguen abiertas (la lista cambia al ejecutar las reglas)
@@ -236,7 +246,10 @@ function SeleccionCorreccionIA({ accion, observaciones, alResultado }: {
             <label className="casilla">
               <input type="checkbox" checked={elegidas.includes(o.id)} disabled={pendiente}
                 onChange={(e) => setElegidas((x) => (e.target.checked ? [...x, o.id] : x.filter((y) => y !== o.id)))} />
-              <span><span className={`etiqueta ${CLASE_NIVEL[o.nivel]}`}>{NIVELES[o.nivel]}</span> {o.mensaje}</span>
+              <span>
+                <span className={`etiqueta ${CLASE_NIVEL[o.nivel]}`}>{NIVELES[o.nivel]}</span>{o.categoria && <span className="suave"> {o.categoria}</span>} {o.mensaje}
+                {o.detalle && <blockquote>{o.detalle}</blockquote>}
+              </span>
             </label>
           </li>
         ))}
@@ -256,8 +269,8 @@ function SeleccionCorreccionIA({ accion, observaciones, alResultado }: {
 }
 
 /** Propuestas de la IA: el usuario elige cuáles aplicar (todas marcadas al inicio) */
-function PropuestasCorreccion({ accion, propuestas, sinCorreccion, alResultado }: {
-  accion: (indices: number[]) => Promise<Resultado>; propuestas: PropuestaVista[]; sinCorreccion: { observacion: string; motivo: string }[]; alResultado: (r: Resultado) => void;
+function PropuestasCorreccion({ accion, propuestas, sinCorreccion, tituloSinCorreccion, alResultado }: {
+  accion: (indices: number[]) => Promise<Resultado>; propuestas: PropuestaVista[]; sinCorreccion: { observacion: string; motivo: string }[]; tituloSinCorreccion: string; alResultado: (r: Resultado) => void;
 }) {
   const [elegidas, setElegidas] = useState<number[]>(() => propuestas.map((p) => p.indice));
   const [pendiente, iniciar] = useTransition();
@@ -275,7 +288,7 @@ function PropuestasCorreccion({ accion, propuestas, sinCorreccion, alResultado }
                   <span>
                     <strong>{p.etiqueta}</strong>
                     <span className="cambio"><del>{p.antes}</del> <span aria-hidden="true">→</span><span className="solo-lectores"> cambia a </span> <ins>{p.despues}</ins></span>
-                    <span className="suave">{p.explicacion} Fuente: {p.fuente}</span>
+                    <span className="suave">{p.explicacion}{p.fuente && ` Fuente: ${p.fuente}`}</span>
                     <span className="suave">Observación: {p.observacion}</span>
                   </span>
                 </label>
@@ -293,7 +306,7 @@ function PropuestasCorreccion({ accion, propuestas, sinCorreccion, alResultado }
       )}
       {sinCorreccion.length > 0 && (
         <details className="sin-correccion" open={!propuestas.length}>
-          <summary>No se corrigen con datos ({sinCorreccion.length})</summary>
+          <summary>{tituloSinCorreccion} ({sinCorreccion.length})</summary>
           <ul>{sinCorreccion.map((x, i) => <li key={i}><strong>{x.observacion}</strong><div className="suave">{x.motivo}</div></li>)}</ul>
           {!propuestas.length && <button type="button" className="secundario pequeno" disabled={pendiente} onClick={() => enviar([])}>Entendido</button>}
         </details>

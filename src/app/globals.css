@@ -198,6 +198,7 @@ h1 .etiqueta { font-size: 0.8rem; letter-spacing: 0; }
 .lista-seleccion .casilla { align-items: flex-start; font-weight: 400; }
 .lista-seleccion .casilla input { margin-top: 0.2rem; }
 .lista-seleccion .casilla > span { min-width: 0; overflow-wrap: anywhere; }
+.lista-seleccion blockquote { margin: 0.3rem 0 0; padding-left: 0.5rem; border-left: 3px solid var(--borde); color: var(--texto-suave); font-style: italic; font-size: 0.86rem; }
 .propuestas .casilla > span { display: flex; flex-direction: column; gap: 0.2rem; }
 .propuestas .suave { font-size: 0.85rem; }
 .cambio del { background: var(--peligro-claro); color: var(--peligro); text-decoration-thickness: 1px; padding: 0 3px; border-radius: 3px; }

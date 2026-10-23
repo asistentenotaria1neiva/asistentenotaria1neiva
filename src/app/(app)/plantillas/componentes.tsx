@@ -11,7 +11,7 @@ const VEREDICTO: Record<Veredicto, [string, string]> = {
   APTA: ['ok', 'IA: apta'], APTA_CON_OBSERVACIONES: ['advertencia', 'IA: con observaciones'], NO_APTA: ['critica', 'IA: no apta'],
 };
 
-const CATEGORIA: Record<string, string> = {
+export const CATEGORIA: Record<string, string> = {
   VARIABLES: 'Variables', DATO_FIJO: 'Dato fijo', REDACCION: 'Redacción', CONTENIDO: 'Contenido del acto', CAMBIO: 'Cambio', FORMATO: 'Formato',
 };
 
@@ -51,10 +51,16 @@ export function LeyendaPlantilla() {
   );
 }
 
-export function PanelRevision({ revision, revisadaEn }: { revision: RevisionPlantilla | null; revisadaEn: string }) {
+/** Hallazgos ordenados por nivel, con su índice original (el que usa la corrección con IA) */
+export function hallazgosOrdenados(revision: RevisionPlantilla | null) {
+  const orden = { CRITICA: 0, ADVERTENCIA: 1, INFORMATIVA: 2 };
+  return (revision?.ia?.hallazgos ?? []).map((h, indice) => ({ ...h, indice })).sort((x, y) => orden[x.nivel] - orden[y.nivel]);
+}
+
+/** ocultarHallazgos: el panel «Arreglar con IA» ya los muestra con casillas para elegirlos */
+export function PanelRevision({ revision, revisadaEn, ocultarHallazgos }: { revision: RevisionPlantilla | null; revisadaEn: string; ocultarHallazgos?: boolean }) {
   if (!revision) return <p className="suave">Esta versión aún no ha sido revisada.</p>;
   const a = revision.automatica;
-  const nivelesOrden = { CRITICA: 0, ADVERTENCIA: 1, INFORMATIVA: 2 };
   return (
     <>
       <p className="suave">Revisada por {revision.revisadaPor} · {revisadaEn}{revision.ia ? ` · ${revision.ia.modelo}` : ''}</p>
@@ -63,10 +69,11 @@ export function PanelRevision({ revision, revisadaEn }: { revision: RevisionPlan
         <>
           <p><EtiquetaVeredicto revision={revision} /></p>
           <p>{revision.ia.resumen}</p>
-          {revision.ia.hallazgos.length > 0 && (
+          {revision.ia.hallazgos.length > 0 && ocultarHallazgos && <p className="suave">{revision.ia.hallazgos.length} hallazgo(s): revíselos y elija cuáles arreglar en «Arreglar con IA».</p>}
+          {revision.ia.hallazgos.length > 0 && !ocultarHallazgos && (
             <ul className="hallazgos">
-              {[...revision.ia.hallazgos].sort((x, y) => nivelesOrden[x.nivel] - nivelesOrden[y.nivel]).map((h, i) => (
-                <li key={i}>
+              {hallazgosOrdenados(revision).map((h) => (
+                <li key={h.indice}>
                   <div className="fila"><EtiquetaNivel nivel={h.nivel} /><span className="suave">{CATEGORIA[h.categoria] ?? h.categoria}</span></div>
                   <div>{h.mensaje}</div>
                   {h.fragmento && <blockquote>{h.fragmento}</blockquote>}

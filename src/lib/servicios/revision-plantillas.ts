@@ -49,6 +49,27 @@ export interface RevisionPlantilla {
   ia: { veredicto: Veredicto; resumen: string; cambios: string[]; hallazgos: HallazgoPlantilla[]; modelo: string; duracionMs: number } | null;
   errorIA: string | null;
   revisadaPor: string;
+  /** Corrección con IA de los hallazgos (src/lib/servicios/correccion-plantillas.ts) */
+  correccion?: CorreccionPlantilla;
+}
+
+export interface PropuestaPlantilla {
+  hallazgo: number; // índice en ia.hallazgos
+  original: string;
+  corregido: string;
+  explicacion: string;
+  estado: 'PENDIENTE' | 'APLICADA' | 'DESCARTADA';
+}
+
+export interface CorreccionPlantilla {
+  estado: 'EN_CURSO' | 'COMPLETADA' | 'ERROR';
+  iniciadaEn: string;
+  hallazgos: number[];
+  propuestas: PropuestaPlantilla[];
+  sinCorreccion: { hallazgo: number; motivo: string }[];
+  error?: string;
+  /** Versión creada al aplicar las propuestas */
+  nuevaVersionId?: string;
 }
 
 const LIMITE_TEXTO = 80_000; // caracteres por texto enviado a la IA
