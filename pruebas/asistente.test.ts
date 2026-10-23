@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { datosFaltantes, rutaDesdeError, convertirRespuesta, resolverRuta, validarValor } from '@/lib/escritura/rutas';
+import { datosFaltantes, rutaDesdeError, rutaDesdeCampo, convertirRespuesta, resolverRuta, validarValor } from '@/lib/escritura/rutas';
 import { datosVacios, type DatosExpediente, type Persona, type Inmueble } from '@/lib/escritura/tipos';
 
 function expediente(): DatosExpediente {
@@ -60,5 +60,16 @@ describe('asistente: respuestas', () => {
 
   it('no resuelve campos de actos que no están en la escritura', () => {
     expect(resolverRuta(expediente(), ['compraventa'], 'acto:hipoteca.valor')).toBeNull();
+  });
+});
+
+describe('asistente: corregir desde una observación', () => {
+  it('convierte el campo de una observación de las reglas en la ruta de la pregunta', () => {
+    expect(rutaDesdeCampo('personas.v1.estado_civil')).toBe('persona:v1.estado_civil');
+    expect(rutaDesdeCampo('inmuebles.i1.matricula')).toBe('inmueble:i1.matricula');
+    expect(rutaDesdeCampo('actos.compraventa.precio')).toBe('acto:compraventa.precio');
+    expect(rutaDesdeCampo('persona:v1.nombre')).toBe('persona:v1.nombre');
+    expect(rutaDesdeCampo('texto libre de la IA')).toBeNull();
+    expect(resolverRuta(expediente(), ['compraventa'], rutaDesdeCampo('personas.v1.estado_civil')!)?.etiqueta).toBe('JOSE PRUEBA · Estado civil');
   });
 });

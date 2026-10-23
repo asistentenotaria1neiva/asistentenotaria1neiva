@@ -23,7 +23,7 @@ import { TIPOS_DOCUMENTALES, type TipoDocumental } from '../ia/documentos';
 import { llamarEstructurado, ErrorIA } from '../ia/cliente';
 import { SISTEMA_ASISTENTE, esquemaAsistente } from '../ia/instrucciones';
 import {
-  obtenerExpediente, puedeEditar, datosDe, actosDe, guardarPaso, cambiarActos, aplicarSugerenciasConfiables, resolverDestino,
+  obtenerExpediente, puedeEditar, datosDe, actosDe, guardarPaso, cambiarActos, aplicarSugerenciasConfiables, cerrarSugerenciasRespondidas, resolverDestino,
   ErrorNegocio, type ActualizacionPaso,
 } from './expedientes';
 import { analizarDocumento, instruccionesAprobadas } from './documentos';
@@ -39,7 +39,7 @@ export interface PreguntaAsistente {
   etiqueta: string;
   pregunta: string;
   motivo: string;
-  origen: 'IA' | 'REGLAS';
+  origen: 'IA' | 'REGLAS' | 'USUARIO';
   obligatoria: boolean;
   valorSugerido: unknown;
   fuente: string | null;
@@ -170,6 +170,18 @@ export async function iniciarAsistente(s: SesionActiva, expedienteId: string) {
           obligatoria: !!destino.campo.obligatorio, valorSugerido: sugerido, fuente: sugerido === null ? null : p.fuente?.slice(0, 500) ?? null, estado: 'PENDIENTE',
         });
       }
+      // Todo dato dudoso se pregunta, aunque la IA no lo haya hecho: así se decide cada sugerencia pendiente
+      for (const x of dudosos) {
+        const ruta = rutaParaIA(datos, x.campo);
+        const destino = resolverRuta(datos, actos, ruta);
+        if (!destino || destino.campo.tipo === 'lista' || preguntas.some((p) => p.ruta === ruta)) continue;
+        const sugerido = x.valores.map((v) => validarValor(destino.campo, v.valor, datos)).find((v) => !('error' in v));
+        preguntas.push({
+          id: `p${preguntas.length + 1}`, ruta, etiqueta: destino.etiqueta, pregunta: `Confirme: ${destino.etiqueta}`,
+          motivo: `Dato dudoso (${x.motivo}): ${x.valores.map((v) => `«${String(v.valor)}» en ${v.documento}`).join('; ')}.`.slice(0, 500),
+          origen: 'REGLAS', obligatoria: !!destino.campo.obligatorio, valorSugerido: sugerido && 'valor' in sugerido ? sugerido.valor : null, fuente: x.valores[0]?.documento ?? null, estado: 'PENDIENTE',
+        });
+      }
       preguntas.push(...preguntasDeReglas(datos, actos, preguntas));
 
       // Las inconsistencias quedan como observaciones; las de un análisis anterior sin decidir se reemplazan
@@ -273,7 +285,10 @@ export async function responderAsistente(s: SesionActiva, expedienteId: string, 
   r.preguntas.push(...preguntasDeReglas(guardados, actos, r.preguntas));
   await db.analisisIA.update({ where: { id: a.id }, data: { resultado: r as unknown as Prisma.InputJsonValue } });
   await auditar({ ...datosAuditoria(s), accion: 'ASISTENTE_RESPUESTAS', entidad: 'expediente', entidadId: expedienteId, detalle: { respondidas, errores: Object.keys(errores).length, campos: r.preguntas.filter((p) => p.estado === 'RESPONDIDA').map((p) => p.ruta.replace(/:[^.]+\./, ':*.')) } });
-  if (respondidas) await ejecutarRevision(s, expedienteId, false);
+  if (respondidas) {
+    await cerrarSugerenciasRespondidas(s, expedienteId);
+    await ejecutarRevision(s, expedienteId, false);
+  }
   const pendientes = r.preguntas.filter((p) => p.estado === 'PENDIENTE');
   return { respondidas, errores, pendientes: pendientes.length, obligatoriasPendientes: pendientes.filter((p) => p.obligatoria).length, erroresFormulario };
 }
@@ -285,4 +300,26 @@ export async function continuarConDatos(s: SesionActiva, expedienteId: string, o
   const abiertas = await db.observacion.findMany({ where: { expedienteId, codigo: CODIGO_INCONSISTENCIA, estado: 'ABIERTA', id: { in: observacionIds } } });
   for (const o of abiertas) await resolverObservacion(s, o.id, 'JUSTIFICADA', JUSTIFICACION_CONTINUAR, false);
   return abiertas.length;
+}
+
+/**
+ * Agrega una pregunta para corregir o completar un dato: desde la revisión de los datos de la
+ * escritura, al cambiar una respuesta o desde una observación. Si ya hay una pregunta pendiente
+ * sobre ese dato, no se duplica.
+ */
+export async function agregarPregunta(s: SesionActiva, expedienteId: string, ruta: string, motivo?: string) {
+  const e = await obtenerExpediente(s, expedienteId);
+  if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede editar en su estado actual.');
+  const a = await db.analisisIA.findFirst({ where: { expedienteId, proposito: 'ASISTENTE', estado: 'COMPLETADO' }, orderBy: { creadoEn: 'desc' } });
+  const r = a?.resultado as ResultadoAsistente | null | undefined;
+  if (!a || !r) throw new ErrorNegocio('Ejecute primero el asistente de IA.');
+  const destino = resolverRuta(datosDe(e), actosDe(e), ruta);
+  if (!destino || destino.campo.tipo === 'lista') throw new ErrorNegocio('Ese dato no se puede corregir desde el asistente.');
+  if (r.preguntas.some((p) => p.ruta === ruta && p.estado === 'PENDIENTE')) return 'La pregunta ya está en la lista.';
+  r.preguntas.push({
+    id: `p${r.preguntas.length + 1}`, ruta, etiqueta: destino.etiqueta, pregunta: `Corregir: ${destino.etiqueta}`, motivo: (motivo ?? 'Corrección solicitada por el funcionario.').slice(0, 500),
+    origen: 'USUARIO', obligatoria: !!destino.campo.obligatorio, valorSugerido: null, fuente: null, estado: 'PENDIENTE',
+  });
+  await db.analisisIA.update({ where: { id: a.id }, data: { resultado: r as unknown as Prisma.InputJsonValue } });
+  return 'Pregunta agregada.';
 }

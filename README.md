@@ -13,7 +13,7 @@ Desarrollado por Automind. Documentación: [`docs/`](docs/).
 | Ruta | Qué hay |
 | --- | --- |
 | `src/` | Aplicación Next.js 16 (React 19 + TypeScript). Lógica de negocio en `src/lib/` |
-| `src/lib/escritura/` | Datos del formulario, esquemas por tipo, fórmulas de personas e inmuebles, armado y generación del borrador |
+| `src/lib/escritura/` | Datos del expediente, esquemas por tipo (definen las preguntas del asistente), fórmulas de personas e inmuebles, armado y generación del borrador |
 | `src/lib/reglas/` | Reglas fijas de validación y cruce (sin IA) |
 | `src/lib/ia/` | Integración con Claude: esquemas de extracción, instrucciones, cliente |
 | `src/lib/servicios/` | Expedientes, documentos, revisión, borradores, plantillas, aprendizaje |
@@ -148,4 +148,4 @@ Navegador (equipo registrado) ──HTTPS──► Vercel (TLS, HSTS) ──► 
                                                                └──► API de Claude (solo análisis y revisión)
 ```
 
-Flujo de cada escritura: crear expediente → cargar documentos → la IA extrae y precarga → formulario por pasos → reglas + revisión de la IA (críticas bloquean) → borrador sobre plantilla aprobada → revisor aprueba o devuelve → lista para firma del notario.
+Flujo de cada escritura: crear expediente y elegir actos → cargar documentos → el asistente de IA analiza, advierte inconsistencias y pregunta lo que falta → reglas + revisión de la IA (críticas bloquean) → borrador sobre plantilla aprobada → revisor aprueba o devuelve → lista para firma del notario.

@@ -8,11 +8,11 @@ import { redirect } from 'next/navigation';
 import { after } from 'next/server';
 import { requerirSesion } from '@/lib/sesion';
 import {
-  crearExpediente, guardarPaso, aplicarSugerencia, descartarSugerencia, enviarARevision, aprobarExpediente,
-  devolverExpediente, marcarFirmada, archivarExpediente, reabrirExpediente, reasignarExpediente, ErrorNegocio, type ActualizacionPaso,
+  crearExpediente, enviarARevision, aprobarExpediente,
+  devolverExpediente, marcarFirmada, archivarExpediente, reabrirExpediente, reasignarExpediente, ErrorNegocio,
 } from '@/lib/servicios/expedientes';
 import { subirDocumento, analizarDocumento, eliminarDocumento } from '@/lib/servicios/documentos';
-import { iniciarAsistente, responderAsistente, continuarConDatos, type RespuestasAsistente } from '@/lib/servicios/asistente';
+import { iniciarAsistente, responderAsistente, continuarConDatos, agregarPregunta, type RespuestasAsistente } from '@/lib/servicios/asistente';
 import { ejecutarRevision, resolverObservacion } from '@/lib/servicios/revision';
 import { proponerCorrecciones, aplicarCorrecciones } from '@/lib/servicios/correccion-ia';
 import { generarBorradorExpediente } from '@/lib/servicios/borradores';
@@ -43,28 +43,6 @@ export async function accionCrearExpediente(_: Resultado, f: FormData): Promise<
   redirect(`/expedientes/${id}/documentos`);
 }
 
-export async function accionGuardarPaso(id: string, act: ActualizacionPaso): Promise<Resultado> {
-  const s = await requerirSesion();
-  try {
-    const { errores } = await guardarPaso(s, id, act);
-    revalidatePath(`/expedientes/${id}`, 'layout');
-    return Object.keys(errores).length ? { errores, error: 'Se guardó, pero hay datos por completar o corregir.' } : { ok: 'Guardado.' };
-  } catch (e) {
-    if (e instanceof ErrorNegocio) return { error: e.message };
-    console.error('[guardarPaso]', e);
-    return { error: 'No se pudo guardar.' };
-  }
-}
-
-export async function accionAplicarSugerencia(expedienteId: string, datoId: string): Promise<Resultado> {
-  const s = await requerirSesion();
-  return ejecutar(() => aplicarSugerencia(s, datoId).then(() => 'Sugerencia aplicada.'), `/expedientes/${expedienteId}`);
-}
-
-export async function accionDescartarSugerencia(expedienteId: string, datoId: string, motivo: string): Promise<Resultado> {
-  const s = await requerirSesion();
-  return ejecutar(() => descartarSugerencia(s, datoId, motivo).then(() => 'Sugerencia descartada.'), `/expedientes/${expedienteId}`);
-}
 
 export async function accionSubirDocumento(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
   const s = await requerirSesion();
@@ -132,7 +110,7 @@ export async function accionAplicarCorrecciones(expedienteId: string, analisisId
     const r = await aplicarCorrecciones(s, expedienteId, analisisId, indices);
     if (!r.aplicadas && !r.omitidas.length) return 'Propuesta descartada: no se cambió ningún dato.';
     const omitidas = r.omitidas.length ? ` No se aplicaron ${r.omitidas.length} porque el dato cambió después de la propuesta: ${r.omitidas.join(', ')}.` : '';
-    const errores = r.errores ? ` El formulario quedó con ${r.errores} dato(s) por completar o corregir.` : '';
+    const errores = r.errores ? ` Quedan ${r.errores} dato(s) por completar o corregir en el asistente.` : '';
     return `${r.aplicadas} cambio(s) aplicado(s) y reglas ejecutadas de nuevo.${omitidas}${errores}`;
   }, `/expedientes/${expedienteId}`);
 }
@@ -200,4 +178,15 @@ export async function accionContinuarConDatos(expedienteId: string, observacionI
     const n = await continuarConDatos(s, expedienteId, observacionIds);
     return `Se continúa con los datos actuales: ${n} inconsistencia(s) quedan registradas como aceptadas para el revisor.`;
   }, `/expedientes/${expedienteId}`);
+}
+
+/**
+ * Pide al asistente una pregunta para corregir o completar un dato (desde la revisión de los datos,
+ * una respuesta ya dada o una observación) y lleva al usuario a las preguntas.
+ */
+export async function accionCorregirDato(expedienteId: string, ruta: string, motivo?: string): Promise<Resultado> {
+  const s = await requerirSesion();
+  const r = await ejecutar(() => agregarPregunta(s, expedienteId, ruta, motivo), `/expedientes/${expedienteId}`);
+  if (r.error) return r;
+  redirect(`/expedientes/${expedienteId}/asistente#preguntas`);
 }

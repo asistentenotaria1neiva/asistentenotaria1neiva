@@ -257,29 +257,23 @@ export async function aplicarSugerenciasConfiables(s: SesionActiva, expedienteId
   return { aplicadas: aceptados.length, dudosos, datos };
 }
 
-/** Aplica una sugerencia de la IA (crea la persona/inmueble si no existe) */
-export async function aplicarSugerencia(s: SesionActiva, datoId: string) {
-  const d = await db.datoExtraido.findUniqueOrThrow({ where: { id: datoId } });
-  const e = await obtenerExpediente(s, d.expedienteId);
-  if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede editar en su estado actual.');
+/**
+ * Asistente de IA: las sugerencias pendientes cuyo dato ya quedó definido por una respuesta se dan
+ * por decididas (aceptada si coincide con lo respondido; corregida si no, y se registra para el aprendizaje).
+ */
+export async function cerrarSugerenciasRespondidas(s: SesionActiva, expedienteId: string) {
+  const e = await obtenerExpediente(s, expedienteId);
   const datos = datosDe(e);
-  if (!aplicarEnDatos(datos, d.campo, d.valor)) throw new ErrorNegocio('Sugerencia no aplicable.');
-  await db.$transaction([
-    db.expediente.update({ where: { id: e.id }, data: { datos: datos as unknown as Prisma.InputJsonValue } }),
-    db.datoExtraido.update({ where: { id: d.id }, data: { estado: 'ACEPTADO', valorFinal: d.valor as Prisma.InputJsonValue } }),
-  ]);
-  await sincronizarEntidades(e.id, datos);
-  await auditar({ ...datosAuditoria(s), accion: 'SUGERENCIA_APLICADA', entidad: 'dato_extraido', entidadId: d.id, detalle: { campo: d.campo.replace(/:[^.]+\./, ':*.'), confianza: d.confianza } });
-}
-
-export async function descartarSugerencia(s: SesionActiva, datoId: string, motivo: string) {
-  const d = await db.datoExtraido.findUniqueOrThrow({ where: { id: datoId } });
-  const e = await obtenerExpediente(s, d.expedienteId);
-  if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede editar en su estado actual.');
-  if (motivo.trim().length < 5) throw new ErrorNegocio('Indique por qué descarta la sugerencia.');
-  await db.datoExtraido.update({ where: { id: d.id }, data: { estado: 'DESCARTADO' } });
-  await registrarCorreccion({ expedienteId: e.id, tipoId: e.tipoId, categoria: 'EXTRACCION', campo: d.campo, valorIA: d.valor, motivo, creadoPorId: s.usuario.id, datos: datosDe(e) });
-  await auditar({ ...datosAuditoria(s), accion: 'SUGERENCIA_DESCARTADA', entidad: 'dato_extraido', entidadId: d.id });
+  const pendientes = await db.datoExtraido.findMany({ where: { expedienteId, estado: 'PENDIENTE' } });
+  for (const d of pendientes) {
+    const destino = resolverDestino(datos, d.campo);
+    if (!destino || destino.indice < 0) continue;
+    const actual = leerRuta(datos, destino.ruta);
+    if (actual === undefined || actual === null || actual === '') continue;
+    const coincide = JSON.stringify(actual) === JSON.stringify(d.valor);
+    await db.datoExtraido.update({ where: { id: d.id }, data: { estado: coincide ? 'ACEPTADO' : 'CORREGIDO', valorFinal: actual as Prisma.InputJsonValue } });
+    if (!coincide) await registrarCorreccion({ expedienteId, tipoId: e.tipoId, categoria: 'EXTRACCION', campo: d.campo, valorIA: d.valor, valorCorregido: actual, creadoPorId: s.usuario.id, datos });
+  }
 }
 
 // ------------------------------------------------------------------ flujo de estados

@@ -115,6 +115,19 @@ export function rutaDesdeError(datos: DatosExpediente, rutaError: string): strin
   return elemento ? `${base === 'personas' ? 'persona' : 'inmueble'}:${elemento.id}.${resto}` : null;
 }
 
+/**
+ * Convierte el campo de una observación de las reglas ("personas.<id>.estado_civil",
+ * "inmuebles.<id>.matricula", "actos.compraventa.precio") en la ruta de campo. Si ya es una ruta, la devuelve.
+ */
+export function rutaDesdeCampo(campo: string | null | undefined): string | null {
+  if (!campo) return null;
+  if (/^(escritura\.|persona:|inmueble:|acto:)/.test(campo)) return campo;
+  const m = /^(personas|inmuebles|actos)\.([^.]+)\.(.+)$/.exec(campo);
+  if (!m) return null;
+  const [, base, clave, resto] = m;
+  return `${base === 'personas' ? 'persona' : base === 'inmuebles' ? 'inmueble' : 'acto'}:${clave}.${resto}`;
+}
+
 export interface DatoFaltante { ruta: string; etiqueta: string; motivo: string; obligatorio: boolean }
 
 /**

@@ -5,7 +5,8 @@ import { obtenerExpediente, puedeEditar, datosDe } from '@/lib/servicios/expedie
 import { estadoCorreccion } from '@/lib/servicios/correccion-ia';
 import { revisionIAEnCurso } from '@/lib/servicios/revision';
 import type { DatosExpediente } from '@/lib/escritura/tipos';
-import { accionRevisar, accionResolverObservacion, accionProponerCorrecciones, accionAplicarCorrecciones } from '../../acciones';
+import { accionRevisar, accionResolverObservacion, accionProponerCorrecciones, accionAplicarCorrecciones, accionCorregirDato } from '../../acciones';
+import { rutaDesdeCampo } from '@/lib/escritura/rutas';
 import { BotonAccion, FormularioResolver, PanelCorreccionIA, RefrescoAutomatico } from '../../formularios';
 import { EtiquetaNivel, Tabla, fecha } from '../../../componentes';
 
@@ -108,7 +109,9 @@ export default async function Observaciones({ params }: { params: Promise<{ id: 
             {(ev.documento || ev.detalle) && (
               <p className="suave">Evidencia: {ev.documento}{ev.pagina ? `, página ${ev.pagina}` : ''}{ev.fragmento ? ` — «${ev.fragmento}»` : ''}{ev.detalle ?? ''}</p>
             )}
-            {o.campo && puedeEditar(s, e) && <p><Link href={`/expedientes/${id}/formulario`}>Ir al formulario para corregir</Link></p>}
+            {o.campo && puedeEditar(s, e) && (rutaDesdeCampo(o.campo)
+              ? <BotonAccion accion={accionCorregirDato.bind(null, id, rutaDesdeCampo(o.campo)!, o.mensaje.slice(0, 300))} texto="Corregir en el asistente" clase="secundario pequeno" />
+              : <p><Link href={`/expedientes/${id}/asistente`}>Ir al asistente para corregir</Link></p>)}
             {puedeRevisar && o.nivel !== 'INFORMATIVA' && <FormularioResolver accion={resolver} observacionId={o.id} nivel={o.nivel} origen={o.origen} puedeDescartarCritica={s.usuario.rol !== 'DIGITADOR'} />}
             {puedeRevisar && o.nivel === 'INFORMATIVA' && <FormularioResolver accion={resolver} observacionId={o.id} nivel={o.nivel} origen={o.origen} puedeDescartarCritica={false} />}
           </section>

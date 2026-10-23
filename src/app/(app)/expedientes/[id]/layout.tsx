@@ -20,9 +20,8 @@ export default async function ExpedienteLayout({ children, params }: { children:
     { href: '', texto: 'Resumen y flujo' },
     { href: '/documentos', texto: `1 · Documentos (${docs})` },
     { href: '/asistente', texto: '2 · Asistente IA' },
-    { href: '/formulario', texto: '3 · Formulario' },
-    { href: '/observaciones', texto: `4 · Observaciones (${abiertas} abierta${abiertas === 1 ? '' : 's'})` },
-    { href: '/borrador', texto: `5 · Borrador (${borradores})` },
+    { href: '/observaciones', texto: `3 · Observaciones (${abiertas} abierta${abiertas === 1 ? '' : 's'})` },
+    { href: '/borrador', texto: `4 · Borrador (${borradores})` },
   ];
   return (
     <>

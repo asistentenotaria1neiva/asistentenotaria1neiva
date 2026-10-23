@@ -124,27 +124,13 @@ test('digitador: cambio de contraseña, expediente, carga cifrada, formulario y 
   await expect(page.getByText('El análisis con IA no está disponible')).toBeVisible();
   await captura(page, '03-documentos');
 
-  // Formulario: el paso del acto no deja avanzar sin datos obligatorios
-  await page.getByRole('link', { name: '3 · Formulario' }).click();
-  await page.waitForLoadState('networkidle');
-  await page.getByRole('button', { name: /^[0-9]+. Compraventa$/ }).click();
-  await expect(page.getByRole('heading', { name: 'Compraventa', level: 2 })).toBeVisible();
-  await page.getByRole('button', { name: 'Guardar y continuar →' }).or(page.getByRole('link', { name: 'Ir a la revisión →' })).first().waitFor();
-  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect(page.getByText('Precio: dato obligatorio.')).toBeVisible();
-  await expect(page.getByText('Vendedor(es): dato obligatorio.')).toBeVisible();
-
-  // Paso de personas: un documento mal digitado se marca
-  await page.getByRole('button', { name: /^[0-9]+. Personas$/ }).click();
-  await page.getByRole('button', { name: '+ Agregar persona' }).click();
-  await page.getByLabel('Nombre completo / razón social *').fill('ana lucia prueba rojas');
-  await page.getByLabel('Número de documento *').fill('12A');
-  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect(page.getByText(/Número de documento: La cédula solo puede contener números/)).toBeVisible();
-  await captura(page, '04-formulario-errores');
+  // Asistente: sin clave de la API no se puede analizar (las preguntas las prepara la IA)
+  await page.getByRole('link', { name: '2 · Asistente IA' }).click();
+  await expect(page.getByText('El asistente no está disponible')).toBeVisible();
+  await captura(page, '04-asistente');
 
   // Reglas: el expediente incompleto tiene observaciones críticas
-  await page.getByRole('link', { name: /4 · Observaciones/ }).click();
+  await page.getByRole('link', { name: /3 · Observaciones/ }).click();
   await page.getByRole('button', { name: 'Ejecutar reglas' }).click();
   await expect(page.locator('.aviso[role=status]').last()).toContainText('Revisión ejecutada');
   await page.reload();
@@ -152,7 +138,7 @@ test('digitador: cambio de contraseña, expediente, carga cifrada, formulario y 
   await captura(page, '05-observaciones');
 
   // El borrador no se genera con críticas abiertas
-  await page.getByRole('link', { name: /5 · Borrador/ }).click();
+  await page.getByRole('link', { name: /4 · Borrador/ }).click();
   await expect(page.getByText(/observación\(es\) crítica\(s\) abiertas/)).toBeVisible();
   await cerrarSesion(page);
 });

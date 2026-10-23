@@ -151,7 +151,7 @@ export function FormularioResolver({ accion, observacionId, nivel, origen, puede
 }) {
   const [r, enviar, pendiente] = useActionState(accion, {});
   const critica = nivel === 'CRITICA';
-  if (critica && origen === 'REGLA') return <p className="suave">Corrija el dato en el formulario y ejecute de nuevo la revisión.</p>;
+  if (critica && origen === 'REGLA') return <p className="suave">Corrija el dato con «Corregir en el asistente» y ejecute de nuevo la revisión.</p>;
   return (
     <form action={enviar}>
       <Mensaje r={r} />
@@ -182,7 +182,7 @@ export interface ElementoCorregible { id: string; nivel: string; mensaje: string
 
 const TEXTOS_EXPEDIENTE = {
   seleccion: 'Elija las observaciones que quiere arreglar. La IA propone los cambios de datos con su fuente; usted decide cuáles aplicar.',
-  propuesta: 'Al aplicar, los datos se guardan en el formulario y las reglas se ejecutan de nuevo.',
+  propuesta: 'Al aplicar, los datos se guardan en el expediente y las reglas se ejecutan de nuevo.',
   sinCorreccion: 'No se corrigen con datos',
 };
 

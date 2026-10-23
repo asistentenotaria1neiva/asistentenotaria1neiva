@@ -3,19 +3,19 @@ import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { obtenerExpediente, puedeEditar, datosDe, actosDe, bloqueos } from '@/lib/servicios/expedientes';
 import { estadoAsistente, CODIGO_INCONSISTENCIA } from '@/lib/servicios/asistente';
-import { ESQUEMAS } from '@/lib/escritura/esquemas';
-import { resolverRuta } from '@/lib/escritura/rutas';
-import { leerRuta } from '@/lib/escritura/validar-formulario';
+import { ESQUEMAS, PASOS_COMUNES, CAMPOS_PERSONA, CAMPOS_INMUEBLE, type Campo } from '@/lib/escritura/esquemas';
+import { resolverRuta, CAMPOS_TERMINACION } from '@/lib/escritura/rutas';
+import { leerRuta, campoVisible } from '@/lib/escritura/validar-formulario';
 import type { DatosExpediente } from '@/lib/escritura/tipos';
-import { accionIniciarAsistente, accionResponderAsistente, accionContinuarConDatos, accionGenerarBorrador } from '../../acciones';
+import { accionIniciarAsistente, accionResponderAsistente, accionContinuarConDatos, accionGenerarBorrador, accionCorregirDato } from '../../acciones';
 import { BotonAccion, RefrescoAutomatico } from '../../formularios';
-import { EtiquetaNivel, fecha } from '../../../componentes';
+import { EtiquetaNivel, Tabla, fecha } from '../../../componentes';
 import { Cuestionario, type PreguntaVista } from './Cuestionario';
 
 // El análisis de los documentos y del expediente continúa en segundo plano (after) tras responder la acción
 export const maxDuration = 300;
 
-/** Valor inicial de una pregunta como lo espera el control del formulario */
+/** Valor inicial de una pregunta como lo espera su control */
 function comoEntrada(v: unknown, multiple: boolean): string | string[] {
   if (multiple) return Array.isArray(v) ? v.map(String) : typeof v === 'string' && v ? [v] : [];
   if (v === null || v === undefined) return '';
@@ -81,6 +81,22 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
   const listo = !!r && r.actosConfirmados && !obligatoriasPendientes && actos.length > 0;
   const titulo = (a: string) => ESQUEMAS[a]?.titulo ?? a;
 
+  // Revisión de todos los datos que irán en la escritura, cada uno con su ruta para corregirlo
+  const filas = (campos: Campo[], valores: Record<string, unknown>, prefijo: string) => campos
+    .filter((c) => c.tipo !== 'lista' && campoVisible(c, valores))
+    .flatMap((c) => {
+      const v = leerRuta(valores, c.id);
+      if (v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length)) return [];
+      const opcion = c.opciones?.find((o) => o.valor === v || o.valor === String(v));
+      return [{ ruta: `${prefijo}.${c.id}`, etiqueta: c.etiqueta, valor: opcion && c.tipo === 'opciones' ? opcion.etiqueta : mostrar(v, datos) }];
+    });
+  const grupos = [
+    { titulo: 'Escritura', filas: filas(PASOS_COMUNES[0].campos.filter((c) => !CAMPOS_TERMINACION.includes(c.id)), datos.escritura as unknown as Record<string, unknown>, 'escritura') },
+    ...actos.filter((a) => ESQUEMAS[a]).map((a) => ({ titulo: titulo(a), filas: filas(ESQUEMAS[a].pasos.flatMap((p) => p.campos), (datos.actos[a] ?? {}) as Record<string, unknown>, `acto:${a}`) })),
+    ...datos.personas.map((p) => ({ titulo: `${p.nombre || 'Persona sin nombre'} · ${p.numero_documento}`, filas: filas(CAMPOS_PERSONA, p as unknown as Record<string, unknown>, `persona:${p.id}`) })),
+    ...datos.inmuebles.map((i) => ({ titulo: `Inmueble ${i.matricula || i.nombre_corto || i.direccion}`, filas: filas(CAMPOS_INMUEBLE, i as unknown as Record<string, unknown>, `inmueble:${i.id}`) })),
+  ].filter((g) => g.filas.length);
+
   return (
     <>
       <section className="tarjeta">
@@ -114,7 +130,7 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
           {r.tipoSinPlantilla && <div className="aviso alerta">Los documentos indican además: <strong>{r.tipoSinPlantilla}</strong>. La notaría aún no tiene plantilla aprobada para ese acto.</div>}
           <h3>Documentos</h3>
           <p className="suave">{r.resumenDocumentos}</p>
-          {r.aplicadasAutomaticamente > 0 && <p className="suave">Se llevaron al expediente {r.aplicadasAutomaticamente} dato(s) leídos con confianza de los documentos. Puede revisarlos en el <Link href={`/expedientes/${id}/formulario`}>formulario</Link>.</p>}
+          {r.aplicadasAutomaticamente > 0 && <p className="suave">Se llevaron al expediente {r.aplicadasAutomaticamente} dato(s) leídos con confianza de los documentos. Puede revisarlos y corregirlos en «Datos de la escritura», más abajo.</p>}
           {r.erroresDocumentos.length > 0 && <div className="aviso error">No se pudieron analizar: {r.erroresDocumentos.join(' · ')}</div>}
           {r.documentosFaltantes.length > 0 && (
             <div className="aviso alerta">
@@ -156,23 +172,49 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
       )}
 
       {r && (
-        <section className="tarjeta">
+        <section className="tarjeta" id="preguntas">
           <h2 style={{ marginTop: 0 }}>Preguntas {pendientes.length > 0 && <span className="suave">({pendientes.length} pendiente{pendientes.length === 1 ? '' : 's'})</span>}</h2>
           {!pendientes.length && !r.actosConfirmados && editable && <p className="suave">Confirme el tipo de escritura para continuar.</p>}
           {!pendientes.length && r.actosConfirmados && <div className="aviso exito">No hay preguntas pendientes.</div>}
           {editable && (pendientes.length > 0 || !r.actosConfirmados) && (
-            <Cuestionario key={`${r.id}-${respondidas.length}-${r.actosConfirmados}`} accion={accionResponderAsistente.bind(null, id, r.id)} preguntas={pendientes}
+            <Cuestionario key={`${r.id}-${r.preguntas.length}-${respondidas.length}-${r.actosConfirmados}`} accion={accionResponderAsistente.bind(null, id, r.id)} preguntas={pendientes}
               actos={r.actosConfirmados ? undefined : { propuestos: r.actosPropuestos, catalogo: Object.values(ESQUEMAS).map((x) => ({ id: x.tipo, titulo: x.titulo })) }} />
           )}
           {respondidas.length > 0 && (
             <details style={{ marginTop: '1rem' }}>
               <summary>Respuestas guardadas ({respondidas.length})</summary>
-              <ul>{respondidas.map((p) => (
-                <li key={p.id}><strong>{p.etiqueta}:</strong> {p.estado === 'OMITIDA' ? <span className="suave">sin respuesta</span> : mostrar(p.respuesta, datos)}</li>
-              ))}</ul>
-              <p className="suave">Para cambiar una respuesta use el <Link href={`/expedientes/${id}/formulario`}>formulario</Link>.</p>
+              <Tabla>
+                <tbody>{respondidas.map((p) => (
+                  <tr key={p.id}>
+                    <td className="principal-celda"><strong>{p.etiqueta}</strong></td>
+                    <td data-etiqueta="Respuesta">{p.estado === 'OMITIDA' ? <span className="suave">sin respuesta</span> : mostrar(p.respuesta, datos)}</td>
+                    <td>{editable && <BotonAccion accion={accionCorregirDato.bind(null, id, p.ruta, 'Cambio de una respuesta anterior.')} texto="Cambiar" clase="secundario pequeno" />}</td>
+                  </tr>
+                ))}</tbody>
+              </Tabla>
             </details>
           )}
+        </section>
+      )}
+
+      {r && grupos.length > 0 && (
+        <section className="tarjeta">
+          <h2 style={{ marginTop: 0 }}>Datos de la escritura</h2>
+          <p className="suave">Todo lo que irá en la escritura: lo leído de los documentos y lo respondido. Si algo no es correcto, pulse «Corregir» y el asistente le hará la pregunta.</p>
+          {grupos.map((g) => (
+            <details key={g.titulo}>
+              <summary><strong>{g.titulo}</strong> <span className="suave">({g.filas.length} dato{g.filas.length === 1 ? '' : 's'})</span></summary>
+              <Tabla>
+                <tbody>{g.filas.map((f) => (
+                  <tr key={f.ruta}>
+                    <td className="principal-celda">{f.etiqueta}</td>
+                    <td data-etiqueta="Valor" style={{ whiteSpace: 'pre-line' }}>{f.valor}</td>
+                    <td>{editable && <BotonAccion accion={accionCorregirDato.bind(null, id, f.ruta, undefined)} texto="Corregir" clase="secundario pequeno" />}</td>
+                  </tr>
+                ))}</tbody>
+              </Tabla>
+            </details>
+          ))}
         </section>
       )}
 
