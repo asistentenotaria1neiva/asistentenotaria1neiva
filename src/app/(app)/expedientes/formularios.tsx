@@ -98,8 +98,7 @@ export function FormularioNuevo({ accion, actos }: { accion: (r: Resultado, f: F
               </li>
             ))}
           </ol>
-          <button type="submit" disabled={pendiente || !seleccion.length} style={{ width: '100%' }}>{pendiente ? 'Creando…' : 'Crear expediente'}</button>
-        </div>
+          <button type="submit" disabled={pendiente || !seleccion.length} style={{ width: '100%' }}>{pendiente ? 'Creando…' : 'Crear expediente'}</button>        </div>
       </div>
     </form>
   );

@@ -25,10 +25,10 @@ export default async function ResumenExpediente({ params }: { params: Promise<{ 
   const pasos = [
     { t: 'Crear expediente y elegir actos', hecho: true },
     { t: 'Cargar documentos soporte', hecho: nDocs > 0 },
-    { t: 'La IA extrae y precarga los datos', hecho: nAnalizados > 0 },
-    { t: 'Completar y corregir el formulario por pasos', hecho: !!ultimoBorrador },
+    { t: 'La IA analiza los documentos y prepara las preguntas', hecho: nAnalizados > 0 },
+    { t: 'Responder las preguntas del asistente y resolver inconsistencias', hecho: !!ultimoBorrador },
     { t: 'Revisión (reglas + IA) y observaciones resueltas', hecho: nRevisiones > 0 && !b.criticas.length && !b.advertencias.length },
-    { t: 'Borrador generado sobre la plantilla aprobada', hecho: !!ultimoBorrador },
+    { t: 'Escritura en Word generada sobre la plantilla aprobada (con espacios para la terminación)', hecho: !!ultimoBorrador },
     { t: 'Aprobación del revisor', hecho: cerrado },
     { t: 'Lista para firma del notario', hecho: cerrado },
   ];

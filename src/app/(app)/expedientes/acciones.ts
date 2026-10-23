@@ -11,7 +11,8 @@ import {
   crearExpediente, guardarPaso, aplicarSugerencia, descartarSugerencia, enviarARevision, aprobarExpediente,
   devolverExpediente, marcarFirmada, archivarExpediente, reabrirExpediente, reasignarExpediente, ErrorNegocio, type ActualizacionPaso,
 } from '@/lib/servicios/expedientes';
-import { subirDocumento, analizarDocumento } from '@/lib/servicios/documentos';
+import { subirDocumento, analizarDocumento, eliminarDocumento } from '@/lib/servicios/documentos';
+import { iniciarAsistente, responderAsistente, continuarConDatos, type RespuestasAsistente } from '@/lib/servicios/asistente';
 import { ejecutarRevision, resolverObservacion } from '@/lib/servicios/revision';
 import { proponerCorrecciones, aplicarCorrecciones } from '@/lib/servicios/correccion-ia';
 import { generarBorradorExpediente } from '@/lib/servicios/borradores';
@@ -158,5 +159,45 @@ export async function accionFlujo(expedienteId: string, _: Resultado, f: FormDat
       case 'reasignar': await reasignarExpediente(s, expedienteId, String(f.get('usuarioId') ?? '')); return 'Reasignado.';
       default: throw new ErrorNegocio('Acción no válida.');
     }
+  }, `/expedientes/${expedienteId}`);
+}
+
+export async function accionEliminarDocumento(expedienteId: string, documentoId: string): Promise<Resultado> {
+  const s = await requerirSesion();
+  return ejecutar(() => eliminarDocumento(s, documentoId).then(() => 'Documento retirado. Cargue el documento correcto y vuelva a ejecutar el asistente.'), `/expedientes/${expedienteId}`);
+}
+
+export async function accionIniciarAsistente(expedienteId: string): Promise<Resultado> {
+  const s = await requerirSesion();
+  return ejecutar(async () => {
+    const r = await iniciarAsistente(s, expedienteId);
+    // La IA sigue después de responder: la persona puede salir de la página
+    after(r.tarea);
+    return `El asistente está analizando ${r.documentos} documento(s) en segundo plano; las preguntas aparecerán aquí al terminar.`;
+  }, `/expedientes/${expedienteId}`);
+}
+
+export async function accionResponderAsistente(expedienteId: string, analisisId: string, respuestas: RespuestasAsistente): Promise<Resultado & { erroresPreguntas?: Record<string, string> }> {
+  const s = await requerirSesion();
+  let erroresPreguntas: Record<string, string> | undefined;
+  const r = await ejecutar(async () => {
+    const x = await responderAsistente(s, expedienteId, analisisId, respuestas);
+    erroresPreguntas = x.errores;
+    const errores = Object.keys(x.errores).length;
+    if (errores && !x.respondidas) throw new ErrorNegocio(`Revise ${errores} respuesta(s) marcada(s).`);
+    const base = `${x.respondidas} respuesta(s) guardada(s).`;
+    if (errores) return `${base} Revise ${errores} respuesta(s) marcada(s).`;
+    if (x.obligatoriasPendientes) return `${base} Faltan ${x.obligatoriasPendientes} dato(s) obligatorio(s).`;
+    if (x.pendientes) return `${base} Quedan ${x.pendientes} pregunta(s) opcional(es); puede responderlas u omitirlas.`;
+    return `${base} Ya puede generar la escritura en Word.`;
+  }, `/expedientes/${expedienteId}`);
+  return { ...r, erroresPreguntas };
+}
+
+export async function accionContinuarConDatos(expedienteId: string, observacionIds: string[]): Promise<Resultado> {
+  const s = await requerirSesion();
+  return ejecutar(async () => {
+    const n = await continuarConDatos(s, expedienteId, observacionIds);
+    return `Se continúa con los datos actuales: ${n} inconsistencia(s) quedan registradas como aceptadas para el revisor.`;
   }, `/expedientes/${expedienteId}`);
 }

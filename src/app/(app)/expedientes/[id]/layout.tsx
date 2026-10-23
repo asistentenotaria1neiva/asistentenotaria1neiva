@@ -18,10 +18,11 @@ export default async function ExpedienteLayout({ children, params }: { children:
   ]);
   const pestanas = [
     { href: '', texto: 'Resumen y flujo' },
-    { href: '/documentos', texto: `1–3 · Documentos (${docs})` },
-    { href: '/formulario', texto: '4 · Formulario' },
-    { href: '/observaciones', texto: `5 · Observaciones (${abiertas} abierta${abiertas === 1 ? '' : 's'})` },
-    { href: '/borrador', texto: `6 · Borrador (${borradores})` },
+    { href: '/documentos', texto: `1 · Documentos (${docs})` },
+    { href: '/asistente', texto: '2 · Asistente IA' },
+    { href: '/formulario', texto: '3 · Formulario' },
+    { href: '/observaciones', texto: `4 · Observaciones (${abiertas} abierta${abiertas === 1 ? '' : 's'})` },
+    { href: '/borrador', texto: `5 · Borrador (${borradores})` },
   ];
   return (
     <>

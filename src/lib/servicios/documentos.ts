@@ -6,7 +6,7 @@ import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
-import { guardarCifrado, leerCifrado } from '../almacenamiento';
+import { guardarCifrado, leerCifrado, borrarCifrado } from '../almacenamiento';
 import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { TIPOS_DOCUMENTALES, esquemaExtraccion, type TipoDocumental, type ResultadoExtraccion } from '../ia/documentos';
@@ -31,6 +31,8 @@ export function tipoPorFirma(b: Buffer): string | null {
 export async function subirDocumento(s: SesionActiva, expedienteId: string, archivo: File, tipo: string) {
   const e = await obtenerExpediente(s, expedienteId);
   if (!puedeEditar(s, e)) throw new ErrorNegocio('No se pueden cargar documentos en el estado actual del expediente.');
+  // AUTO: la IA identifica el documento al analizarlo (se guarda como OTRO hasta entonces)
+  if (tipo === 'AUTO') tipo = 'OTRO';
   if (!(tipo in TIPOS_DOCUMENTALES)) throw new ErrorNegocio('Tipo de documento no válido.');
   if (!(await consumirLimite(`carga:${s.usuario.id}`, 60, 3600)).permitido) throw new ErrorNegocio('Demasiadas cargas en la última hora.');
   if (archivo.size === 0 || archivo.size > TAMANO_MAXIMO) throw new ErrorNegocio(`El archivo debe pesar entre 1 byte y ${LIMITE_CARGA_MB} MB.`);
@@ -61,25 +63,36 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string) {
   if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede modificar en su estado actual.');
   if (doc.estadoAnalisis === 'EN_CURSO') throw new ErrorNegocio('El documento ya se está analizando.');
   if (!(await consumirLimite(`ia:${s.usuario.id}`, 100, 3600)).permitido) throw new ErrorNegocio('Límite de análisis por hora alcanzado.');
-  const tipo = doc.tipoDocumental as TipoDocumental;
+  let tipo = doc.tipoDocumental as TipoDocumental;
   const instr = await instruccionesAprobadas('EXTRACCION', Array.isArray(e.actos) ? (e.actos as string[]) : []);
   await db.documento.update({ where: { id: doc.id }, data: { estadoAnalisis: 'EN_CURSO' } });
   const analisis = await db.analisisIA.create({ data: { expedienteId: e.id, proposito: 'EXTRACCION', modelo: process.env.CLAUDE_MODELO_EXTRACCION || 'claude-opus-5-5', estado: 'EN_CURSO', documentoId: doc.id, versionInstruccion: instr.version } });
   try {
     const bytes = await leerCifrado(doc.rutaCifrada);
-    const r = await llamarEstructurado<ResultadoExtraccion>({
+    const extraer = (t: TipoDocumental) => llamarEstructurado<ResultadoExtraccion>({
       proposito: 'EXTRACCION',
       sistema: SISTEMA_EXTRACCION + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
       contenido: [
-        bloqueDocumento(bytes, doc.mime, `${TIPOS_DOCUMENTALES[tipo]} – ${doc.nombreOriginal}`),
-        { type: 'text', text: `Tipo de documento declarado por el usuario: ${tipo} (${TIPOS_DOCUMENTALES[tipo]}). Extrae los datos según el esquema.` },
+        bloqueDocumento(bytes, doc.mime, `${TIPOS_DOCUMENTALES[t]} – ${doc.nombreOriginal}`),
+        { type: 'text', text: t === 'OTRO'
+          ? 'El usuario no indicó qué documento es. Identifícalo en tipo_detectado y extrae los datos relevantes.'
+          : `Tipo de documento declarado por el usuario: ${t} (${TIPOS_DOCUMENTALES[t]}). Extrae los datos según el esquema.` },
       ],
-      esquema: esquemaExtraccion(tipo),
+      esquema: esquemaExtraccion(t),
     });
+    let r = await extraer(tipo);
+    const consumo = { tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs };
+    // Si la IA reconoce otro tipo de documento, se extrae de nuevo con el esquema que le corresponde
+    const detectado = r.datos.tipo_detectado;
+    if (detectado && detectado !== tipo && detectado !== 'OTRO' && detectado in TIPOS_DOCUMENTALES) {
+      tipo = detectado;
+      r = await extraer(tipo);
+      consumo.tokensEntrada += r.tokensEntrada; consumo.tokensSalida += r.tokensSalida; consumo.tokensCacheLectura += r.tokensCacheLectura; consumo.duracionMs += r.duracionMs;
+    }
     const sugerencias = sugerenciasDesdeHechos(tipo, r.datos);
     await db.$transaction([
-      db.documento.update({ where: { id: doc.id }, data: { estadoAnalisis: 'COMPLETADO', hechos: r.datos as unknown as Prisma.InputJsonValue } }),
-      db.analisisIA.update({ where: { id: analisis.id }, data: { estado: 'COMPLETADO', modelo: r.modelo, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs } }),
+      db.documento.update({ where: { id: doc.id }, data: { estadoAnalisis: 'COMPLETADO', tipoDocumental: tipo, hechos: r.datos as unknown as Prisma.InputJsonValue } }),
+      db.analisisIA.update({ where: { id: analisis.id }, data: { estado: 'COMPLETADO', modelo: r.modelo, ...consumo } }),
       // Sugerencias anteriores del mismo documento que nadie tocó se reemplazan
       db.datoExtraido.deleteMany({ where: { documentoId: doc.id, estado: 'PENDIENTE' } }),
       db.datoExtraido.createMany({
@@ -99,6 +112,25 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string) {
     if (!(err instanceof ErrorIA)) console.error('[analizarDocumento]', err);
     throw new ErrorNegocio(mensaje);
   }
+}
+
+/**
+ * Retira un documento mientras el expediente está en elaboración (p. ej. para recargarlo cuando el
+ * asistente advierte que está incompleto o no corresponde). Sus sugerencias sin decidir se eliminan;
+ * los datos ya aplicados al formulario se conservan. La auditoría guarda el hash del archivo retirado.
+ */
+export async function eliminarDocumento(s: SesionActiva, documentoId: string) {
+  const doc = await db.documento.findUniqueOrThrow({ where: { id: documentoId } });
+  const e = await obtenerExpediente(s, doc.expedienteId);
+  if (!puedeEditar(s, e)) throw new ErrorNegocio('No se pueden retirar documentos en el estado actual del expediente.');
+  if (doc.estadoAnalisis === 'EN_CURSO') throw new ErrorNegocio('El documento se está analizando; espere a que termine.');
+  await db.$transaction([
+    db.datoExtraido.deleteMany({ where: { documentoId: doc.id, estado: 'PENDIENTE' } }),
+    db.datoExtraido.updateMany({ where: { documentoId: doc.id }, data: { documentoId: null } }),
+    db.documento.delete({ where: { id: doc.id } }),
+  ]);
+  await borrarCifrado(doc.rutaCifrada).catch((err) => console.error('[eliminarDocumento]', err));
+  await auditar({ ...datosAuditoria(s), accion: 'DOCUMENTO_RETIRADO', entidad: 'documento', entidadId: doc.id, detalle: { expedienteId: doc.expedienteId, tipo: doc.tipoDocumental, sha256: doc.hashSha256 } });
 }
 
 /** Descarga individual (siempre auditada); no existe exportación masiva */

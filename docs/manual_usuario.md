@@ -23,13 +23,27 @@ Tenga en cuenta:
 | Paso | Dónde | Qué hacer |
 | --- | --- | --- |
 | 1 | **Nuevo expediente** | Marque los actos de la escritura y ordénelos como deben aparecer (p. ej. cancelación de patrimonio y luego compraventa). |
-| 2 | **Documentos** | Cargue los documentos soporte (PDF o fotos): cédulas, certificado de tradición, paz y salvo, poderes, etc. Elija el tipo correcto de cada uno. La lista superior muestra cuáles faltan. |
-| 3 | **Documentos → Analizar con IA** | La IA lee cada documento y propone los datos. Abra "Datos extraídos" para ver de dónde salió cada dato (página y texto) y con qué confianza. |
-| 4 | **Formulario** | Complete y corrija los pasos: datos de la escritura, personas, inmuebles y el paso de cada acto. |
+| 2 | **Documentos** | Cargue los documentos soporte (PDF o fotos): cédulas, certificado de tradición, paz y salvo, poderes, etc. Si no sabe qué tipo es un documento, elija **"Detectar automáticamente"**. Un documento equivocado se puede **retirar** y cargar el correcto. |
+| 3 | **Asistente IA** | Pulse **"Analizar documentos y preparar preguntas"** (ver abajo). Revise el tipo de escritura, atienda las inconsistencias y responda las preguntas. |
+| 4 | **Formulario** | Opcional: revise o corrija cualquier dato en detalle (personas, inmuebles y el paso de cada acto). |
 | 5 | **Observaciones** | Ejecute **"Reglas + revisión de la IA"** y atienda cada observación. |
-| 6 | **Borrador** | Genere el borrador; descárguelo en Word o PDF y léalo completo. |
+| 6 | **Asistente IA** o **Borrador** | Genere la escritura en Word; descárguela y léala completa. |
 | 7 | **Resumen y flujo → Enviar a revisión** | El revisor lo aprueba o lo devuelve con comentarios. |
 | 8 | Lista para firma | El expediente queda listo para la firma del notario. |
+
+### Asistente IA
+
+Al pulsar **"Analizar documentos y preparar preguntas"** la IA, en segundo plano (puede salir de la página y volver):
+
+1. Lee los documentos que aún no se han analizado e identifica los que se cargaron como "Detectar automáticamente".
+2. Lleva al expediente los datos que leyó con confianza. Los dudosos (borrosos, de formato inválido o que no coinciden entre documentos) no se aplican: se convierten en preguntas.
+3. Verifica que los documentos correspondan a los actos elegidos: si indican otro tipo de escritura, lo advierte y propone los actos que corresponden para que usted confirme o los deje como están. También indica los documentos que faltan.
+4. Señala las **inconsistencias** entre documentos (nombres o cédulas distintos, vendedor que no es el titular, certificados vencidos, gravámenes vigentes…). Para cada una puede:
+   - **Recargar el documento**: retírelo en *Documentos*, cargue el correcto y pulse **"Analizar de nuevo"**.
+   - **Continuar con los datos actuales**: la inconsistencia queda registrada como aceptada y el revisor la verá.
+5. Hace las **preguntas** necesarias para completar la escritura (estado civil, quién vende y quién compra, precio, afectación a vivienda familiar…). Cuando un documento sugiere la respuesta, aparece ya escrita con su fuente: verifíquela. Las preguntas marcadas como *obligatorio* deben responderse; las demás pueden dejarse sin respuesta. Si al guardar falta algún dato obligatorio, el asistente agrega la pregunta.
+
+La IA no redacta la escritura: el Word se arma con las plantillas aprobadas por el notario y con el formato de la notaría. Quedan **en blanco** para el funcionario que hace la terminación: número y fecha de la escritura, hojas de papel notarial, derechos notariales y retención en la fuente, y los datos de firma de cada otorgante.
 
 ## 3. Formulario por pasos
 

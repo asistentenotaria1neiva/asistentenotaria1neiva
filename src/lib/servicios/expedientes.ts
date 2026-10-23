@@ -40,10 +40,15 @@ export const actosDe = (e: { actos: Prisma.JsonValue }): string[] => (Array.isAr
 
 // ------------------------------------------------------------------ creación
 
+function validarActos(actos: string[]): string[] {
+  if (!actos.length) throw new ErrorNegocio('Seleccione al menos un acto con plantilla disponible.');
+  if (actos.some((a) => !ESQUEMAS[a])) throw new ErrorNegocio('Hay actos sin plantilla disponible.');
+  if (new Set(actos).size !== actos.length) throw new ErrorNegocio('Un acto no puede repetirse en la misma escritura.');
+  return actos;
+}
+
 export async function crearExpediente(s: SesionActiva, actos: string[]): Promise<string> {
-  const validos = actos.filter((a) => ESQUEMAS[a]);
-  if (!validos.length) throw new ErrorNegocio('Seleccione al menos un acto con plantilla disponible.');
-  if (new Set(validos).size !== validos.length) throw new ErrorNegocio('Un acto no puede repetirse en la misma escritura.');
+  const validos = validarActos(actos);
   // Si el catálogo falta (p. ej. tras restaurar un respaldo) se recarga antes de crear
   if (!(await db.tipoEscritura.findUnique({ where: { id: validos[0] } }))) await asegurarCatalogo();
   const anio = new Date().getFullYear();
@@ -56,6 +61,17 @@ export async function crearExpediente(s: SesionActiva, actos: string[]): Promise
   });
   await auditar({ ...datosAuditoria(s), accion: 'EXPEDIENTE_CREADO', entidad: 'expediente', entidadId: exp.id, detalle: { numero: exp.numeroInterno, actos: validos } });
   return exp.id;
+}
+
+/** Cambia los actos de la escritura (si el asistente advierte que los documentos indican otro tipo). Los datos de los actos retirados se conservan. */
+export async function cambiarActos(s: SesionActiva, id: string, actos: string[]) {
+  const e = await obtenerExpediente(s, id);
+  if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede editar en su estado actual.');
+  const validos = validarActos(actos);
+  if (JSON.stringify(validos) === JSON.stringify(actosDe(e))) return;
+  if (!(await db.tipoEscritura.findUnique({ where: { id: validos[0] } }))) await asegurarCatalogo();
+  await db.expediente.update({ where: { id }, data: { actos: validos, tipoId: validos[0] } });
+  await auditar({ ...datosAuditoria(s), accion: 'EXPEDIENTE_ACTOS_CAMBIADOS', entidad: 'expediente', entidadId: id, detalle: { de: actosDe(e), a: validos } });
 }
 
 // ------------------------------------------------------------------ normalización
@@ -188,21 +204,66 @@ async function detectarCorrecciones(s: SesionActiva, e: Expediente, despues: Dat
   }
 }
 
+/** Escribe el valor de una sugerencia en los datos; crea la persona o el inmueble si no existe. false = no aplicable. */
+function aplicarEnDatos(datos: DatosExpediente, campo: string, valor: unknown): boolean {
+  let destino = resolverDestino(datos, campo);
+  if (!destino) return false;
+  if (destino.indice < 0) {
+    const clave = campo.split(':')[1].split('.')[0];
+    if (destino.base === 'persona') datos.personas.push({ id: crypto.randomUUID(), tipo_persona: 'NATURAL', nombre: '', tipo_documento: 'CC', numero_documento: clave, domicilio: 'la ciudad de Neiva (H)' } as Persona);
+    else if (destino.base === 'inmueble') datos.inmuebles.push({ id: crypto.randomUUID(), tipo_inmueble: 'LOTE', direccion: '', municipio: 'Neiva', departamento: 'Huila', linderos: '', matricula: campo.startsWith('inmueble:') ? clave : '', orip: 'NEIVA - HUILA', cedula_catastral: campo.startsWith('catastral:') ? clave : '', tradicion: { modo: 'COMPRA', tradente: '', escritura_numero: '', escritura_fecha: '', notaria: '' }, fecha_certificado_tradicion: '' } as Inmueble);
+    destino = resolverDestino(datos, campo)!;
+  }
+  escribirRuta(datos as unknown as Record<string, unknown>, destino.ruta, valor);
+  return true;
+}
+
+/** Orden de aplicación: primero los inmuebles del certificado, para que el paz y salvo encuentre su cédula catastral */
+const ORDEN_SUGERENCIA = ['inmueble:', 'persona:', 'catastral:', 'acto:'];
+const ordenSugerencia = (campo: string) => ORDEN_SUGERENCIA.findIndex((p) => campo.startsWith(p));
+
+/**
+ * Asistente de IA: aplica de una vez las sugerencias confiables (confianza alta o media y formato
+ * válido) que no chocan con otra sugerencia ni con un dato ya digitado. Las dudosas y las que
+ * chocan quedan pendientes y se devuelven para que el asistente pregunte por ellas.
+ */
+export async function aplicarSugerenciasConfiables(s: SesionActiva, expedienteId: string) {
+  const e = await obtenerExpediente(s, expedienteId);
+  if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede editar en su estado actual.');
+  const datos = datosDe(e);
+  const pendientes = await db.datoExtraido.findMany({ where: { expedienteId, estado: 'PENDIENTE' }, include: { documento: { select: { nombreOriginal: true } } }, orderBy: { creadoEn: 'asc' } });
+  const porCampo = new Map<string, typeof pendientes>();
+  for (const d of pendientes) porCampo.set(d.campo, [...(porCampo.get(d.campo) ?? []), d]);
+  const aceptados: typeof pendientes = [];
+  const dudosos: { campo: string; valores: { valor: unknown; documento: string; confianza: string }[]; motivo: string }[] = [];
+  const iguales = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  for (const [campo, grupo] of [...porCampo].sort(([a], [b]) => ordenSugerencia(a) - ordenSugerencia(b))) {
+    const valores = grupo.map((d) => ({ valor: d.valor, documento: d.documento?.nombreOriginal ?? 'documento', confianza: d.confianza }));
+    if (grupo.some((d) => d.revisionManual)) { dudosos.push({ campo, valores, motivo: 'confianza baja o formato dudoso' }); continue; }
+    if (grupo.some((d) => !iguales(d.valor, grupo[0].valor))) { dudosos.push({ campo, valores, motivo: 'los documentos no coinciden' }); continue; }
+    const destino = resolverDestino(datos, campo);
+    const actual = destino && destino.indice >= 0 ? leerRuta(datos, destino.ruta) : undefined;
+    if (actual !== undefined && actual !== '' && !iguales(actual, grupo[0].valor)) { dudosos.push({ campo, valores: [...valores, { valor: actual, documento: 'dato ya digitado', confianza: 'ALTA' }], motivo: 'el documento no coincide con lo digitado' }); continue; }
+    if (aplicarEnDatos(datos, campo, grupo[0].valor)) aceptados.push(...grupo);
+  }
+  if (aceptados.length) {
+    await db.$transaction([
+      db.expediente.update({ where: { id: e.id }, data: { datos: datos as unknown as Prisma.InputJsonValue } }),
+      ...aceptados.map((d) => db.datoExtraido.update({ where: { id: d.id }, data: { estado: 'ACEPTADO', valorFinal: d.valor as Prisma.InputJsonValue } })),
+    ]);
+    await sincronizarEntidades(e.id, datos);
+    await auditar({ ...datosAuditoria(s), accion: 'SUGERENCIAS_APLICADAS_ASISTENTE', entidad: 'expediente', entidadId: e.id, detalle: { aplicadas: aceptados.length, dudosas: dudosos.length } });
+  }
+  return { aplicadas: aceptados.length, dudosos, datos };
+}
+
 /** Aplica una sugerencia de la IA (crea la persona/inmueble si no existe) */
 export async function aplicarSugerencia(s: SesionActiva, datoId: string) {
   const d = await db.datoExtraido.findUniqueOrThrow({ where: { id: datoId } });
   const e = await obtenerExpediente(s, d.expedienteId);
   if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede editar en su estado actual.');
   const datos = datosDe(e);
-  let destino = resolverDestino(datos, d.campo);
-  if (!destino) throw new ErrorNegocio('Sugerencia no aplicable.');
-  if (destino.indice < 0) {
-    const clave = d.campo.split(':')[1].split('.')[0];
-    if (destino.base === 'persona') datos.personas.push({ id: crypto.randomUUID(), tipo_persona: 'NATURAL', nombre: '', tipo_documento: 'CC', numero_documento: clave, domicilio: 'la ciudad de Neiva (H)' } as Persona);
-    else if (destino.base === 'inmueble') datos.inmuebles.push({ id: crypto.randomUUID(), tipo_inmueble: 'LOTE', direccion: '', municipio: 'Neiva', departamento: 'Huila', linderos: '', matricula: d.campo.startsWith('inmueble:') ? clave : '', orip: 'NEIVA - HUILA', cedula_catastral: d.campo.startsWith('catastral:') ? clave : '', tradicion: { modo: 'COMPRA', tradente: '', escritura_numero: '', escritura_fecha: '', notaria: '' }, fecha_certificado_tradicion: '' } as Inmueble);
-    destino = resolverDestino(datos, d.campo)!;
-  }
-  escribirRuta(datos as unknown as Record<string, unknown>, destino.ruta, d.valor);
+  if (!aplicarEnDatos(datos, d.campo, d.valor)) throw new ErrorNegocio('Sugerencia no aplicable.');
   await db.$transaction([
     db.expediente.update({ where: { id: e.id }, data: { datos: datos as unknown as Prisma.InputJsonValue } }),
     db.datoExtraido.update({ where: { id: d.id }, data: { estado: 'ACEPTADO', valorFinal: d.valor as Prisma.InputJsonValue } }),

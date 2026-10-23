@@ -125,7 +125,7 @@ test('digitador: cambio de contraseña, expediente, carga cifrada, formulario y 
   await captura(page, '03-documentos');
 
   // Formulario: el paso del acto no deja avanzar sin datos obligatorios
-  await page.getByRole('link', { name: '4 · Formulario' }).click();
+  await page.getByRole('link', { name: '3 · Formulario' }).click();
   await page.waitForLoadState('networkidle');
   await page.getByRole('button', { name: /^[0-9]+. Compraventa$/ }).click();
   await expect(page.getByRole('heading', { name: 'Compraventa', level: 2 })).toBeVisible();
@@ -144,7 +144,7 @@ test('digitador: cambio de contraseña, expediente, carga cifrada, formulario y 
   await captura(page, '04-formulario-errores');
 
   // Reglas: el expediente incompleto tiene observaciones críticas
-  await page.getByRole('link', { name: /5 · Observaciones/ }).click();
+  await page.getByRole('link', { name: /4 · Observaciones/ }).click();
   await page.getByRole('button', { name: 'Ejecutar reglas' }).click();
   await expect(page.locator('.aviso[role=status]').last()).toContainText('Revisión ejecutada');
   await page.reload();
@@ -152,7 +152,7 @@ test('digitador: cambio de contraseña, expediente, carga cifrada, formulario y 
   await captura(page, '05-observaciones');
 
   // El borrador no se genera con críticas abiertas
-  await page.getByRole('link', { name: /6 · Borrador/ }).click();
+  await page.getByRole('link', { name: /5 · Borrador/ }).click();
   await expect(page.getByText(/observación\(es\) crítica\(s\) abiertas/)).toBeVisible();
   await cerrarSesion(page);
 });

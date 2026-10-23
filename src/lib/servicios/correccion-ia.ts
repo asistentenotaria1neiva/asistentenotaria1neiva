@@ -13,9 +13,8 @@ import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
-import { PASOS_COMUNES, ESQUEMAS, CAMPOS_PERSONA, CAMPOS_INMUEBLE, type Campo } from '../escritura/esquemas';
+import { resolverRuta, validarValor, catalogo } from '../escritura/rutas';
 import { leerRuta, escribirRuta } from '../escritura/validar-formulario';
-import type { DatosExpediente } from '../escritura/tipos';
 import { llamarEstructurado, ErrorIA } from '../ia/cliente';
 import { SISTEMA_CORRECCION, ESQUEMA_CORRECCION } from '../ia/instrucciones';
 import { obtenerExpediente, puedeEditar, guardarPaso, datosDe, actosDe, ErrorNegocio, type ActualizacionPaso } from './expedientes';
@@ -36,75 +35,6 @@ export interface PropuestaCorreccion {
 export interface ResultadoCorreccion {
   correcciones: PropuestaCorreccion[];
   sinCorreccion: { observacionId: string; motivo: string }[];
-}
-
-/** Campo del formulario al que apunta una ruta de corrección, con su ruta dentro de los datos */
-interface Destino { campo: Campo; rutaDatos: string; etiqueta: string; paso: 'escritura' | 'personas' | 'inmuebles' | { acto: string } }
-
-const camposActo = (acto: string) => ESQUEMAS[acto]?.pasos.flatMap((p) => p.campos) ?? [];
-
-function resolverRuta(datos: DatosExpediente, actos: string[], ruta: string): Destino | null {
-  const m = /^(escritura|persona:([^.]+)|inmueble:([^.]+)|acto:([^.]+))\.([a-z_]+(?:\.[a-z_]+)?)$/.exec(ruta);
-  if (!m) return null;
-  const [, , personaId, inmuebleId, acto, id] = m;
-  if (m[1] === 'escritura') {
-    const campo = PASOS_COMUNES[0].campos.find((c) => c.id === id);
-    return campo ? { campo, rutaDatos: `escritura.${id}`, etiqueta: `Escritura · ${campo.etiqueta}`, paso: 'escritura' } : null;
-  }
-  if (personaId) {
-    const i = datos.personas.findIndex((p) => p.id === personaId);
-    const campo = CAMPOS_PERSONA.find((c) => c.id === id);
-    return i >= 0 && campo ? { campo, rutaDatos: `personas.${i}.${id}`, etiqueta: `${datos.personas[i].nombre || 'Persona'} · ${campo.etiqueta}`, paso: 'personas' } : null;
-  }
-  if (inmuebleId) {
-    const i = datos.inmuebles.findIndex((x) => x.id === inmuebleId);
-    const campo = CAMPOS_INMUEBLE.find((c) => c.id === id);
-    return i >= 0 && campo ? { campo, rutaDatos: `inmuebles.${i}.${id}`, etiqueta: `${datos.inmuebles[i].matricula || datos.inmuebles[i].nombre_corto || 'Inmueble'} · ${campo.etiqueta}`, paso: 'inmuebles' } : null;
-  }
-  if (!actos.includes(acto)) return null;
-  const campo = camposActo(acto).find((c) => c.id === id);
-  return campo ? { campo, rutaDatos: `actos.${acto}.${id}`, etiqueta: `${ESQUEMAS[acto].titulo} · ${campo.etiqueta}`, paso: { acto } } : null;
-}
-
-/** Comprueba que el valor propuesto tenga el tipo del campo; devuelve el valor normalizado o un error */
-function validarValor(campo: Campo, valor: unknown, datos: DatosExpediente): { valor: unknown } | { error: string } {
-  const esPersona = (x: unknown) => typeof x === 'string' && datos.personas.some((p) => p.id === x);
-  const esInmueble = (x: unknown) => typeof x === 'string' && datos.inmuebles.some((i) => i.id === x);
-  switch (campo.tipo) {
-    case 'texto': case 'textoLargo':
-      return typeof valor === 'string' ? { valor: valor.trim() } : { error: 'se esperaba un texto' };
-    case 'fecha':
-      return typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor) ? { valor } : { error: 'se esperaba una fecha AAAA-MM-DD' };
-    case 'entero': case 'moneda': case 'medida': {
-      const n = typeof valor === 'number' ? valor : Number(String(valor).replace(/\s/g, ''));
-      return Number.isFinite(n) ? { valor: n } : { error: 'se esperaba un número' };
-    }
-    case 'booleano':
-      return typeof valor === 'boolean' ? { valor } : { error: 'se esperaba sí o no' };
-    case 'opciones':
-      return campo.opciones?.some((o) => o.valor === valor) ? { valor } : { error: 'no es una de las opciones del campo' };
-    case 'persona':
-      return esPersona(valor) ? { valor } : { error: 'no es una persona registrada' };
-    case 'personas':
-      return Array.isArray(valor) && valor.every(esPersona) ? { valor } : { error: 'no son personas registradas' };
-    case 'inmueble':
-      return esInmueble(valor) ? { valor } : { error: 'no es un inmueble registrado' };
-    case 'inmuebles':
-      return Array.isArray(valor) && valor.every(esInmueble) ? { valor } : { error: 'no son inmuebles registrados' };
-    case 'lista':
-      return Array.isArray(valor) && valor.every((x) => x && typeof x === 'object') ? { valor } : { error: 'se esperaba una lista' };
-  }
-}
-
-/** Catálogo compacto de los campos modificables, para que la IA use rutas y valores válidos */
-function catalogo(actos: string[]) {
-  const describir = (c: Campo) => ({ campo: c.id, etiqueta: c.etiqueta, tipo: c.tipo, ...(c.opciones ? { opciones: c.opciones.map((o) => o.valor) } : {}) });
-  return {
-    escritura: PASOS_COMUNES[0].campos.map(describir),
-    persona: CAMPOS_PERSONA.map(describir),
-    inmueble: CAMPOS_INMUEBLE.map(describir),
-    actos: Object.fromEntries(actos.filter((a) => ESQUEMAS[a]).map((a) => [a, camposActo(a).map(describir)])),
-  };
 }
 
 /** Una propuesta EN_CURSO más antigua que esto se da por interrumpida (p. ej., el servidor se reinició) */

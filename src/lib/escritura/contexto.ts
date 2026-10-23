@@ -166,7 +166,8 @@ export function prepararContexto(datos: DatosExpediente, ordenActos: string[], n
     comprobantes: comprobantes.map((texto) => ({ texto })),
     hay_fiscales: comprobantes.some((c) => c.startsWith('Certificados de paz y salvos')),
     hay_art61: defs.some((d) => d.enajenacion),
-    hay_retefuente: defs.some((d) => d.enajenacion) && !!e.retefuente,
+    // En las enajenaciones la línea se imprime aunque esté vacía: la completa quien hace la terminación
+    hay_retefuente: defs.some((d) => d.enajenacion),
     advertencia_registro: defs.some((d) => d.registro),
     hay_libro_varios: defs.some((d) => d.libroVarios),
     firmantes: listaFirmantes.map((f) => ({ nombre: f.nombre, calidad: f.calidades.join(' '), abogado: f.abogado })),

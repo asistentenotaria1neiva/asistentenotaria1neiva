@@ -5,7 +5,7 @@ import { obtenerExpediente, puedeEditar, actosDe } from '@/lib/servicios/expedie
 import { LIMITE_CARGA_MB } from '@/lib/servicios/documentos';
 import { TIPOS_DOCUMENTALES, type DatoConFuente } from '@/lib/ia/documentos';
 import { ESQUEMAS } from '@/lib/escritura/esquemas';
-import { accionSubirDocumento, accionAnalizarDocumento, accionAnalizarPendientes } from '../../acciones';
+import { accionSubirDocumento, accionAnalizarDocumento, accionAnalizarPendientes, accionEliminarDocumento } from '../../acciones';
 import { FormularioCarga, BotonAccion } from '../../formularios';
 import { EtiquetaConfianza, Tabla } from '../../../componentes';
 
@@ -67,18 +67,19 @@ export default async function Documentos({ params }: { params: Promise<{ id: str
         <section className="tarjeta">
           <h2>Cargar documentos</h2>
           <p className="suave">Los archivos se cifran al guardarse y solo el servidor puede leerlos. Para el análisis se envían a la API de Claude (ver docs/seguridad.md).</p>
-          <FormularioCarga accion={accionSubirDocumento.bind(null, id)} tipos={Object.entries(TIPOS_DOCUMENTALES)} limiteMb={LIMITE_CARGA_MB} />
+          <FormularioCarga accion={accionSubirDocumento.bind(null, id)} tipos={[['AUTO', 'Detectar automáticamente (la IA identifica el documento)'], ...Object.entries(TIPOS_DOCUMENTALES)]} limiteMb={LIMITE_CARGA_MB} />
           {!iaDisponible && <div className="aviso alerta">El análisis con IA no está disponible: falta configurar la clave de la API en el servidor.</div>}
           {iaDisponible && pendientes > 0 && <BotonAccion accion={accionAnalizarPendientes.bind(null, id)} texto={`Analizar con IA los ${pendientes} documento(s) pendiente(s)`} textoPendiente="Analizando… (puede tardar varios minutos)" />}
         </section>
       )}
       {docs.map((d) => (
-        <section className="tarjeta" key={d.id}>
+        <section className="tarjeta" key={d.id} id={`doc-${d.id}`}>
           <div className="fila entre">
             <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}><strong>{d.nombreOriginal}</strong><div className="suave">{TIPOS_DOCUMENTALES[d.tipoDocumental as keyof typeof TIPOS_DOCUMENTALES]} · {(d.tamano / 1024).toFixed(0)} KB</div></div>
             <div className="fila">
               <span className={`etiqueta ${d.estadoAnalisis === 'COMPLETADO' ? 'ok' : d.estadoAnalisis === 'ERROR' ? 'critica' : ''}`}>{d.estadoAnalisis.toLowerCase().replace('_', ' ')}</span>
               <a className="boton secundario pequeno" href={`/api/documentos/${d.id}`} target="_blank" rel="noopener">Ver</a>
+              {editable && <BotonAccion accion={accionEliminarDocumento.bind(null, id, d.id)} texto="Retirar" clase="secundario pequeno" confirmar={`¿Retirar «${d.nombreOriginal}»? Podrá cargar el documento correcto en su lugar.`} />}
               {editable && iaDisponible && <BotonAccion accion={accionAnalizarDocumento.bind(null, id, d.id)} texto={d.estadoAnalisis === 'COMPLETADO' ? 'Analizar de nuevo' : 'Analizar con IA'} clase="pequeno" textoPendiente="Analizando…" />}
             </div>
           </div>
@@ -86,7 +87,7 @@ export default async function Documentos({ params }: { params: Promise<{ id: str
         </section>
       ))}
       {!docs.length && <p className="suave vacio tarjeta">Aún no hay documentos cargados.</p>}
-      <div className="fila" style={{ justifyContent: 'flex-end' }}><Link className="boton" href={`/expedientes/${id}/formulario`}>Continuar al formulario →</Link></div>
+      <div className="fila" style={{ justifyContent: 'flex-end' }}><Link className="boton" href={`/expedientes/${id}/asistente`}>Continuar con el asistente de IA →</Link></div>
     </>
   );
 }
