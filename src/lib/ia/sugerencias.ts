@@ -147,18 +147,6 @@ export function sugerenciasDesdeHechos(tipo: TipoDocumental, r: ResultadoExtracc
       }
       break;
     }
-    case 'REGISTRO_CIVIL_DEFUNCION':
-      s.push(crear('acto:derechos_herenciales.causante_nombre', D('nombre'), may));
-      s.push(crear('acto:derechos_herenciales.causante_documento', D('documento'), (v) => validarCedula(String(v)).normalizado ?? v, validarCedula));
-      s.push(crear('acto:derechos_herenciales.causante_fecha_defuncion', D('fecha_defuncion'), fecha10, (v) => validarFecha(v)));
-      break;
-    case 'REGISTRO_CIVIL_MATRIMONIO':
-      s.push(crear('acto:divorcio_civil.matrimonio_fecha', D('fecha_matrimonio'), fecha10, (v) => validarFecha(v)));
-      s.push(crear('acto:divorcio_civil.matrimonio_lugar', D('lugar_matrimonio'), (v) => String(v).trim()));
-      s.push(crear('acto:divorcio_civil.matrimonio_serial', D('serial'), (v) => String(v).trim()));
-      s.push(crear('acto:divorcio_civil.matrimonio_inscripcion', D('fecha_inscripcion'), fecha10, (v) => validarFecha(v)));
-      s.push(crear('acto:divorcio_civil.matrimonio_registro', D('oficina_registro'), (v) => String(v).trim()));
-      break;
     default:
       break;
   }

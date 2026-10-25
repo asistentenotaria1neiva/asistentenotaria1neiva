@@ -20,7 +20,7 @@ import { hashContrasena } from '@/lib/seguridad/contrasenas';
 import type { DatosExpediente } from '@/lib/escritura/tipos';
 
 const caso = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'datos_prueba', 'casos.json'), 'utf8')).casos
-  .find((c: { clave: string }) => c.clave === 'tres_actos') as { actos: string[]; datos: DatosExpediente };
+  .find((c: { clave: string }) => c.clave === 'compraventa_encargada') as { actos: string[]; datos: DatosExpediente };
 
 const sufijo = Date.now().toString(36);
 let digitador: SesionActiva, revisor: SesionActiva, admin: SesionActiva;

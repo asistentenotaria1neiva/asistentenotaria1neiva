@@ -73,9 +73,10 @@ describe('cruces con el certificado de tradición', () => {
   it('embargo vigente bloquea la compraventa', () => {
     expect(codigos(entrada('compraventa_simple', [certificado({ anotaciones: [{ tipo: 'EMBARGO', numero: '012', especificacion: 'EMBARGO EJECUTIVO' }] })]))).toContain('CRITICA:R03-LIMITACION-VIGENTE');
   });
-  it('la hipoteca no se advierte si la misma escritura la cancela', () => {
+  it('hipoteca vigente no mencionada en la compraventa', () => {
     const e = entrada('compraventa_simple', [certificado({ anotaciones: [{ tipo: 'HIPOTECA', numero: '010', especificacion: 'HIPOTECA' }] })]);
-    e.actos = ['cancelacion_hipoteca', 'compraventa'];
+    expect(codigos(e)).toContain('ADVERTENCIA:R03-GRAVAMEN-VIGENTE');
+    e.datos.actos.compraventa.excepcion_gravamen = 'la hipoteca de la anotación 010';
     expect(codigos(e)).not.toContain('ADVERTENCIA:R03-GRAVAMEN-VIGENTE');
   });
   it('certificado antiguo y fecha distinta a la del formulario', () => {
@@ -94,7 +95,7 @@ describe('cruces con el certificado de tradición', () => {
 
 describe('reglas contra el error humano', () => {
   it('NIT con dígito de verificación errado', () => {
-    const e = entrada('cancelacion_hipoteca_banco', [], (dx) => { dx.personas[0].numero_documento = '860.002.964-5'; });
+    const e = entrada('compraventa_simple', [], (dx) => { Object.assign(dx.personas[0], { tipo_persona: 'JURIDICA', tipo_documento: 'NIT', numero_documento: '860.002.964-5' }); });
     expect(codigos(e)).toContain('CRITICA:R01-DOCUMENTO');
   });
   it('dos personas con el mismo documento', () => {
@@ -117,35 +118,17 @@ describe('reglas contra el error humano', () => {
     const e = entrada('compraventa_simple', [], (dx) => { dx.actos.compraventa.precio = 20_000_000; });
     expect(codigos(e)).toContain('ADVERTENCIA:R05-PRECIO-AVALUO');
   });
-  it('condición resolutoria cuyo plazo aún no se cumple', () => {
-    const e = entrada('tres_actos', [], (dx) => { dx.inmuebles[0].tradicion.escritura_fecha = '2025-03-26'; });
-    expect(codigos(e)).toContain('CRITICA:R06-PLAZO-CONDICION');
-  });
-  it('condición resolutoria vencida no genera alerta de plazo', () => {
-    expect(codigos(entrada('tres_actos'))).not.toContain('CRITICA:R06-PLAZO-CONDICION');
-  });
-  it('cancelación de patrimonio con beneficiario menor', () => {
-    const e = entrada('compraventa_simple');
-    e.actos = ['cancelacion_patrimonio'];
-    e.datos.actos.cancelacion_patrimonio = { propietario_id: 'p1', inmueble_id: 'i1', hijos: [{ nombre: 'HIJO PRUEBA', mayor_de_edad: false }] };
-    expect(codigos(e)).toContain('CRITICA:R07-PATRIMONIO-MENORES');
-  });
   it('cédula cargada con número distinto al digitado', () => {
     const ced: DocumentoAnalizado = { id: 'c1', nombre: 'cedula.jpg', tipo: 'CEDULA', hechos: { tipo_detectado: 'CEDULA', legible: true, observaciones: [], datos: { numero: d('1.075.000.112'), nombres: d('ANA LUCIA'), apellidos: d('PRUEBA ROJAS'), lugar_expedicion: d('NEIVA') } } };
     expect(codigos(entrada('compraventa_simple', [ced]))).toContain('CRITICA:R08-CEDULA-NUMERO');
   });
   it('apoderado sin poder cargado', () => {
-    expect(codigos(entrada('divorcio'))).toContain('ADVERTENCIA:R09-SIN-PODER');
+    const e = entrada('compraventa_simple', [], (dx) => { dx.personas[0].apoderado_id = dx.personas[1].id; });
+    expect(codigos(e)).toContain('ADVERTENCIA:R09-SIN-PODER');
   });
   it('borrador con datos sin diligenciar', () => {
     const e = entrada('compraventa_simple');
     e.borradorTexto = 'Texto «FALTA: a.precio_letras» resto';
     expect(codigos(e)).toContain('CRITICA:R12-BORRADOR-INCOMPLETO');
-  });
-  it('salida del país: autorización posterior a la mayoría de edad y otorgante que no es padre', () => {
-    const rc: DocumentoAnalizado = { id: 'rc', nombre: 'registro.pdf', tipo: 'REGISTRO_CIVIL_NACIMIENTO', hechos: { tipo_detectado: 'REGISTRO_CIVIL_NACIMIENTO', legible: true, observaciones: [], datos: { nuip: d('1075809000'), fecha_nacimiento: d('2010-05-01'), padre_documento: d('999'), madre_documento: d('1075000502') } } };
-    const c = codigos(entrada('salida_pais', [rc]));
-    expect(c).toContain('CRITICA:R10-PATRIA-POTESTAD');
-    expect(c).toContain('ADVERTENCIA:R10-MAYORIA-EDAD');
   });
 });

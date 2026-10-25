@@ -48,50 +48,16 @@ describe('generación de borradores sobre las plantillas', () => {
     expect(texto).not.toContain('En la ciudad de Neiva');
   });
 
-  it('escritura de tres actos numera los actos y concuerda el género', async () => {
-    const { texto } = await generar('tres_actos');
+  it('compraventa con fecha, notaria encargada y coadyuvante', async () => {
+    const { texto } = await generar('compraventa_encargada');
     expect(texto).toContain('ESCRITURA PÚBLICA NÚMERO: DOS MIL NOVECIENTOS CUARENTA (2.940)');
-    expect(texto).toContain('PRIMER ACTO - CANCELACION CONDICION RESOLUTORIA');
-    expect(texto).toContain('SEGUNDO ACTO - CANCELACION AFECTACION A VIVIENDA FAMILIAR');
-    expect(texto).toContain('TERCER ACTO - COMPRAVENTA');
+    expect(texto).not.toContain('PRIMER ACTO'); // con un solo acto no se numeran
     expect(texto).toContain('cuya Notaria Encargada es la señora LAURA PATRICIA ENSAYO VARGAS');
     expect(texto).toContain('a los QUINCE (15) DÍAS del mes de OCTUBRE del año DOS MIL VEINTISEIS (2026)');
     expect(texto).toContain('JOSE ANTONIO PRUEBA LUNA, mayor de edad, domiciliado en la ciudad de Neiva (H), identificado con');
-    // "e" ante nombre que empieza por I
-    expect(texto).toContain('JOSE ANTONIO PRUEBA LUNA e INES MARIA EJEMPLO SOTO');
-    expect(texto).toContain('PROHIBICION DE TRANSFERENCIA POR EL TERMINO DE DOS AÑOS');
     expect(texto).toContain('quien coadyuva la presente escritura');
     expect(texto).toContain('NO QUEDA AFECTADO A VIVIENDA FAMILIAR, por voluntad expresa y conjunta de los compañeros permanentes');
     expect(texto).toContain('LA NOTARIA E,');
-  });
-
-  it('cancelación de hipoteca usa la fórmula de la entidad con poder', async () => {
-    const { texto } = await generar('cancelacion_hipoteca_banco');
-    expect(texto).toContain('quien obra en nombre y en representación del BANCO DE BOGOTA S.A, con NIT. 860.002.964-4, establecimiento bancario con domicilio principal en la ciudad de Bogotá D.C, en virtud del poder especial otorgado mediante escritura pública número 9999');
-    expect(texto).toContain('cancela totalmente la hipoteca constituida por el señor JORGE IVAN DEUDOR FICTICIO');
-    expect(texto).toContain('CIENTO OCHO MILLONES DE PESOS M/CTE ($108.000.000)');
-    expect(texto).toContain('se trata de un ACTO SIN CUANTIA');
-    expect(texto).toContain('en el Municipio de Palermo, Departamento del Huila');
-    expect(texto).toContain('EN REPRESENTACION DEL BANCO DE BOGOTA S.A.');
-    expect(texto).toContain('(INVOLUCRADO)');
-  });
-
-  it('divorcio incluye oficios a registro y libro de varios', async () => {
-    const { texto } = await generar('divorcio');
-    expect(texto).toContain('Abogado en ejercicio con tarjeta profesional número 999999 del Consejo Superior de la Judicatura, quien obra en nombre y en representación de NUBIA PRUEBA SANCHEZ');
-    expect(texto).toContain('estado civil CASADOS ENTRE SI, CON SOCIEDAD CONYUGAL VIGENTE');
-    expect(texto).toContain('En dicho matrimonio no hubo procreación de hijos.');
-    expect(texto).toContain('LIBRO DE VARIOS');
-    expect(texto).toContain('NOTARIA PRIMERA DE FLORENCIA - CAQUETA');
-    expect(texto).toContain('al TOMO 99 - FOLIO 11 de fecha 09 de NOVIEMBRE de 1964');
-    expect(texto).not.toContain('inscribir la copia en el registro competente'); // no es acto registrable
-  });
-
-  it('salida del país concuerda con la menor', async () => {
-    const { texto } = await generar('salida_pais');
-    expect(texto).toContain('obra en calidad de padre de VALENTINA PADRE MADRE, menor de edad, domiciliada en la ciudad de Neiva (H), identificada con registro civil de nacimiento NUIP. 1.075.809.000');
-    expect(texto).toContain('autoriza a su menor hija VALENTINA PADRE MADRE');
-    expect(texto).toContain('las veces que su madre SOFIA ANDREA MADRE EJEMPLO, lo estime conveniente');
   });
 
   it('informa todos los datos faltantes a la vez', () => {

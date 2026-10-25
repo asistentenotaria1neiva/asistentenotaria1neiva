@@ -71,7 +71,6 @@ const evid = (doc: DocumentoAnalizado, d?: DatoConFuente) => ({
 
 const isoHoy = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const diasEntre = (desde: string, hasta: string) => Math.round((Date.parse(hasta) - Date.parse(desde)) / 86_400_000);
-const sumarAnios = (iso: string, n: number) => { const [a, m, d] = iso.split('-'); return `${Number(a) + n}-${m}-${d}`; };
 
 /** Personas e inmuebles que intervienen en cada acto */
 function idsDeActo(acto: string, d: Record<string, unknown>) {
@@ -79,17 +78,8 @@ function idsDeActo(acto: string, d: Record<string, unknown>) {
   const titulares: string[] = []; // quienes deben figurar como propietarios inscritos
   const inmuebles: string[] = [...arr(d.inmuebles), ...arr(d.inmueble_id)];
   if (acto === 'compraventa') titulares.push(...arr(d.vendedores));
-  if (['cancelacion_afectacion', 'cancelacion_patrimonio', 'cancelacion_condicion', 'constitucion_afectacion'].includes(acto)) titulares.push(...arr(d.propietario_id));
   return { titulares, inmuebles };
 }
-
-const ACTO_QUE_CANCELA: Record<string, string> = {
-  HIPOTECA: 'cancelacion_hipoteca',
-  AFECTACION_VIVIENDA_FAMILIAR: 'cancelacion_afectacion',
-  PATRIMONIO_FAMILIA: 'cancelacion_patrimonio',
-  CONDICION_RESOLUTORIA: 'cancelacion_condicion',
-  PROHIBICION_ENAJENAR: 'cancelacion_condicion',
-};
 
 const ETIQUETA_ANOTACION: Record<string, string> = {
   HIPOTECA: 'una hipoteca', EMBARGO: 'un embargo', AFECTACION_VIVIENDA_FAMILIAR: 'afectación a vivienda familiar',
@@ -107,7 +97,7 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
   const personas = new Map(e.datos.personas.map((p) => [p.id, p]));
   const inmuebles = new Map(e.datos.inmuebles.map((i) => [i.id, i]));
   const docs = (t: TipoDocumental) => e.documentos.filter((d) => d.hechos && (d.hechos.tipo_detectado ?? d.tipo) === t);
-  const enajena = e.actos.some((a) => ['compraventa', 'derechos_herenciales'].includes(a));
+  const enajena = e.actos.includes('compraventa');
 
   // R01 – Formatos de identificación y duplicados
   const vistos = new Map<string, Persona>();
@@ -184,29 +174,14 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
       // Gravámenes y limitaciones vigentes
       const anotaciones = (cert.hechos!.datos.anotaciones_vigentes as { numero: DatoConFuente<string>; tipo: string; especificacion: DatoConFuente<string> }[] | undefined) ?? [];
       for (const an of anotaciones) {
-        const cancelador = ACTO_QUE_CANCELA[an.tipo];
-        if (cancelador && e.actos.includes(cancelador)) continue;
         if (an.tipo === 'CONDICION_RESOLUTORIA' || an.tipo === 'PROHIBICION_ENAJENAR' || an.tipo === 'EMBARGO' || an.tipo === 'DEMANDA') {
           if (enajena) h.push({ codigo: 'R03-LIMITACION-VIGENTE', nivel: 'CRITICA', mensaje: `El certificado muestra ${ETIQUETA_ANOTACION[an.tipo]} vigente (anotación ${an.numero?.valor ?? '?'}) que la escritura no cancela. Verificar con el notario antes de continuar.`, evidencia: evid(cert, an.especificacion) });
           continue;
         }
         if (['HIPOTECA', 'AFECTACION_VIVIENDA_FAMILIAR', 'PATRIMONIO_FAMILIA', 'USUFRUCTO'].includes(an.tipo)) {
           const mencionada = acto === 'compraventa' && String((e.datos.actos.compraventa ?? {}).excepcion_gravamen ?? '').length > 0;
-          if (!mencionada && (enajena || acto === 'constitucion_afectacion')) {
+          if (!mencionada && enajena) {
             h.push({ codigo: 'R03-GRAVAMEN-VIGENTE', nivel: 'ADVERTENCIA', mensaje: `El certificado muestra ${ETIQUETA_ANOTACION[an.tipo]} vigente (anotación ${an.numero?.valor ?? '?'}) que no se cancela ni se menciona en la escritura.`, evidencia: evid(cert, an.especificacion) });
-          }
-        }
-      }
-      // Actos de cancelación sin la anotación correspondiente en el certificado
-      for (const [tipoAn, actoCancela] of Object.entries(ACTO_QUE_CANCELA)) {
-        if (actoCancela !== acto || tipoAn === 'PROHIBICION_ENAJENAR') continue;
-        const tipos = actoCancela === 'cancelacion_condicion' ? ['CONDICION_RESOLUTORIA', 'PROHIBICION_ENAJENAR'] : [tipoAn];
-        const existe = anotaciones.find((a) => tipos.includes(a.tipo));
-        if (!existe) h.push({ codigo: 'R03-CANCELA-INEXISTENTE', nivel: 'ADVERTENCIA', mensaje: `La escritura cancela ${ETIQUETA_ANOTACION[tipoAn]} que no aparece vigente en el certificado de ${inm.matricula}.` });
-        else if (acto === 'cancelacion_condicion') {
-          const anot = soloDigitos((e.datos.actos.cancelacion_condicion ?? {}).anotacion);
-          if (anot && soloDigitos(existe.numero?.valor) && Number(anot) !== Number(soloDigitos(existe.numero.valor))) {
-            h.push({ codigo: 'R03-ANOTACION', nivel: 'ADVERTENCIA', mensaje: `La anotación de la condición resolutoria en el formulario (${anot}) difiere de la del certificado (${existe.numero.valor}).`, campo: 'actos.cancelacion_condicion.anotacion', evidencia: evid(cert, existe.numero) });
           }
         }
       }
@@ -254,26 +229,6 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
     if ((cv.afectacion === 'SI' || cv.afectacion === 'NO') && !conVinculo && !cv.coadyuvante_id) {
       h.push({ codigo: 'R05-AFECTACION', nivel: 'CRITICA', mensaje: 'Se indicó decisión sobre afectación, pero ningún comprador es casado ni tiene unión marital según su estado civil.', campo: 'actos.compraventa.afectacion' });
     }
-  }
-
-  // R06 – Cancelación de condición resolutoria: plazo cumplido
-  const cc = e.datos.actos.cancelacion_condicion;
-  if (e.actos.includes('cancelacion_condicion') && cc) {
-    const inm = inmuebles.get(String(cc.inmueble_id));
-    const plazo = Number(cc.plazo_anios);
-    if (inm?.tradicion?.escritura_fecha && (plazo === 2 || plazo === 5)) {
-      const cumple = sumarAnios(inm.tradicion.escritura_fecha, plazo);
-      if (cumple > fechaRef) h.push({ codigo: 'R06-PLAZO-CONDICION', nivel: 'CRITICA', mensaje: `El plazo de ${plazo} años de la condición resolutoria se cumple el ${cumple}; aún no puede cancelarse por vencimiento del término.`, campo: 'actos.cancelacion_condicion.plazo_anios' });
-    }
-  }
-
-  // R07 – Patrimonio de familia con beneficiarios menores / divorcio con hijos menores
-  const cp = e.datos.actos.cancelacion_patrimonio;
-  if (e.actos.includes('cancelacion_patrimonio') && Array.isArray(cp?.hijos) && (cp!.hijos as { mayor_de_edad?: boolean; nombre: string }[]).some((x) => x.mayor_de_edad === false)) {
-    h.push({ codigo: 'R07-PATRIMONIO-MENORES', nivel: 'CRITICA', mensaje: 'Hay beneficiarios menores de edad: la plantilla aprobada solo cubre beneficiarios mayores. Este caso requiere el trámite y la redacción que defina el notario.', campo: 'actos.cancelacion_patrimonio.hijos' });
-  }
-  if (e.actos.includes('divorcio_civil') && e.datos.actos.divorcio_civil?.hijos === 'MENORES') {
-    h.push({ codigo: 'R07-DIVORCIO-MENORES', nivel: 'CRITICA', mensaje: 'Con hijos menores se requiere el concepto del Defensor de Familia y un acuerdo sobre custodia, visitas y alimentos; la plantilla aprobada no cubre este caso.', campo: 'actos.divorcio_civil.hijos' });
   }
 
   // R08 – Cédulas cargadas vs. personas del formulario
@@ -327,29 +282,6 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
     const fexp = v<string>(c.hechos, 'fecha_expedicion')?.valor;
     if (fexp && diasEntre(fexp.slice(0, 10), fechaRef) > cfg.diasVigenciaCertificadoExistencia) {
       h.push({ codigo: 'R09-CERT-EXISTENCIA-ANTIGUO', nivel: 'ADVERTENCIA', mensaje: `El certificado de existencia de ${ent.nombre} tiene más de ${cfg.diasVigenciaCertificadoExistencia} días.`, evidencia: evid(c, v(c.hechos, 'fecha_expedicion')) });
-    }
-  }
-
-  // R10 – Salida del país: fechas y patria potestad
-  const sp = e.datos.actos.salida_pais_menor;
-  if (e.actos.includes('salida_pais_menor') && sp) {
-    if (sp.fecha_inicio && sp.vigencia_hasta && String(sp.vigencia_hasta) < String(sp.fecha_inicio)) {
-      h.push({ codigo: 'R10-FECHAS', nivel: 'CRITICA', mensaje: 'La fecha hasta la cual se autoriza es anterior a la fecha de inicio.', campo: 'actos.salida_pais_menor.vigencia_hasta' });
-    }
-    const menor = personas.get(String(sp.menor_id));
-    const otorgante = personas.get(String(sp.otorgante_id));
-    const rc = docs('REGISTRO_CIVIL_NACIMIENTO').find((d) => menor && soloDigitos(v(d.hechos, 'nuip')?.valor) === soloDigitos(menor.numero_documento));
-    if (rc && otorgante) {
-      const padres = [v(rc.hechos, 'padre_documento')?.valor, v(rc.hechos, 'madre_documento')?.valor].map(soloDigitos);
-      if (!padres.includes(soloDigitos(otorgante.numero_documento))) {
-        h.push({ codigo: 'R10-PATRIA-POTESTAD', nivel: 'CRITICA', mensaje: `${otorgante.nombre} no figura como padre ni madre en el registro civil de ${menor?.nombre}.`, evidencia: evid(rc, v(rc.hechos, 'padre_documento')) });
-      }
-      const nac = v<string>(rc.hechos, 'fecha_nacimiento')?.valor;
-      if (nac && sp.vigencia_hasta && sumarAnios(nac.slice(0, 10), 18) < String(sp.vigencia_hasta)) {
-        h.push({ codigo: 'R10-MAYORIA-EDAD', nivel: 'ADVERTENCIA', mensaje: `La autorización va hasta ${sp.vigencia_hasta}, después de que ${menor?.nombre} cumpla 18 años (${sumarAnios(nac.slice(0, 10), 18)}).`, campo: 'actos.salida_pais_menor.vigencia_hasta', evidencia: evid(rc, v(rc.hechos, 'fecha_nacimiento')) });
-      }
-    } else if (menor) {
-      h.push({ codigo: 'R10-SIN-REGISTRO', nivel: 'ADVERTENCIA', mensaje: `No se ha cargado el registro civil de nacimiento de ${menor.nombre} para acreditar la patria potestad.` });
     }
   }
 
