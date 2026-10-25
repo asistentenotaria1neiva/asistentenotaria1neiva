@@ -9,7 +9,7 @@ import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { guardarCifrado, leerCifrado, borrarCifrado } from '../almacenamiento';
 import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
-import { TIPOS_DOCUMENTALES, esquemaExtraccion, type TipoDocumental, type ResultadoExtraccion } from '../ia/documentos';
+import { TIPOS_DOCUMENTALES, esquemaExtraccion, normalizarExtraccion, type TipoDocumental, type ResultadoExtraccion } from '../ia/documentos';
 import { SISTEMA_EXTRACCION, VERSION_INSTRUCCIONES_BASE } from '../ia/instrucciones';
 import { llamarEstructurado, bloqueDocumento, ErrorIA } from '../ia/cliente';
 import { sugerenciasDesdeHechos } from '../ia/sugerencias';
@@ -79,7 +79,7 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string) {
           : `Tipo de documento declarado por el usuario: ${t} (${TIPOS_DOCUMENTALES[t]}). Extrae los datos según el esquema.` },
       ],
       esquema: esquemaExtraccion(t),
-    });
+    }).then((x) => ({ ...x, datos: normalizarExtraccion(t, x.datos) }));
     let r = await extraer(tipo);
     const consumo = { tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs };
     // Si la IA reconoce otro tipo de documento, se extrae de nuevo con el esquema que le corresponde
