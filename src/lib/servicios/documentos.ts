@@ -11,7 +11,7 @@ import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { TIPOS_DOCUMENTALES, esquemaExtraccion, normalizarExtraccion, type TipoDocumental, type ResultadoExtraccion } from '../ia/documentos';
 import { SISTEMA_EXTRACCION, VERSION_INSTRUCCIONES_BASE } from '../ia/instrucciones';
-import { llamarEstructurado, bloqueDocumento, ErrorIA } from '../ia/cliente';
+import { llamarEstructurado, prepararDocumento, ErrorIA } from '../ia/cliente';
 import { sugerenciasDesdeHechos } from '../ia/sugerencias';
 import { obtenerExpediente, puedeEditar, ErrorNegocio } from './expedientes';
 
@@ -103,13 +103,17 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string) {
   const instr = await instruccionesAprobadas('EXTRACCION', Array.isArray(e.actos) ? (e.actos as string[]) : []);
   await db.documento.update({ where: { id: doc.id }, data: { estadoAnalisis: 'EN_CURSO' } });
   const analisis = await db.analisisIA.create({ data: { expedienteId: e.id, proposito: 'EXTRACCION', modelo: process.env.CLAUDE_MODELO_EXTRACCION || 'claude-opus-5-5', estado: 'EN_CURSO', documentoId: doc.id, versionInstruccion: instr.version } });
+  // Un PDF grande se sube a Anthropic (Files API) una sola vez y se borra al terminar, también si falla
+  let liberar = async () => {};
   try {
-    const bytes = await leerCifrado(doc.rutaCifrada);
+    const preparado = await prepararDocumento(await leerCifrado(doc.rutaCifrada), doc.mime, doc.nombreOriginal);
+    liberar = preparado.liberar;
+    const bloque = (t: TipoDocumental) => (preparado.bloque.type === 'document' ? { ...preparado.bloque, title: `${TIPOS_DOCUMENTALES[t]} – ${doc.nombreOriginal}` } : preparado.bloque);
     const extraer = (t: TipoDocumental) => llamarEstructurado<ResultadoExtraccion>({
       proposito: 'EXTRACCION',
       sistema: SISTEMA_EXTRACCION + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
       contenido: [
-        bloqueDocumento(bytes, doc.mime, `${TIPOS_DOCUMENTALES[t]} – ${doc.nombreOriginal}`),
+        bloque(t),
         { type: 'text', text: t === 'OTRO'
           ? 'El usuario no indicó qué documento es. Identifícalo en tipo_detectado y extrae los datos relevantes.'
           : `Tipo de documento declarado por el usuario: ${t} (${TIPOS_DOCUMENTALES[t]}). Extrae los datos según el esquema.` },
@@ -147,6 +151,8 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string) {
     await auditar({ ...datosAuditoria(s), accion: 'ANALISIS_FALLIDO', entidad: 'documento', entidadId: doc.id, detalle: { error: mensaje } });
     if (!(err instanceof ErrorIA)) console.error('[analizarDocumento]', err);
     throw new ErrorNegocio(mensaje);
+  } finally {
+    await liberar();
   }
 }
 

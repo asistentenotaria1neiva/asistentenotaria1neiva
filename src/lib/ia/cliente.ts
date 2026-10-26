@@ -4,7 +4,7 @@
  * para cada tarea (extracción y revisión), sin cambiar código.
  */
 import 'server-only';
-import Anthropic from '@anthropic-ai/sdk';
+import Anthropic, { toFile } from '@anthropic-ai/sdk';
 
 type Esfuerzo = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type Proposito = 'EXTRACCION' | 'REVISION';
@@ -33,6 +33,15 @@ export class ErrorIA extends Error {
   constructor(message: string, public codigo: 'CONFIGURACION' | 'RECHAZO' | 'TRUNCADO' | 'FORMATO' | 'API') {
     super(message);
   }
+}
+
+/** Traduce los errores del SDK a mensajes para el usuario; los demás se relanzan tal cual */
+function errorDeApi(e: unknown): unknown {
+  if (e instanceof Anthropic.AuthenticationError) return new ErrorIA('La clave de la API de Claude no es válida.', 'CONFIGURACION');
+  if (e instanceof Anthropic.RateLimitError) return new ErrorIA('La API de Claude está limitando las solicitudes; intente de nuevo en unos minutos.', 'API');
+  if (e instanceof Anthropic.BadRequestError) return new ErrorIA(`Solicitud rechazada por la API: ${e.message}`, 'API');
+  if (e instanceof Anthropic.APIError) return new ErrorIA(`Error de la API de Claude (${e.status ?? 'sin estado'}).`, 'API');
+  return e;
 }
 
 export interface ResultadoLlamada<T> {
@@ -72,11 +81,7 @@ export async function llamarEstructurado<T>(opciones: {
     });
     mensaje = await stream.finalMessage();
   } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError) throw new ErrorIA('La clave de la API de Claude no es válida.', 'CONFIGURACION');
-    if (e instanceof Anthropic.RateLimitError) throw new ErrorIA('La API de Claude está limitando las solicitudes; intente de nuevo en unos minutos.', 'API');
-    if (e instanceof Anthropic.BadRequestError) throw new ErrorIA(`Solicitud rechazada por la API: ${e.message}`, 'API');
-    if (e instanceof Anthropic.APIError) throw new ErrorIA(`Error de la API de Claude (${e.status ?? 'sin estado'}).`, 'API');
-    throw e;
+    throw errorDeApi(e);
   }
   if (mensaje.stop_reason === 'refusal') throw new ErrorIA('El modelo declinó analizar este contenido. Revise el documento manualmente.', 'RECHAZO');
   if (mensaje.stop_reason === 'max_tokens') throw new ErrorIA('La respuesta de la IA quedó incompleta (límite de longitud).', 'TRUNCADO');
@@ -97,13 +102,45 @@ export async function llamarEstructurado<T>(opciones: {
   };
 }
 
-/** Bloque de contenido para un documento (PDF o imagen) */
+/**
+ * Un PDF de más de esto no cabe en la solicitud (32 MB, y en base64 crece un tercio): se sube antes
+ * por la Files API (hasta 500 MB) y la solicitud solo lleva su referencia.
+ */
+const LIMITE_PDF_EN_LINEA = 20 * 1024 * 1024;
+const LIMITE_FILES_API = 500 * 1024 * 1024;
+
+export interface DocumentoParaIA {
+  bloque: Anthropic.Beta.BetaContentBlockParam;
+  /** Borra de Anthropic el archivo subido, si lo hubo. Llamarlo siempre al terminar (también si falla). */
+  liberar: () => Promise<void>;
+}
+
+/**
+ * Prepara un documento para enviarlo a la IA: en la solicitud si cabe; si es un PDF grande, por la
+ * Files API. El archivo se sube con un nombre genérico (no el del documento), vence a la hora por si
+ * no se pudiera borrar y se borra en cuanto termina el análisis (liberar).
+ */
+export async function prepararDocumento(bytes: Buffer, mime: string, titulo: string): Promise<DocumentoParaIA> {
+  if (mime !== 'application/pdf' || bytes.length <= LIMITE_PDF_EN_LINEA) return { bloque: bloqueDocumento(bytes, mime, titulo), liberar: async () => {} };
+  if (bytes.length > LIMITE_FILES_API) throw new ErrorIA(`El PDF pesa ${(bytes.length / 1024 / 1024).toFixed(0)} MB y la IA analiza hasta 500 MB: quedó cargado, pero sus datos deben ingresarse a mano (o cárguelo dividido).`, 'FORMATO');
+  const api = obtenerCliente();
+  let id: string;
+  try {
+    id = (await api.files.upload({ file: await toFile(bytes, 'documento.pdf', { type: 'application/pdf' }), expires_in_seconds: 3600 })).id;
+  } catch (e) {
+    throw errorDeApi(e);
+  }
+  return {
+    bloque: { type: 'document', source: { type: 'file', file_id: id }, title: titulo },
+    liberar: () => api.files.delete(id).then(() => undefined, (e) => console.error('[ia] no se pudo borrar el archivo subido (vence en una hora)', id, e)),
+  };
+}
+
+/** Bloque de contenido para un documento (PDF o imagen) que viaja dentro de la solicitud */
 export function bloqueDocumento(bytes: Buffer, mime: string, titulo: string): Anthropic.Beta.BetaContentBlockParam {
-  // Límites de la API: 32 MB por solicitud (el archivo viaja en base64, un tercio más grande) y 5 MB por imagen.
-  // Los documentos se pueden cargar de cualquier tamaño; solo el análisis con IA queda limitado.
+  // Las imágenes se analizan hasta 5 MB; los PDF grandes van por prepararDocumento (Files API).
   const mb = bytes.length / 1024 / 1024;
-  if (mime === 'application/pdf' && mb > 22) throw new ErrorIA(`El PDF pesa ${mb.toFixed(0)} MB y la IA analiza hasta 22 MB: quedó cargado, pero sus datos deben ingresarse a mano (o cárguelo dividido o comprimido).`, 'FORMATO');
-  if (mime !== 'application/pdf' && mb > 5) throw new ErrorIA(`La imagen pesa ${mb.toFixed(1)} MB y la IA analiza hasta 5 MB: quedó cargada, pero sus datos deben ingresarse a mano (o cárguela con menor resolución).`, 'FORMATO');
+  if (mime !== 'application/pdf' && mb > 5) throw new ErrorIA(`La imagen pesa ${mb.toFixed(1)} MB y la IA analiza hasta 5 MB: quedó cargada, pero sus datos deben ingresarse a mano (o cárguela con menor resolución o como PDF).`, 'FORMATO');
   const data = bytes.toString('base64');
   if (mime === 'application/pdf') {
     return { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data }, title: titulo };
