@@ -50,6 +50,7 @@ model Usuario {
   dispositivosAprobados   Dispositivo[]
   plantillasCargadas      Plantilla[]   @relation("cargadaPor")
   plantillasAprobadas     Plantilla[]   @relation("aprobadaPor")
+  notificaciones          Notificacion[]
 
   @@map("usuarios")
 }
@@ -299,6 +300,8 @@ model AnalisisIA {
   error               String?
   documentoId         String?
   resultado           Json?
+  progreso            Json? // avance de un análisis en segundo plano (src/lib/servicios/tareas.ts)
+  actualizadoEn       DateTime   @default(now()) @updatedAt // latido: si deja de cambiar, la tarea se cortó
   creadoEn            DateTime   @default(now())
 
   datos DatoExtraido[]
@@ -451,4 +454,19 @@ model LimitePeticiones {
   ventanaFin DateTime
 
   @@map("limite_peticiones")
+}
+
+// Avisos para el usuario: análisis terminados, escrituras aprobadas o devueltas…
+model Notificacion {
+  id        String    @id @default(cuid())
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+  titulo    String
+  mensaje   String
+  enlace    String?
+  leidaEn   DateTime?
+  creadaEn  DateTime  @default(now())
+
+  @@index([usuarioId, creadaEn])
+  @@map("notificaciones")
 }

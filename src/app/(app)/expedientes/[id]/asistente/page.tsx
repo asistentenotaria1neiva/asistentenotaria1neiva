@@ -2,13 +2,16 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { obtenerExpediente, puedeEditar, datosDe, actosDe, bloqueos } from '@/lib/servicios/expedientes';
+import { after } from 'next/server';
 import { estadoAsistente, CODIGO_INCONSISTENCIA } from '@/lib/servicios/asistente';
+import { tareaEnCurso, tareaPorReanudar } from '@/lib/servicios/tareas';
+import { ProgresoAnalisis } from '../progreso';
 import { ESQUEMAS, PASOS_COMUNES, CAMPOS_PERSONA, CAMPOS_INMUEBLE, type Campo } from '@/lib/escritura/esquemas';
 import { resolverRuta, CAMPOS_TERMINACION } from '@/lib/escritura/rutas';
 import { leerRuta, campoVisible } from '@/lib/escritura/validar-formulario';
 import type { DatosExpediente } from '@/lib/escritura/tipos';
 import { accionIniciarAsistente, accionResponderAsistente, accionContinuarConDatos, accionGenerarBorrador, accionCorregirDato } from '../../acciones';
-import { BotonAccion, RefrescoAutomatico } from '../../formularios';
+import { BotonAccion } from '../../formularios';
 import { EtiquetaNivel, Tabla, fecha } from '../../../componentes';
 import { Cuestionario, type PreguntaVista } from './Cuestionario';
 
@@ -49,6 +52,10 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
   const editable = puedeEditar(s, e);
   const datos = datosDe(e);
   const actos = actosDe(e);
+  // Un análisis que dejó de avanzar (la etapa se cortó) se reanuda en segundo plano
+  const reanudar = editable ? await tareaPorReanudar(id) : null;
+  if (reanudar) after(reanudar);
+  const tarea = await tareaEnCurso(id);
   const [estado, nDocs, inconsistencias, b, ultimoBorrador] = await Promise.all([
     estadoAsistente(id),
     db.documento.count({ where: { expedienteId: id } }),
@@ -103,22 +110,17 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
         <div className="fila entre" style={{ alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 320px' }}>
             <h2 style={{ marginTop: 0 }}>Asistente de escrituración</h2>
-            <p className="suave">La IA lee los documentos cargados, identifica el tipo de escritura, advierte las inconsistencias y le hace las preguntas necesarias para completarla. {r && !estado.enCurso && `Último análisis: ${fecha(r.creadoEn)}.`}</p>
+            <p className="suave">La IA lee los documentos cargados, identifica el tipo de escritura, advierte las inconsistencias y le hace las preguntas necesarias para completarla. {r && !tarea && `Último análisis: ${fecha(r.creadoEn)}.`}</p>
           </div>
-          {editable && iaDisponible && nDocs > 0 && (estado.enCurso
+          {editable && iaDisponible && nDocs > 0 && (tarea
             ? <button type="button" disabled aria-busy="true"><span className="girador pequeno" aria-hidden="true" />Analizando…</button>
             : <BotonAccion accion={accionIniciarAsistente.bind(null, id)} texto={r ? 'Analizar de nuevo' : 'Analizar documentos y preparar preguntas'} textoPendiente="Iniciando…"
               confirmar={r ? 'Se analizarán de nuevo los documentos y se prepararán preguntas nuevas. Las respuestas ya guardadas se conservan en el expediente. ¿Continuar?' : undefined} />)}
         </div>
         {!nDocs && <div className="aviso info">Primero <Link href={`/expedientes/${id}/documentos`}>cargue los documentos soporte</Link> (cédulas, certificado de tradición, paz y salvo, título anterior…).</div>}
         {!iaDisponible && <div className="aviso alerta">El asistente no está disponible: falta configurar la clave de la API en el servidor.</div>}
-        {estado.enCurso && (
-          <div className="aviso info" role="status">
-            La IA está analizando los documentos (iniciado {fecha(estado.enCurso)}). Puede tardar unos minutos; puede salir de esta página y volver.
-            <RefrescoAutomatico />
-          </div>
-        )}
-        {!estado.enCurso && estado.error && <div className="aviso error">El último análisis no se completó: {estado.error}</div>}
+        {tarea && <ProgresoAnalisis tarea={tarea} />}
+        {!tarea && estado.error && <div className="aviso error">El último análisis no se completó: {estado.error} Pulse «{r ? 'Analizar de nuevo' : 'Analizar documentos y preparar preguntas'}»: los documentos ya analizados no se repiten.</div>}
       </section>
 
       {r && (

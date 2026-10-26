@@ -32,7 +32,8 @@ Tenga en cuenta:
 
 ### Asistente IA
 
-Al pulsar **"Analizar documentos y preparar preguntas"** la IA, en segundo plano (puede salir de la página y volver):
+Al pulsar **"Analizar documentos y preparar preguntas"** la IA trabaja en segundo plano. Mientras tanto la página muestra el **porcentaje** de avance y **qué documento** está analizando (varios a la vez). Puede salir de la página: al terminar le llega un aviso en **Notificaciones** (menú lateral). Si pulsa **"Avisarme en este equipo"** y acepta el permiso del navegador, el aviso también aparece en la pantalla aunque esté en otra pestaña. Si el análisis se corta, se reanuda solo y no repite los documentos ya analizados. La IA:
+
 
 1. Lee los documentos que aún no se han analizado e identifica los que se cargaron como "Detectar automáticamente".
 2. Lleva al expediente los datos que leyó con confianza. Los dudosos (borrosos, de formato inválido o que no coinciden entre documentos) no se aplican: se convierten en preguntas.

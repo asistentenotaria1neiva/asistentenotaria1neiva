@@ -14,6 +14,7 @@ import { PASOS_COMUNES, ESQUEMAS } from '../escritura/esquemas';
 import { validarPaso, validarCampos, leerRuta, escribirRuta, type Errores } from '../escritura/validar-formulario';
 import { validarDocumento, validarMatricula, validarCedulaCatastral } from '../validaciones/formatos';
 import { registrarCorreccion } from './aprendizaje';
+import { notificar } from './notificaciones';
 import { asegurarCatalogo } from './inicializacion';
 
 export class ErrorNegocio extends Error {}
@@ -309,6 +310,9 @@ export async function aprobarExpediente(s: SesionActiva, id: string) {
   const b = await bloqueos(id);
   if (b.criticas.length || b.advertencias.length) throw new ErrorNegocio('Hay observaciones sin resolver.');
   await cambiarEstado(s, e, 'APROBADA', 'EXPEDIENTE_APROBADO', { aprobadoEn: new Date(), revisor: { connect: { id: s.usuario.id } } });
+  if (e.responsableId !== s.usuario.id) {
+    await notificar(e.responsableId, { titulo: `Escritura aprobada · ${e.numeroInterno}`, mensaje: `${s.usuario.nombre} aprobó la escritura: está lista para firma.`, enlace: `/expedientes/${id}` });
+  }
 }
 
 export async function devolverExpediente(s: SesionActiva, id: string, comentario: string) {
@@ -318,6 +322,9 @@ export async function devolverExpediente(s: SesionActiva, id: string, comentario
   if (e.estado !== 'EN_REVISION') throw new ErrorNegocio('El expediente no está en revisión.');
   await cambiarEstado(s, e, 'DEVUELTO', 'EXPEDIENTE_DEVUELTO', { comentarioRevision: comentario.trim(), revisor: { connect: { id: s.usuario.id } } });
   await registrarCorreccion({ expedienteId: id, tipoId: e.tipoId, categoria: 'REVISION', motivo: comentario, creadoPorId: s.usuario.id, datos: datosDe(e) });
+  if (e.responsableId !== s.usuario.id) {
+    await notificar(e.responsableId, { titulo: `Escritura devuelta · ${e.numeroInterno}`, mensaje: `${s.usuario.nombre} devolvió la escritura para corregir. Lea el comentario de la revisión en el expediente.`, enlace: `/expedientes/${id}` });
+  }
 }
 
 export async function marcarFirmada(s: SesionActiva, id: string, numeroEscritura: number) {

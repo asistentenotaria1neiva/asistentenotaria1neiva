@@ -1,6 +1,8 @@
 import { requerirSesion } from '@/lib/sesion';
 import { accionCerrarSesion } from '../(acceso)/acciones';
 import { MenuLateral, type EnlaceMenu } from './navegacion';
+import { Avisos } from './notificaciones/Avisos';
+import { noLeidas } from '@/lib/servicios/notificaciones';
 
 const ROL: Record<string, string> = { ADMINISTRADOR: 'Administrador', REVISOR: 'Revisor', DIGITADOR: 'Digitador' };
 
@@ -26,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="app">
       <MenuLateral enlaces={enlaces}>
+        <Avisos inicial={await noLeidas(s.usuario.id)} />
         <div className="pie">
           <div><strong>{s.usuario.nombre}</strong></div>
           <div className="suave">{ROL[s.usuario.rol]}{s.remota ? ' · acceso remoto' : ''}</div>

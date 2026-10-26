@@ -73,6 +73,7 @@ La primera vez, la aplicación abre **/instalacion** para crear el administrador
 | `CLAUDE_FALLBACKS` | `default` activa el respaldo del servidor de Anthropic ante rechazos por política; vacío lo desactiva |
 | `IPS_OFICINA` | IP públicas de la oficina (valor inicial; luego se administra en el panel) |
 | `CONFIAR_EN_PROXY` | `true` en Vercel (toma la IP real de `X-Real-IP`) |
+| `URL_APLICACION` | Dirección pública de la aplicación; los análisis largos la usan para encadenar sus etapas (vacío = el dominio de la petición) |
 | `PDF_CONVERSOR_URL` | URL de un servicio Gotenberg externo (vacío = solo Word) |
 
 ## Despliegue en Vercel + Supabase

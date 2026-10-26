@@ -139,8 +139,11 @@ export async function iniciarSesion(usuarioTxt: string, contrasena: string, huel
   return { ok: true, siguiente: u.debeCambiarContrasena ? '/cambiar-contrasena' : '/' };
 }
 
-/** Lee y valida la sesión de la petición actual (sin redirigir) */
-export async function leerSesion(): Promise<SesionActiva | null> {
+/**
+ * Lee y valida la sesión de la petición actual (sin redirigir). `sinActividad`: no cuenta como
+ * actividad (p. ej. la consulta periódica de notificaciones), para no impedir el cierre por inactividad.
+ */
+export async function leerSesion(opciones: { sinActividad?: boolean } = {}): Promise<SesionActiva | null> {
   const token = verificarTokenFirmado((await cookies()).get(COOKIE_SESION)?.value);
   if (!token) return null;
   const s = await db.sesion.findUnique({ where: { tokenHash: huellaToken(token) }, include: { usuario: true, dispositivo: true } });
@@ -159,7 +162,7 @@ export async function leerSesion(): Promise<SesionActiva | null> {
   if (s.dispositivoId && s.dispositivo?.estado !== 'APROBADO') return revocar('equipo desactivado');
   const ip = await ipCliente();
   if (s.usuario.rol !== 'ADMINISTRADOR' && !ipPermitida(ip, await obtenerConfig('red.ips_oficina'))) return revocar('cambio a una red no autorizada');
-  if (ahora - s.ultimaActividad.getTime() > 60_000) {
+  if (!opciones.sinActividad && ahora - s.ultimaActividad.getTime() > 60_000) {
     await db.sesion.update({ where: { id: s.id }, data: { ultimaActividad: new Date() } });
   }
   return {

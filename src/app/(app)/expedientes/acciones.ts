@@ -12,7 +12,9 @@ import {
   devolverExpediente, marcarFirmada, archivarExpediente, reabrirExpediente, reasignarExpediente, ErrorNegocio,
 } from '@/lib/servicios/expedientes';
 import { subirParteDocumento, completarDocumento, analizarDocumento, eliminarDocumento } from '@/lib/servicios/documentos';
-import { iniciarAsistente, responderAsistente, continuarConDatos, agregarPregunta, type RespuestasAsistente } from '@/lib/servicios/asistente';
+import { responderAsistente, continuarConDatos, agregarPregunta, type RespuestasAsistente } from '@/lib/servicios/asistente';
+import { iniciarTarea } from '@/lib/servicios/tareas';
+import { urlAplicacion } from '@/lib/seguridad/red';
 import { ejecutarRevision, resolverObservacion } from '@/lib/servicios/revision';
 import { proponerCorrecciones, aplicarCorrecciones } from '@/lib/servicios/correccion-ia';
 import { generarBorradorExpediente } from '@/lib/servicios/borradores';
@@ -71,17 +73,13 @@ export async function accionAnalizarDocumento(expedienteId: string, documentoId:
   }, `/expedientes/${expedienteId}/documentos`);
 }
 
+/** Analiza los documentos pendientes en segundo plano, por etapas (src/lib/servicios/tareas.ts) */
 export async function accionAnalizarPendientes(expedienteId: string): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {
-    const docs = await db.documento.findMany({ where: { expedienteId, estadoAnalisis: { in: ['PENDIENTE', 'ERROR'] } } });
-    let total = 0;
-    const errores: string[] = [];
-    for (const d of docs) {
-      try { total += (await analizarDocumento(s, d.id)).sugerencias; } catch (e) { errores.push(`${d.nombreOriginal}: ${(e as Error).message}`); }
-    }
-    if (errores.length) throw new ErrorNegocio(`Se analizaron ${docs.length - errores.length} de ${docs.length}. ${errores.join(' | ')}`);
-    return `Se analizaron ${docs.length} documento(s): ${total} dato(s) sugerido(s).`;
+    const r = await iniciarTarea(s, expedienteId, 'DOCUMENTOS', await urlAplicacion());
+    after(r.etapa);
+    return `Analizando ${r.documentos} documento(s) en segundo plano. Puede salir de esta página: le avisaremos al terminar.`;
   }, `/expedientes/${expedienteId}/documentos`);
 }
 
@@ -157,10 +155,10 @@ export async function accionEliminarDocumento(expedienteId: string, documentoId:
 export async function accionIniciarAsistente(expedienteId: string): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {
-    const r = await iniciarAsistente(s, expedienteId);
-    // La IA sigue después de responder: la persona puede salir de la página
-    after(r.tarea);
-    return `El asistente está analizando ${r.documentos} documento(s) en segundo plano; las preguntas aparecerán aquí al terminar.`;
+    const r = await iniciarTarea(s, expedienteId, 'ASISTENTE', await urlAplicacion());
+    // La IA sigue después de responder, por etapas: la persona puede salir de la página
+    after(r.etapa);
+    return `El asistente está analizando ${r.documentos} documento(s) en segundo plano; las preguntas aparecerán aquí al terminar y le avisaremos.`;
   }, `/expedientes/${expedienteId}`);
 }
 

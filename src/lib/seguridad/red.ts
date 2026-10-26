@@ -31,6 +31,19 @@ export function ipPermitida(ip: string, lista: string[]): boolean {
   });
 }
 
+/**
+ * Dirección de la propia aplicación, para que una tarea en segundo plano encadene su siguiente etapa.
+ * URL_APLICACION manda; si no está, la del dominio por el que entró la petición (en Vercel, siempre
+ * uno de los dominios del proyecto).
+ */
+export async function urlAplicacion(): Promise<string> {
+  if (process.env.URL_APLICACION) return process.env.URL_APLICACION.replace(/\/+$/, '');
+  const h = await headers();
+  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000';
+  const protocolo = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') || host.startsWith('127.') ? 'http' : 'https');
+  return `${protocolo}://${host}`;
+}
+
 export async function agenteUsuario(): Promise<string> {
   return ((await headers()).get('user-agent') ?? '').slice(0, 300);
 }

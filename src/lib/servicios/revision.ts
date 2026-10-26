@@ -22,6 +22,7 @@ import type { ResultadoExtraccion, TipoDocumental } from '../ia/documentos';
 import { obtenerExpediente, datosDe, actosDe, ErrorNegocio } from './expedientes';
 import { instruccionesAprobadas } from './documentos';
 import { registrarCorreccion } from './aprendizaje';
+import { notificar } from './notificaciones';
 
 /** Texto de vista previa con la última versión de cada plantilla (aprobada o no), solo para revisar */
 async function textoVistaPrevia(datos: ReturnType<typeof datosDe>, actos: string[]) {
@@ -148,6 +149,11 @@ export async function ejecutarRevision(s: SesionActiva, expedienteId: string, co
       await db.analisisIA.update({ where: { id: analisis.id }, data: { estado: 'ERROR', error: errorIA } });
     }
     await registrar(nuevasIA, errorIA).catch((err) => console.error('[ejecutarRevision] auditoría', err));
+    await notificar(s.usuario.id, {
+      titulo: `${errorIA ? 'La revisión de la IA no se completó' : 'Revisión de la IA terminada'} · ${e.numeroInterno}`,
+      mensaje: errorIA ?? (nuevasIA ? `La IA dejó ${nuevasIA} observación(es) para revisar.` : 'La IA no encontró observaciones.'),
+      enlace: `/expedientes/${expedienteId}/observaciones`,
+    });
   };
   return { hallazgos: hallazgos.length, nuevasReglas, tareaIA };
 }

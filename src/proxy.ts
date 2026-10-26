@@ -6,7 +6,8 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLICAS = ['/ingreso', '/verificacion', '/configurar-2fa', '/cambiar-contrasena', '/registrar-equipo', '/instalacion'];
+// /api/tareas no lleva cookie: la llama la propia aplicación con una firma (src/app/api/tareas/route.ts)
+const PUBLICAS = ['/ingreso', '/verificacion', '/configurar-2fa', '/cambiar-contrasena', '/registrar-equipo', '/instalacion', '/api/tareas'];
 
 export function proxy(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());

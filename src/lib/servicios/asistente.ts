@@ -1,6 +1,7 @@
 /**
  * Asistente de escrituración con IA. Una vez cargados los documentos:
- *   1. Se analizan los documentos pendientes (la IA identifica cada uno si el usuario no dijo qué es).
+ *   1. Se analizan los documentos pendientes (la IA identifica cada uno si el usuario no dijo qué es),
+ *      en etapas y en paralelo: src/lib/servicios/tareas.ts.
  *   2. Los datos confiables se llevan al expediente; los dudosos o contradictorios no.
  *   3. La IA determina el tipo de escritura, advierte las inconsistencias entre documentos y
  *      formula las preguntas que faltan para completarla. Las reglas agregan las preguntas de los
@@ -20,13 +21,13 @@ import { escribirRuta } from '../escritura/validar-formulario';
 import { resolverRuta, validarValor, catalogo, convertirRespuesta, datosFaltantes, CAMPOS_TERMINACION } from '../escritura/rutas';
 import type { DatosExpediente } from '../escritura/tipos';
 import { TIPOS_DOCUMENTALES, type TipoDocumental } from '../ia/documentos';
-import { llamarEstructurado, ErrorIA } from '../ia/cliente';
+import { llamarEstructurado } from '../ia/cliente';
 import { SISTEMA_ASISTENTE, esquemaAsistente } from '../ia/instrucciones';
 import {
   obtenerExpediente, puedeEditar, datosDe, actosDe, guardarPaso, cambiarActos, aplicarSugerenciasConfiables, cerrarSugerenciasRespondidas, resolverDestino,
   ErrorNegocio, type ActualizacionPaso,
 } from './expedientes';
-import { analizarDocumento, instruccionesAprobadas } from './documentos';
+import { instruccionesAprobadas } from './documentos';
 import { ejecutarRevision, resolverObservacion } from './revision';
 
 /** Código de las observaciones que crea el asistente */
@@ -69,16 +70,12 @@ interface RespuestaIA {
   preguntas: { ruta: string; pregunta: string; motivo: string; valor_sugerido_json: string | null; fuente: string | null }[];
 }
 
-/** Un análisis EN_CURSO más antiguo que esto se da por interrumpido (p. ej., el servidor se reinició) */
-const LIMITE_ANALISIS_MS = 30 * 60 * 1000;
-
-/** Último análisis del asistente: en curso, terminado (con sus preguntas) o fallido */
+/**
+ * Último análisis del asistente: en curso, terminado (con sus preguntas) o fallido. Un análisis que
+ * dejó de avanzar lo reanuda (o lo da por fallido) src/lib/servicios/tareas.ts antes de llamar aquí.
+ */
 export async function estadoAsistente(expedienteId: string) {
   const ultimo = await db.analisisIA.findFirst({ where: { expedienteId, proposito: 'ASISTENTE' }, orderBy: { creadoEn: 'desc' } });
-  if (ultimo?.estado === 'EN_CURSO' && Date.now() - ultimo.creadoEn.getTime() > LIMITE_ANALISIS_MS) {
-    await db.analisisIA.update({ where: { id: ultimo.id }, data: { estado: 'ERROR', error: 'El análisis se interrumpió antes de terminar. Ejecútelo de nuevo.' } });
-    ultimo.estado = 'ERROR';
-  }
   const completado = await db.analisisIA.findFirst({ where: { expedienteId, proposito: 'ASISTENTE', estado: 'COMPLETADO' }, orderBy: { creadoEn: 'desc' } });
   return {
     enCurso: ultimo?.estado === 'EN_CURSO' ? ultimo.creadoEn : null,
@@ -107,111 +104,94 @@ function rutaParaIA(datos: DatosExpediente, campo: string): string {
 }
 
 /**
- * Deja el análisis EN_CURSO y devuelve `tarea`, que la acción programa para después de responder:
- * analizar varios documentos y el expediente puede tardar minutos.
+ * Última etapa del asistente, cuando los documentos ya se analizaron (src/lib/servicios/tareas.ts los
+ * analiza antes, en etapas): lleva los datos confiables al expediente y la IA determina el tipo de
+ * escritura, las inconsistencias y las preguntas. Deja el análisis COMPLETADO; si falla, lanza el error.
  */
-export async function iniciarAsistente(s: SesionActiva, expedienteId: string) {
+export async function prepararPreguntas(s: SesionActiva, expedienteId: string, analisisId: string, erroresDocumentos: string[]) {
   const e = await obtenerExpediente(s, expedienteId);
   if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede editar en su estado actual.');
-  if ((await estadoAsistente(expedienteId)).enCurso) throw new ErrorNegocio('El asistente ya está analizando este expediente. Espere a que termine.');
-  const documentos = await db.documento.findMany({ where: { expedienteId }, select: { id: true, estadoAnalisis: true, nombreOriginal: true } });
-  if (!documentos.length) throw new ErrorNegocio('Cargue al menos un documento antes de iniciar el asistente.');
   const instr = await instruccionesAprobadas('REVISION', actosDe(e));
-  const analisis = await db.analisisIA.create({ data: { expedienteId, proposito: 'ASISTENTE', modelo: process.env.CLAUDE_MODELO_REVISION || 'claude-opus-5-5', estado: 'EN_CURSO', versionInstruccion: instr.version } });
+  // 2. Datos confiables al expediente
+  const { aplicadas, dudosos } = await aplicarSugerenciasConfiables(s, expedienteId);
+  const actual = await obtenerExpediente(s, expedienteId);
+  const datos = datosDe(actual);
+  const actosActuales = actosDe(actual);
+  const docs = await db.documento.findMany({ where: { expedienteId }, orderBy: { creadoEn: 'asc' } });
 
-  const tarea = async () => {
-    try {
-      // 1. Documentos sin analizar
-      const erroresDocumentos: string[] = [];
-      for (const d of documentos.filter((x) => x.estadoAnalisis === 'PENDIENTE' || x.estadoAnalisis === 'ERROR')) {
-        try { await analizarDocumento(s, d.id); } catch (err) { erroresDocumentos.push(`${d.nombreOriginal}: ${(err as Error).message}`); }
-      }
-      // 2. Datos confiables al expediente
-      const { aplicadas, dudosos } = await aplicarSugerenciasConfiables(s, expedienteId);
-      const actual = await obtenerExpediente(s, expedienteId);
-      const datos = datosDe(actual);
-      const actosActuales = actosDe(actual);
-      const docs = await db.documento.findMany({ where: { expedienteId }, orderBy: { creadoEn: 'asc' } });
-
-      // 3. La IA: tipo, inconsistencias y preguntas
-      const entrada = {
-        actos_elegidos_por_el_usuario: actosActuales,
-        catalogo_actos: Object.values(ESQUEMAS).map((x) => ({ id: x.tipo, titulo: x.titulo, documentos_soporte: x.documentosSoporte.map((d) => `${d.etiqueta}${d.obligatorio ? '' : ' (si aplica)'}`) })),
-        catalogo_campos: catalogo(Object.keys(ESQUEMAS), { sinTerminacion: true }),
-        datos_expediente: datos,
-        documentos: docs.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: TIPOS_DOCUMENTALES[d.tipoDocumental as TipoDocumental] ?? d.tipoDocumental, estado_analisis: d.estadoAnalisis, hechos: d.hechos })),
-        datos_dudosos: dudosos.map((x) => ({ ruta: rutaParaIA(datos, x.campo), motivo: x.motivo, valores: x.valores })),
-        documentos_con_error: erroresDocumentos,
-      };
-      const r = await llamarEstructurado<RespuestaIA>({
-        proposito: 'REVISION',
-        sistema: SISTEMA_ASISTENTE + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
-        contenido: [{ type: 'text', text: `<expediente>\n${JSON.stringify(entrada)}\n</expediente>\nDetermina el tipo de escritura, las inconsistencias y las preguntas.` }],
-        esquema: esquemaAsistente(Object.keys(ESQUEMAS)),
-      });
-
-      // 4. Se valida la respuesta contra los esquemas
-      const propuestos = [...new Set(r.datos.actos.filter((a) => ESQUEMAS[a]))];
-      const actos = propuestos.length ? propuestos : actosActuales;
-      const preguntas: PreguntaAsistente[] = [];
-      for (const p of r.datos.preguntas) {
-        const destino = resolverRuta(datos, actos, p.ruta);
-        if (!destino || destino.campo.tipo === 'lista' || preguntas.some((x) => x.ruta === p.ruta)) continue;
-        if (destino.paso === 'escritura' && CAMPOS_TERMINACION.includes(destino.campo.id)) continue;
-        let sugerido: unknown = null;
-        if (p.valor_sugerido_json) {
-          let v: unknown;
-          try { v = JSON.parse(p.valor_sugerido_json); } catch { v = p.valor_sugerido_json; }
-          const ok = validarValor(destino.campo, v, datos);
-          if (!('error' in ok)) sugerido = ok.valor;
-        }
-        preguntas.push({
-          id: `p${preguntas.length + 1}`, ruta: p.ruta, etiqueta: destino.etiqueta, pregunta: p.pregunta.slice(0, 500), motivo: p.motivo.slice(0, 500), origen: 'IA',
-          obligatoria: !!destino.campo.obligatorio, valorSugerido: sugerido, fuente: sugerido === null ? null : p.fuente?.slice(0, 500) ?? null, estado: 'PENDIENTE',
-        });
-      }
-      // Todo dato dudoso se pregunta, aunque la IA no lo haya hecho: así se decide cada sugerencia pendiente
-      for (const x of dudosos) {
-        const ruta = rutaParaIA(datos, x.campo);
-        const destino = resolverRuta(datos, actos, ruta);
-        if (!destino || destino.campo.tipo === 'lista' || preguntas.some((p) => p.ruta === ruta)) continue;
-        const sugerido = x.valores.map((v) => validarValor(destino.campo, v.valor, datos)).find((v) => !('error' in v));
-        preguntas.push({
-          id: `p${preguntas.length + 1}`, ruta, etiqueta: destino.etiqueta, pregunta: `Confirme: ${destino.etiqueta}`,
-          motivo: `Dato dudoso (${x.motivo}): ${x.valores.map((v) => `«${String(v.valor)}» en ${v.documento}`).join('; ')}.`.slice(0, 500),
-          origen: 'REGLAS', obligatoria: !!destino.campo.obligatorio, valorSugerido: sugerido && 'valor' in sugerido ? sugerido.valor : null, fuente: x.valores[0]?.documento ?? null, estado: 'PENDIENTE',
-        });
-      }
-      preguntas.push(...preguntasDeReglas(datos, actos, preguntas));
-
-      // Las inconsistencias quedan como observaciones; las de un análisis anterior sin decidir se reemplazan
-      await db.observacion.updateMany({ where: { expedienteId, codigo: CODIGO_INCONSISTENCIA, estado: 'ABIERTA' }, data: { estado: 'CORREGIDA', resueltaEn: new Date(), justificacion: 'Reemplazada por un análisis posterior del asistente.' } });
-      const idsDocs = new Set(docs.map((d) => d.id));
-      for (const i of r.datos.inconsistencias) {
-        const documentoId = i.documento_id && idsDocs.has(i.documento_id) ? i.documento_id : null;
-        await db.observacion.create({ data: { expedienteId, origen: 'IA', codigo: CODIGO_INCONSISTENCIA, nivel: i.nivel, mensaje: i.mensaje.slice(0, 2000), evidencia: { detalle: i.evidencia.slice(0, 2000), documentoId } } });
-      }
-
-      const resultado: ResultadoAsistente = {
-        actosPropuestos: actos,
-        actosConfirmados: actosActuales.length > 0 && JSON.stringify(actosActuales) === JSON.stringify(actos),
-        explicacionTipo: r.datos.explicacion_tipo.slice(0, 2000),
-        tipoSinPlantilla: r.datos.tipo_sin_plantilla?.slice(0, 300) ?? null,
-        resumenDocumentos: r.datos.resumen_documentos.slice(0, 2000),
-        documentosFaltantes: r.datos.documentos_faltantes.slice(0, 20).map((d) => ({ documento: d.documento.slice(0, 300), motivo: d.motivo.slice(0, 500) })),
-        preguntas,
-        aplicadasAutomaticamente: aplicadas,
-        erroresDocumentos,
-      };
-      await db.analisisIA.update({ where: { id: analisis.id }, data: { estado: 'COMPLETADO', modelo: r.modelo, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs, resultado: resultado as unknown as Prisma.InputJsonValue } });
-      await auditar({ ...datosAuditoria(s), accion: 'ASISTENTE_ANALISIS', entidad: 'expediente', entidadId: expedienteId, detalle: { actos, preguntas: preguntas.length, inconsistencias: r.datos.inconsistencias.length, aplicadas, documentosConError: erroresDocumentos.length } });
-    } catch (err) {
-      const mensaje = err instanceof ErrorIA || err instanceof ErrorNegocio ? err.message : 'Error inesperado en el análisis del asistente.';
-      if (!(err instanceof ErrorIA) && !(err instanceof ErrorNegocio)) console.error('[iniciarAsistente]', err);
-      await db.analisisIA.update({ where: { id: analisis.id }, data: { estado: 'ERROR', error: mensaje } }).catch((x) => console.error('[iniciarAsistente]', x));
-    }
+  // 3. La IA: tipo, inconsistencias y preguntas
+  const entrada = {
+    actos_elegidos_por_el_usuario: actosActuales,
+    catalogo_actos: Object.values(ESQUEMAS).map((x) => ({ id: x.tipo, titulo: x.titulo, documentos_soporte: x.documentosSoporte.map((d) => `${d.etiqueta}${d.obligatorio ? '' : ' (si aplica)'}`) })),
+    catalogo_campos: catalogo(Object.keys(ESQUEMAS), { sinTerminacion: true }),
+    datos_expediente: datos,
+    documentos: docs.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: TIPOS_DOCUMENTALES[d.tipoDocumental as TipoDocumental] ?? d.tipoDocumental, estado_analisis: d.estadoAnalisis, hechos: d.hechos })),
+    datos_dudosos: dudosos.map((x) => ({ ruta: rutaParaIA(datos, x.campo), motivo: x.motivo, valores: x.valores })),
+    documentos_con_error: erroresDocumentos,
   };
-  return { documentos: documentos.length, tarea };
+  const r = await llamarEstructurado<RespuestaIA>({
+    proposito: 'REVISION',
+    sistema: SISTEMA_ASISTENTE + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
+    contenido: [{ type: 'text', text: `<expediente>\n${JSON.stringify(entrada)}\n</expediente>\nDetermina el tipo de escritura, las inconsistencias y las preguntas.` }],
+    esquema: esquemaAsistente(Object.keys(ESQUEMAS)),
+  });
+
+  // 4. Se valida la respuesta contra los esquemas
+  const propuestos = [...new Set(r.datos.actos.filter((a) => ESQUEMAS[a]))];
+  const actos = propuestos.length ? propuestos : actosActuales;
+  const preguntas: PreguntaAsistente[] = [];
+  for (const p of r.datos.preguntas) {
+    const destino = resolverRuta(datos, actos, p.ruta);
+    if (!destino || destino.campo.tipo === 'lista' || preguntas.some((x) => x.ruta === p.ruta)) continue;
+    if (destino.paso === 'escritura' && CAMPOS_TERMINACION.includes(destino.campo.id)) continue;
+    let sugerido: unknown = null;
+    if (p.valor_sugerido_json) {
+      let v: unknown;
+      try { v = JSON.parse(p.valor_sugerido_json); } catch { v = p.valor_sugerido_json; }
+      const ok = validarValor(destino.campo, v, datos);
+      if (!('error' in ok)) sugerido = ok.valor;
+    }
+    preguntas.push({
+      id: `p${preguntas.length + 1}`, ruta: p.ruta, etiqueta: destino.etiqueta, pregunta: p.pregunta.slice(0, 500), motivo: p.motivo.slice(0, 500), origen: 'IA',
+      obligatoria: !!destino.campo.obligatorio, valorSugerido: sugerido, fuente: sugerido === null ? null : p.fuente?.slice(0, 500) ?? null, estado: 'PENDIENTE',
+    });
+  }
+  // Todo dato dudoso se pregunta, aunque la IA no lo haya hecho: así se decide cada sugerencia pendiente
+  for (const x of dudosos) {
+    const ruta = rutaParaIA(datos, x.campo);
+    const destino = resolverRuta(datos, actos, ruta);
+    if (!destino || destino.campo.tipo === 'lista' || preguntas.some((p) => p.ruta === ruta)) continue;
+    const sugerido = x.valores.map((v) => validarValor(destino.campo, v.valor, datos)).find((v) => !('error' in v));
+    preguntas.push({
+      id: `p${preguntas.length + 1}`, ruta, etiqueta: destino.etiqueta, pregunta: `Confirme: ${destino.etiqueta}`,
+      motivo: `Dato dudoso (${x.motivo}): ${x.valores.map((v) => `«${String(v.valor)}» en ${v.documento}`).join('; ')}.`.slice(0, 500),
+      origen: 'REGLAS', obligatoria: !!destino.campo.obligatorio, valorSugerido: sugerido && 'valor' in sugerido ? sugerido.valor : null, fuente: x.valores[0]?.documento ?? null, estado: 'PENDIENTE',
+    });
+  }
+  preguntas.push(...preguntasDeReglas(datos, actos, preguntas));
+
+  // Las inconsistencias quedan como observaciones; las de un análisis anterior sin decidir se reemplazan
+  await db.observacion.updateMany({ where: { expedienteId, codigo: CODIGO_INCONSISTENCIA, estado: 'ABIERTA' }, data: { estado: 'CORREGIDA', resueltaEn: new Date(), justificacion: 'Reemplazada por un análisis posterior del asistente.' } });
+  const idsDocs = new Set(docs.map((d) => d.id));
+  for (const i of r.datos.inconsistencias) {
+    const documentoId = i.documento_id && idsDocs.has(i.documento_id) ? i.documento_id : null;
+    await db.observacion.create({ data: { expedienteId, origen: 'IA', codigo: CODIGO_INCONSISTENCIA, nivel: i.nivel, mensaje: i.mensaje.slice(0, 2000), evidencia: { detalle: i.evidencia.slice(0, 2000), documentoId } } });
+  }
+
+  const resultado: ResultadoAsistente = {
+    actosPropuestos: actos,
+    actosConfirmados: actosActuales.length > 0 && JSON.stringify(actosActuales) === JSON.stringify(actos),
+    explicacionTipo: r.datos.explicacion_tipo.slice(0, 2000),
+    tipoSinPlantilla: r.datos.tipo_sin_plantilla?.slice(0, 300) ?? null,
+    resumenDocumentos: r.datos.resumen_documentos.slice(0, 2000),
+    documentosFaltantes: r.datos.documentos_faltantes.slice(0, 20).map((d) => ({ documento: d.documento.slice(0, 300), motivo: d.motivo.slice(0, 500) })),
+    preguntas,
+    aplicadasAutomaticamente: aplicadas,
+    erroresDocumentos,
+  };
+  await db.analisisIA.update({ where: { id: analisisId }, data: { estado: 'COMPLETADO', modelo: r.modelo, versionInstruccion: instr.version, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs, resultado: resultado as unknown as Prisma.InputJsonValue } });
+  await auditar({ ...datosAuditoria(s), accion: 'ASISTENTE_ANALISIS', entidad: 'expediente', entidadId: expedienteId, detalle: { actos, preguntas: preguntas.length, inconsistencias: r.datos.inconsistencias.length, aplicadas, documentosConError: erroresDocumentos.length } });
+  return { numeroInterno: e.numeroInterno, obligatoriasPendientes: preguntas.filter((p) => p.obligatoria && p.estado === 'PENDIENTE').length, actosConfirmados: resultado.actosConfirmados };
 }
 
 export interface RespuestasAsistente {
