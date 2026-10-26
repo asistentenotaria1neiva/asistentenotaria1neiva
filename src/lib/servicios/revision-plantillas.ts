@@ -3,6 +3,8 @@
  *   1. Verificación automática: variables y condiciones que usa, cuáles son nuevas o ya no
  *      aparecen frente a la versión aprobada, y una prueba de llenado con datos FICTICIOS
  *      (datos_prueba/casos.json) que muestra las variables que el sistema no sabe llenar.
+ *      Si la versión viene de convertir un caso real, también se prueba con los valores ficticios
+ *      que propuso la IA en la conversión (src/lib/servicios/variabilizar-plantilla.ts).
  *   2. Revisión de la IA: redacción, datos fijos de un caso real, partes del acto y cambios.
  * El resultado se guarda en la versión (plantillas.revision). La IA solo advierte: la
  * aprobación sigue siendo del administrador por indicación del notario.
@@ -21,6 +23,7 @@ import type { DatosExpediente } from '../escritura/tipos';
 import { vistaPreviaDocx, textoDeParrafos, etiquetasDe, type Parrafo, type EtiquetasPlantilla } from '../escritura/vista-previa';
 import { llamarEstructurado, ErrorIA } from '../ia/cliente';
 import { SISTEMA_REVISION_PLANTILLA, ESQUEMA_REVISION_PLANTILLA } from '../ia/instrucciones';
+import type { Variabilizacion } from './variabilizar-plantilla';
 import casosEjemplo from '../../../datos_prueba/casos.json';
 
 interface CasoEjemplo { clave: string; descripcion: string; actos: string[]; datos: DatosExpediente }
@@ -86,36 +89,66 @@ function casoPara(tipoId: string): CasoEjemplo | undefined {
   return CASOS.find((c) => c.actos.includes(tipoId) || c.actos.some((a) => ACTOS[a]?.anexo === tipoId));
 }
 
-/** Hay un caso de datos ficticios para probar este tipo de plantilla */
-export const tieneEjemplo = (tipoId: string) => !!casoPara(tipoId);
+/** Valores ficticios que propuso la IA al convertir un caso real en plantilla (variable → valor) */
+export type ValoresEjemplo = Record<string, string> | null | undefined;
 
-export type PruebaEjemplo =
-  | { caso: CasoEjemplo; docx: Buffer; parrafos: Parrafo[]; faltantes: string[] }
-  | { caso: CasoEjemplo; error: string };
+const CASO_CONVERSION = { clave: 'conversion_ia', descripcion: 'valores ficticios que propuso la IA al convertir el caso real en plantilla' };
 
-/** Llena la plantilla con un caso ficticio. null si aún no hay caso de ejemplo para el tipo. */
-export async function probarConEjemplo(tipoId: string, archivo: Buffer): Promise<PruebaEjemplo | null> {
+/** Hay datos ficticios para probar este tipo de plantilla: un caso de ejemplo o los valores de la conversión */
+export const tieneEjemplo = (tipoId: string, valores?: ValoresEjemplo) => !!casoPara(tipoId) || !!(valores && Object.keys(valores).length);
+
+/** Contexto del caso de ejemplo de este tipo (null si no hay); también orienta la conversión de casos reales */
+export async function contextoEjemplo(tipoId: string): Promise<Record<string, unknown> | null> {
   const caso = casoPara(tipoId);
   if (!caso) return null;
+  const ctx = prepararContexto(caso.datos, caso.actos, await obtenerConfig('notaria'));
+  return ctx.actos.find((a) => a.plantilla === tipoId)?.contexto ?? ctx.global;
+}
+
+/** Agrega al contexto los valores de la conversión que el caso no trae, sin modificar los objetos originales */
+function completarContexto(contexto: Record<string, unknown>, valores: Record<string, string>): Record<string, unknown> {
+  const poner = (obj: Record<string, unknown>, ruta: string[], valor: string): Record<string, unknown> => {
+    const [k, ...resto] = ruta;
+    const actual = obj[k];
+    if (!resto.length) return actual === undefined || actual === null ? { ...obj, [k]: valor } : obj;
+    if (actual !== undefined && actual !== null && (typeof actual !== 'object' || Array.isArray(actual))) return obj;
+    return { ...obj, [k]: poner((actual ?? {}) as Record<string, unknown>, resto, valor) };
+  };
+  return Object.entries(valores).reduce((ctx, [ruta, valor]) => poner(ctx, ruta.split('.'), valor), contexto);
+}
+
+export type PruebaEjemplo =
+  | { caso: { clave: string; descripcion: string }; docx: Buffer; parrafos: Parrafo[]; faltantes: string[] }
+  | { caso: { clave: string; descripcion: string }; error: string };
+
+/** Llena la plantilla con datos ficticios. null si no hay caso de ejemplo ni valores de la conversión. */
+export async function probarConEjemplo(tipoId: string, archivo: Buffer, valores?: ValoresEjemplo): Promise<PruebaEjemplo | null> {
+  if (!tieneEjemplo(tipoId, valores)) return null;
+  const caso = casoPara(tipoId);
+  const info = caso ? { clave: caso.clave, descripcion: caso.descripcion } : CASO_CONVERSION;
   try {
-    const ctx = prepararContexto(caso.datos, caso.actos, await obtenerConfig('notaria'));
-    const contexto = ctx.actos.find((a) => a.plantilla === tipoId)?.contexto ?? ctx.global;
+    let contexto = (await contextoEjemplo(tipoId)) ?? {};
+    if (valores) contexto = completarContexto(contexto, valores);
     const r = renderizarPlantilla(archivo, contexto);
-    return { caso, docx: r.docx, parrafos: vistaPreviaDocx(r.docx, { marcarFaltantes: true }), faltantes: r.faltantes };
+    return { caso: info, docx: r.docx, parrafos: vistaPreviaDocx(r.docx, { marcarFaltantes: true }), faltantes: r.faltantes };
   } catch (e) {
-    if (e instanceof ErrorDatos) return { caso, error: `El caso de ejemplo no tiene: ${e.faltantes.join(', ')}` };
-    return { caso, error: `La plantilla no se pudo llenar: ${mensajeError(e)}` };
+    if (e instanceof ErrorDatos) return { caso: info, error: `El caso de ejemplo no tiene: ${e.faltantes.join(', ')}` };
+    return { caso: info, error: `La plantilla no se pudo llenar: ${mensajeError(e)}` };
   }
 }
 
-async function verificar(p: Pick<Plantilla, 'id' | 'tipoId' | 'archivo'>) {
+/** Valores ficticios guardados con la versión al convertir un caso real */
+export const valoresEjemploDe = (p: Pick<Plantilla, 'variabilizacion'>): ValoresEjemplo =>
+  (p.variabilizacion as { valoresEjemplo?: Record<string, string> } | null)?.valoresEjemplo;
+
+async function verificar(p: Pick<Plantilla, 'id' | 'tipoId' | 'archivo' | 'variabilizacion'>) {
   const parrafos = vistaPreviaDocx(Buffer.from(p.archivo));
   const etiquetas = etiquetasDe(parrafos);
   const aprobada = await db.plantilla.findFirst({ where: { tipoId: p.tipoId, estado: 'APROBADA', id: { not: p.id } }, orderBy: { version: 'desc' } });
   const parrafosAprobada = aprobada ? vistaPreviaDocx(Buffer.from(aprobada.archivo)) : null;
   const todas = (e: EtiquetasPlantilla) => [...e.variables, ...e.condiciones];
   const previas = parrafosAprobada ? todas(etiquetasDe(parrafosAprobada)) : null;
-  const prueba = await probarConEjemplo(p.tipoId, Buffer.from(p.archivo));
+  const prueba = await probarConEjemplo(p.tipoId, Buffer.from(p.archivo), valoresEjemploDe(p));
   const automatica: VerificacionAutomatica = {
     etiquetas,
     comparadaCon: aprobada?.version ?? null,
@@ -133,7 +166,18 @@ async function verificar(p: Pick<Plantilla, 'id' | 'tipoId' | 'archivo'>) {
   };
 }
 
-function solicitud(p: Pick<Plantilla, 'version' | 'nombreArchivo' | 'notas'> & { tipo: { id: string; nombre: string; categoria: string; esBloque: boolean; descripcion: string | null; normas: string | null } }, v: Awaited<ReturnType<typeof verificar>>): string {
+/** Lo que la IA debe saber de la conversión automática de un caso real (sin datos personales) */
+function textoConversion(v: Variabilizacion | null): string | null {
+  if (!v?.esCasoReal || v.error) return null;
+  return [
+    `CONVERSIÓN AUTOMÁTICA: el archivo cargado era la escritura de un caso real; el sistema reemplazó ${v.reemplazos.length} dato(s) por variables:`,
+    ...v.reemplazos.map((r) => `- ${r.dato} → ${r.variable} (${r.veces} vez/veces)`),
+    v.noAplicados.length ? `Datos que no se pudieron reemplazar (siguen escritos): ${v.noAplicados.map((x) => x.dato).join('; ')}` : '',
+    v.nuevas.length ? `Variables nuevas que el sistema aún no conoce: ${v.nuevas.map((x) => `{{${x}}}`).join(', ')}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function solicitud(p: Pick<Plantilla, 'version' | 'nombreArchivo' | 'notas' | 'variabilizacion'> & { tipo: { id: string; nombre: string; categoria: string; esBloque: boolean; descripcion: string | null; normas: string | null } }, v: Awaited<ReturnType<typeof verificar>>): string {
   const a = v.automatica;
   const lista = (xs: string[]) => (xs.length ? xs.map((x) => `{{${x}}}`).join(', ') : 'ninguna');
   return [
@@ -142,6 +186,7 @@ function solicitud(p: Pick<Plantilla, 'version' | 'nombreArchivo' | 'notas'> & {
     p.tipo.normas && `Referencia normativa registrada (pendiente de validar por el notario): ${p.tipo.normas}`,
     `VERSIÓN EN REVISIÓN: ${p.version} (archivo ${p.nombreArchivo})`,
     p.notas && `Notas de quien la cargó: ${p.notas}`,
+    textoConversion(p.variabilizacion as Variabilizacion | null),
     '',
     'VERIFICACIÓN AUTOMÁTICA:',
     a.comparadaCon

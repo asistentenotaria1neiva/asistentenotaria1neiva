@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TIPOS_DOCUMENTALES, esquemaExtraccion, normalizarExtraccion, type TipoDocumental } from '@/lib/ia/documentos';
-import { ESQUEMA_REVISION, ESQUEMA_CORRECCION, ESQUEMA_REVISION_PLANTILLA, ESQUEMA_CORRECCION_PLANTILLA, esquemaAsistente } from '@/lib/ia/instrucciones';
+import { ESQUEMA_REVISION, ESQUEMA_CORRECCION, ESQUEMA_REVISION_PLANTILLA, ESQUEMA_CORRECCION_PLANTILLA, ESQUEMA_VARIABILIZAR_PLANTILLA, esquemaAsistente } from '@/lib/ia/instrucciones';
 
 /** La API rechaza los esquemas con más de 16 parámetros de tipo unión (["string", "null"] o anyOf) */
 const LIMITE_UNIONES = 16;
@@ -18,7 +18,7 @@ describe('esquemas que se envían a la API de Claude', () => {
   });
 
   it('revisión, corrección y asistente dentro del límite de uniones', () => {
-    for (const e of [ESQUEMA_REVISION, ESQUEMA_CORRECCION, ESQUEMA_REVISION_PLANTILLA, ESQUEMA_CORRECCION_PLANTILLA, esquemaAsistente(['compraventa'])]) {
+    for (const e of [ESQUEMA_REVISION, ESQUEMA_CORRECCION, ESQUEMA_REVISION_PLANTILLA, ESQUEMA_CORRECCION_PLANTILLA, ESQUEMA_VARIABILIZAR_PLANTILLA, esquemaAsistente(['compraventa'])]) {
       expect(uniones(e)).toBeLessThanOrEqual(LIMITE_UNIONES);
     }
   });

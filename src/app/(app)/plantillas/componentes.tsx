@@ -1,6 +1,7 @@
 /** Presentación del panel de plantillas (servidor) */
 import type { Parrafo } from '@/lib/escritura/vista-previa';
 import type { RevisionPlantilla, Veredicto } from '@/lib/servicios/revision-plantillas';
+import type { Variabilizacion } from '@/lib/servicios/variabilizar-plantilla';
 import { EtiquetaNivel } from '../componentes';
 
 export const ESTADO_PLANTILLA: Record<string, [string, string]> = {
@@ -48,6 +49,42 @@ export function LeyendaPlantilla() {
       <span><span className="marca-condicion">{'{{#condición}}'}</span> inicio de texto condicional</span>
       <span><span className="marca-cierre">{'{{/condición}}'}</span> fin del texto condicional</span>
     </div>
+  );
+}
+
+/** Resultado de convertir un caso real en plantilla: qué dato se cambió por qué variable (sin los datos reales) */
+export function PanelConversion({ conversion: c }: { conversion: Variabilizacion }) {
+  return (
+    <section className="tarjeta">
+      <h2 style={{ marginTop: 0 }}>Conversión de caso real</h2>
+      {c.error ? <div className="aviso alerta">La IA no pudo convertir el archivo ({c.error}); se cargó tal como venía. Si tiene datos de un caso, la revisión los señala como «Dato fijo».</div>
+        : !c.esCasoReal ? <p className="suave">La IA no encontró datos de un caso real: el archivo se cargó tal como venía.{c.resumen ? ` ${c.resumen}` : ''}</p>
+        : (
+          <>
+            <p>{c.resumen}</p>
+            {c.reemplazos.length > 0 && (
+              <details open={c.reemplazos.length <= 8}>
+                <summary>{c.reemplazos.length} dato(s) cambiados por variables</summary>
+                <ul className="lista-codigo">{c.reemplazos.map((r) => <li key={r.variable}>{r.dato} → <code>{r.variable}</code>{r.veces > 1 ? <span className="suave"> ({r.veces} veces)</span> : null}{c.nuevas.includes(r.variable.slice(2, -2).split('|')[0].trim()) && <> <span className="etiqueta advertencia">nueva</span></>}</li>)}</ul>
+              </details>
+            )}
+            {c.nuevas.length > 0 && <p className="suave">Las variables marcadas «nueva» aún no las sabe llenar el sistema: en la vista con datos de ejemplo se llenan con los valores ficticios que propuso la IA, pero para generar escrituras hay que incorporarlas.</p>}
+            {c.noAplicados.length > 0 && (
+              <div className="aviso alerta">
+                Siguen escritos en la plantilla (cámbielos en Word):
+                <ul>{c.noAplicados.map((x, i) => <li key={i}>{x.dato}: {x.motivo}</li>)}</ul>
+              </div>
+            )}
+          </>
+        )}
+      {c.advertencias.length > 0 && (
+        <>
+          <h3>Para revisar</h3>
+          <ul>{c.advertencias.map((a, i) => <li key={i}>{a}</li>)}</ul>
+        </>
+      )}
+      <p className="suave">Los datos reales del archivo no se guardan; la plantilla quedó sin datos y la vista «Con datos de ejemplo» la muestra llenada con datos ficticios.</p>
+    </section>
   );
 }
 

@@ -2,14 +2,10 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import type { RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
-import { accionCargarPlantilla } from './acciones';
-import { FormAdmin } from '../admin/formularios';
 import { Tabla, fecha } from '../componentes';
+import { CargaPlantillas, type TipoCargable } from './carga';
 import { EtiquetaVeredicto } from './componentes';
 import { FiltrosPlantillas } from './filtros';
-
-// La carga incluye la revisión de la IA, que puede tardar uno o dos minutos
-export const maxDuration = 300;
 
 const PESTANAS = { '': 'Todas', pendiente: 'Pendientes de aprobación', aprobada: 'Aprobadas', sin_plantilla: 'Sin plantilla' } as const;
 type Filtro = keyof typeof PESTANAS;
@@ -65,8 +61,14 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
     : categorias.map((c) => ({ titulo: c === 'Bloques comunes' ? 'Partes comunes de todas las escrituras (carátula, cierre, oficios)' : c, filas: filas.filter((t) => t.categoria === c) })).filter((g) => g.filas.length);
   const filtrosActivos = !!(q || categoria || prioridad || ia || orden);
 
-  // Las nuevas versiones de una plantilla existente se cargan dentro de ella; aquí solo las que faltan
-  const cargables = tipos.filter((t) => !t.plantillas.length).sort((a, b) => Number(b.esBloque) - Number(a.esBloque) || PRIORIDAD[a.prioridad] - PRIORIDAD[b.prioridad] || a.nombre.localeCompare(b.nombre));
+  // Primero los tipos sin plantilla (partes comunes y prioridad alta arriba); luego, nuevas versiones de las existentes
+  const sinPlantilla = tipos.filter((t) => !t.plantillas.length).length;
+  const cargables: TipoCargable[] = [...tipos]
+    .sort((a, b) => Number(b.esBloque) - Number(a.esBloque) || PRIORIDAD[a.prioridad] - PRIORIDAD[b.prioridad] || a.nombre.localeCompare(b.nombre))
+    .map((t) => ({
+      id: t.id, nombre: t.esBloque ? `[Parte común] ${t.nombre}` : t.nombre, grupo: t.plantillas.length ? 'version' : 'nueva',
+      detalle: t.plantillas.length ? `será la v${Math.max(...t.plantillas.map((p) => p.version)) + 1}` : `prioridad ${t.prioridad.toLowerCase()}`,
+    }));
   const enlace = (f: Filtro) => `/plantillas?${new URLSearchParams(Object.entries({ estado: f, q, categoria, prioridad, ia, orden }).filter(([, v]) => v))}`;
 
   return (
@@ -81,21 +83,15 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
         </div>
       </div>
 
-      {cargables.length > 0 && (
-        <details className="tarjeta carga-nueva" id="cargar" open={!!nuevo}>
-          <summary>+ Cargar plantilla nueva <span className="suave">({cargables.length} tipos aún no tienen plantilla)</span></summary>
-          <p className="suave">
-            Use variables <code>{'{{variable}}'}</code> y bloques condicionales <code>{'{{#condicion}} … {{/condicion}}'}</code>.
-            Al cargarla, el sistema la prueba con datos de ejemplo y la IA la revisa; queda pendiente de aprobación.
-          </p>
-          <FormAdmin accion={accionCargarPlantilla} campos={[
-            { nombre: 'tipoId', etiqueta: 'Tipo de escritura', tipo: 'select', valor: nuevo, opciones: cargables.map((t) => [t.id, t.esBloque ? `[Parte común] ${t.nombre}` : `${t.nombre} · prioridad ${t.prioridad.toLowerCase()}`]) },
-            { nombre: 'archivo', etiqueta: 'Archivo .docx con variables', tipo: 'archivo' },
-            { nombre: 'notas', etiqueta: 'Notas', tipo: 'area', ayuda: 'Origen de la plantilla u observaciones (la IA también lo lee).' },
-          ]} botones={[{ texto: 'Cargar y revisar con IA' }]}
-          mensajePendiente="Cargando la plantilla y revisándola con la IA. Puede tardar uno o dos minutos; no cierre esta página." />
-        </details>
-      )}
+      <details className="tarjeta carga-nueva" id="cargar" open={!!nuevo}>
+        <summary>+ Cargar plantillas <span className="suave">(una o varias a la vez{sinPlantilla ? ` · ${sinPlantilla} tipos aún no tienen plantilla` : ''})</span></summary>
+        <p className="suave">
+          Cargue plantillas con variables <code>{'{{variable}}'}</code> y bloques condicionales <code>{'{{#condicion}} … {{/condicion}}'}</code>,
+          o la escritura de un caso real: la IA cambia sus datos por variables, y queda la plantilla sin datos y su vista con datos de ejemplo ficticios.
+          Cada archivo se prueba con datos de ejemplo y la IA lo revisa, todos al mismo tiempo; quedan pendientes de aprobación.
+        </p>
+        <CargaPlantillas tipos={cargables} inicial={nuevo} />
+      </details>
 
       <FiltrosPlantillas valores={{ q, estado: filtro, categoria, prioridad, ia, orden }} activos={filtrosActivos}
         categorias={categorias.map((c) => [c, c === 'Bloques comunes' ? 'Partes comunes' : c])} />

@@ -4,6 +4,7 @@
  * El borrador solo se genera con la versión APROBADA más reciente de cada bloque.
  */
 import 'server-only';
+import type { Prisma } from '@prisma/client';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import expressionParser from 'docxtemplater/expressions.js';
@@ -44,12 +45,13 @@ export function validarDocxPlantilla(archivo: Buffer): { ok: true; etiquetas: nu
   }
 }
 
-export async function cargarPlantilla(tipoId: string, nombreArchivo: string, archivo: Buffer, usuarioId: string | null, notas?: string) {
+/** `variabilizacion`: resumen de la conversión del caso real en plantilla, si la hubo (variabilizar-plantilla.ts) */
+export async function cargarPlantilla(tipoId: string, nombreArchivo: string, archivo: Buffer, usuarioId: string | null, notas?: string, variabilizacion?: Prisma.InputJsonValue) {
   const v = validarDocxPlantilla(archivo);
   if (!v.ok) throw new ErrorPlantilla(v.error);
   const ultima = await db.plantilla.findFirst({ where: { tipoId }, orderBy: { version: 'desc' } });
   return db.plantilla.create({
-    data: { tipoId, version: (ultima?.version ?? 0) + 1, nombreArchivo, archivo: new Uint8Array(archivo), hashSha256: sha256(archivo), notas, cargadaPorId: usuarioId },
+    data: { tipoId, version: (ultima?.version ?? 0) + 1, nombreArchivo, archivo: new Uint8Array(archivo), hashSha256: sha256(archivo), notas, cargadaPorId: usuarioId, variabilizacion },
   });
 }
 

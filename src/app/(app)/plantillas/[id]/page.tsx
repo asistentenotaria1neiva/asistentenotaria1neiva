@@ -4,13 +4,14 @@ import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { ESQUEMAS } from '@/lib/escritura/esquemas';
 import { vistaPreviaDocx, etiquetasDe } from '@/lib/escritura/vista-previa';
-import { probarConEjemplo, tieneEjemplo, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
+import { probarConEjemplo, tieneEjemplo, valoresEjemploDe, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
+import type { Variabilizacion } from '@/lib/servicios/variabilizar-plantilla';
 import { estadoCorreccionPlantilla } from '@/lib/servicios/correccion-plantillas';
 import { accionCargarPlantilla, accionPlantilla, accionRevisarPlantilla, accionProponerCorreccionesPlantilla, accionAplicarCorreccionesPlantilla } from '../acciones';
 import { FormAdmin } from '../../admin/formularios';
 import { PanelCorreccionIA, RefrescoAutomatico } from '../../expedientes/formularios';
 import { fecha } from '../../componentes';
-import { CATEGORIA, ESTADO_PLANTILLA, LeyendaPlantilla, PanelRevision, VistaDocumento, hallazgosOrdenados } from '../componentes';
+import { CATEGORIA, ESTADO_PLANTILLA, LeyendaPlantilla, PanelConversion, PanelRevision, VistaDocumento, hallazgosOrdenados } from '../componentes';
 
 const TEXTOS_CORRECCION = {
   seleccion: 'Elija los hallazgos que quiere arreglar. La IA propone cada cambio de texto; usted decide cuáles aplicar. Se crea una versión nueva, pendiente de aprobación: esta no cambia.',
@@ -42,9 +43,10 @@ export default async function VersionPlantilla({ params, searchParams }: { param
   const revision = p.revision as RevisionPlantilla | null;
   const parrafos = vistaPreviaDocx(archivo);
   const etiquetas = etiquetasDe(parrafos);
-  const ejemplo = vista === 'ejemplo' ? await probarConEjemplo(p.tipoId, archivo) : null;
+  const conversion = p.variabilizacion as Variabilizacion | null;
+  const ejemplo = vista === 'ejemplo' ? await probarConEjemplo(p.tipoId, archivo, valoresEjemploDe(p)) : null;
   const admin = s.usuario.rol === 'ADMINISTRADOR';
-  const conEjemplo = tieneEjemplo(p.tipoId);
+  const conEjemplo = tieneEjemplo(p.tipoId, valoresEjemploDe(p));
   const esquema = ESQUEMAS[p.tipoId];
 
   // Corrección con IA de los hallazgos: elegir → la IA propone (en segundo plano) → aplicar en una versión nueva
@@ -82,8 +84,8 @@ export default async function VersionPlantilla({ params, searchParams }: { param
           </nav>
 
           <div className="fila descargas">
-            <a className="boton pequeno" href={`/api/plantillas/${p.id}`}>Descargar plantilla (.docx)</a>
-            {conEjemplo && <a className="boton secundario pequeno" href={`/api/plantillas/${p.id}?ejemplo=1`}>Descargar ejemplo llenado (.docx)</a>}
+            <a className="boton pequeno" href={`/api/plantillas/${p.id}`}>Descargar plantilla sin datos (.docx)</a>
+            {conEjemplo && <a className="boton secundario pequeno" href={`/api/plantillas/${p.id}?ejemplo=1`}>Descargar con datos de ejemplo (.docx)</a>}
             <span className="suave">Ábralos en Word para confirmar márgenes, fuentes y saltos de página exactos.</span>
           </div>
 
@@ -108,7 +110,12 @@ export default async function VersionPlantilla({ params, searchParams }: { param
               ? <div className="aviso error">{ejemplo.error}</div>
               : (
                 <>
-                  <div className="aviso info">Datos <strong>ficticios</strong> del caso «{ejemplo.caso.descripcion}». Se muestra solo esta parte de la escritura, llenada como lo haría el sistema.</div>
+                  <div className="aviso info">
+                    {ejemplo.caso.clave === 'conversion_ia'
+                      ? <>Datos <strong>ficticios</strong> que propuso la IA al convertir el caso real en plantilla (el tipo aún no tiene caso de ejemplo).</>
+                      : <>Datos <strong>ficticios</strong> del caso «{ejemplo.caso.descripcion}»{conversion?.reemplazos.length ? ', completados con los que propuso la IA al convertir el caso real' : ''}.</>}
+                    {' '}Se muestra solo esta parte de la escritura, llenada como lo haría el sistema.
+                  </div>
                   {ejemplo.faltantes.length > 0 && <div className="aviso error">El sistema no supo llenar: <code>{ejemplo.faltantes.join(', ')}</code>. Revise que esas variables estén bien escritas; si son nuevas, el sistema aún no las conoce.</div>}
                   <VisorDocx url={`/api/plantillas/${p.id}?ejemplo=1&vista=1`} />
                 </>
@@ -142,6 +149,8 @@ export default async function VersionPlantilla({ params, searchParams }: { param
             <FormAdmin accion={accionRevisarPlantilla} ocultos={{ id: p.id }} botones={[{ texto: revision ? 'Revisar de nuevo con IA' : 'Revisar con IA', clase: 'secundario' }]}
               mensajePendiente="La IA está revisando la plantilla. Puede tardar uno o dos minutos." />
           </section>
+
+          {conversion && <PanelConversion conversion={conversion} />}
 
           {corregible && (
             <section className="tarjeta">
@@ -184,7 +193,7 @@ export default async function VersionPlantilla({ params, searchParams }: { param
 
           <section className="tarjeta">
             <h2 style={{ marginTop: 0 }}>Cargar nueva versión</h2>
-            <p className="suave">Será la v{Math.max(...p.tipo.plantillas.map((v) => v.version)) + 1} de esta plantilla y quedará pendiente de aprobación. El sistema la prueba con datos de ejemplo y la IA la revisa.</p>
+            <p className="suave">Será la v{Math.max(...p.tipo.plantillas.map((v) => v.version)) + 1} de esta plantilla y quedará pendiente de aprobación. Si es la escritura de un caso real, la IA cambia sus datos por variables. El sistema la prueba con datos de ejemplo y la IA la revisa.</p>
             <FormAdmin accion={accionCargarPlantilla} ocultos={{ tipoId: p.tipoId }} campos={[
               { nombre: 'archivo', etiqueta: 'Archivo .docx con variables', tipo: 'archivo' },
               { nombre: 'notas', etiqueta: 'Notas de la versión', tipo: 'area', ayuda: 'Qué cambió y por qué (la IA también lo lee).' },

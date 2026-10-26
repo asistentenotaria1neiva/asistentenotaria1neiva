@@ -20,7 +20,8 @@ const config: NextConfig = {
   // El catálogo y las plantillas .docx se leen del disco al iniciar (src/lib/servicios/inicializacion.ts):
   // en Vercel hay que incluirlos explícitamente en el paquete de cada función
   outputFileTracingIncludes: {
-    '/**': ['./plantillas/catalogo.json', './plantillas/docx/**/*'],
+    // Los modelos limpios orientan la conversión de casos reales en plantillas (src/lib/servicios/variabilizar-plantilla.ts)
+    '/**': ['./plantillas/catalogo.json', './plantillas/docx/**/*', './plantillas/modelos/fuentes/**/*'],
   },
   experimental: {
     serverActions: { bodySizeLimit: '30mb' }, // carga de documentos soporte

@@ -34,6 +34,14 @@ function piezas(parrafo: string): { texto: string; piezas: Pieza[] } {
 /** Expresión que ubica el fragmento tolerando diferencias de espacios (la IA puede normalizarlos) */
 const patron = (fragmento: string) => new RegExp(fragmento.trim().split(/\s+/).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s\\u00a0]+'), 'g');
 
+/** Igual, pero sin tomar el fragmento dentro de una palabra o número más largo ("ANA" no se toma en "ANALIZA") */
+const patronPalabra = (fragmento: string) => {
+  const p = patron(fragmento).source;
+  const borde = (c: string) => /[\p{L}\p{N}]/u.test(c);
+  const t = fragmento.trim();
+  return new RegExp(`${borde(t[0]) ? '(?<![\\p{L}\\p{N}])' : ''}${p}${borde(t.at(-1)!) ? '(?![\\p{L}\\p{N}])' : ''}`, 'gu');
+};
+
 /** Reemplaza [a, b) del texto del párrafo por `nuevo`; null si el rango cruza algo no editable */
 function reemplazarEnParrafo(parrafo: string, lista: Pieza[], a: number, b: number, nuevo: string): string | null {
   const tocadas = lista.filter((p) => p.fin > a && p.inicio < b);
@@ -68,26 +76,55 @@ function reemplazarEnDocumento(xml: string, original: string, nuevo: string): { 
 }
 
 /**
+ * Reemplaza TODAS las apariciones del fragmento (p. ej. un nombre que se repite en la escritura).
+ * En cada párrafo se avanza de atrás hacia adelante: el texto anterior al cambio no se mueve.
+ */
+function reemplazarTodasEnDocumento(xml: string, original: string, nuevo: string): { xml: string; resultado: ResultadoReemplazo; veces: number } {
+  const inicioCuerpo = xml.indexOf('<w:body>');
+  const expresion = patronPalabra(original);
+  let veces = 0;
+  let cruza = 0;
+  const cuerpo = xml.slice(inicioCuerpo).replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (parrafo) => {
+    let limite = Infinity;
+    for (;;) {
+      const datos = piezas(parrafo);
+      const m = [...datos.texto.matchAll(expresion)].filter((x) => x.index + x[0].length <= limite).at(-1);
+      if (!m) return parrafo;
+      limite = m.index;
+      const editado = reemplazarEnParrafo(parrafo, datos.piezas, m.index, m.index + m[0].length, nuevo);
+      if (editado === null) cruza++;
+      else { parrafo = editado; veces++; }
+    }
+  });
+  const resultado: ResultadoReemplazo = veces ? 'APLICADO' : cruza ? 'CRUZA_FORMATO' : 'NO_ENCONTRADO';
+  return { xml: veces ? xml.slice(0, inicioCuerpo) + cuerpo : xml, resultado, veces };
+}
+
+/**
  * Aplica los reemplazos en orden. `aceptar` revisa el documento después de cada reemplazo
  * (p. ej. que las etiquetas sigan bien formadas); si lo rechaza, ese reemplazo se deshace.
+ * Con `todas`, el reemplazo se hace en cada aparición del fragmento; `veces` dice cuántas fueron.
  */
 export function reemplazarEnDocx(
   docx: Buffer,
-  reemplazos: { original: string; nuevo: string }[],
+  reemplazos: { original: string; nuevo: string; todas?: boolean }[],
   aceptar: (docx: Buffer) => string | null = () => null,
-): { docx: Buffer; resultados: (ResultadoReemplazo | { rechazado: string })[] } {
+): { docx: Buffer; resultados: (ResultadoReemplazo | { rechazado: string })[]; veces: number[] } {
   const zip = new PizZip(docx);
   let xml = zip.file('word/document.xml')?.asText() ?? '';
   const generar = (x: string) => { zip.file('word/document.xml', x); return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }); };
   const resultados: (ResultadoReemplazo | { rechazado: string })[] = [];
+  const veces: number[] = [];
   for (const r of reemplazos) {
+    veces.push(0);
     if (!r.original.trim()) { resultados.push('NO_ENCONTRADO'); continue; }
-    const intento = reemplazarEnDocumento(xml, r.original, r.nuevo);
+    const intento = r.todas ? reemplazarTodasEnDocumento(xml, r.original, r.nuevo) : { ...reemplazarEnDocumento(xml, r.original, r.nuevo), veces: 1 };
     if (intento.resultado !== 'APLICADO') { resultados.push(intento.resultado); continue; }
     const motivo = aceptar(generar(intento.xml));
     if (motivo) { resultados.push({ rechazado: motivo }); continue; }
     xml = intento.xml;
     resultados.push('APLICADO');
+    veces[veces.length - 1] = intento.veces;
   }
-  return { docx: generar(xml), resultados };
+  return { docx: generar(xml), resultados, veces };
 }

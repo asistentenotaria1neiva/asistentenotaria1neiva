@@ -63,7 +63,6 @@ La primera vez, la aplicación abre **/instalacion** para crear el administrador
 | --- | --- |
 | `DATABASE_URL` | Conexión a PostgreSQL de Supabase por el *Transaction pooler* (solo desde el servidor) |
 | `SUPABASE_URL`, `SUPABASE_CLAVE_SERVICIO`, `SUPABASE_BUCKET` | Storage de Supabase para los documentos cifrados (vacías = carpeta local `RUTA_ALMACENAMIENTO`) |
-| `LIMITE_CARGA_MB` | Tamaño máximo por documento (en Vercel, 4) |
 | `CLAVE_MAESTRA` | Cifra documentos, borradores y secretos TOTP (AES-256-GCM). **Si se pierde, no se recuperan los documentos.** |
 | `CLAVE_FIRMA` | Firma de los tokens de sesión y de equipo |
 | `ANTHROPIC_API_KEY` | Clave de la API de Claude. **Solo en el servidor** |
@@ -93,7 +92,6 @@ Base de datos PostgreSQL y documentos cifrados en Supabase (proyecto en `us-east
    | `DATABASE_URL` | Cadena *Transaction pooler* (puerto 6543) terminada en `?pgbouncer=true&connection_limit=1` |
    | `CLAVE_MAESTRA`, `CLAVE_FIRMA` | Nuevas, generadas para producción (no las de desarrollo) |
    | `SUPABASE_URL`, `SUPABASE_CLAVE_SERVICIO` | URL del proyecto y clave *secret* / *service_role* |
-   | `LIMITE_CARGA_MB` | `4` (Vercel limita cada petición a 4,5 MB) |
    | `CONFIAR_EN_PROXY` | `true` (Vercel entrega la IP real en `X-Real-IP`) |
    | `IPS_OFICINA` | IP pública de la oficina. **Obligatoria**: sin ella nadie puede ingresar en producción |
    | `ANTHROPIC_API_KEY` y `CLAUDE_*` | Como en desarrollo |

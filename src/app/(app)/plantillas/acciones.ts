@@ -8,11 +8,11 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { after } from 'next/server';
-import { db } from '@/lib/db';
 import { requerirSesion, datosAuditoria } from '@/lib/sesion';
 import { auditar } from '@/lib/auditoria';
-import { cargarPlantilla, aprobarPlantilla, retirarPlantilla, ErrorPlantilla } from '@/lib/servicios/plantillas';
+import { aprobarPlantilla, retirarPlantilla, ErrorPlantilla } from '@/lib/servicios/plantillas';
 import { revisarPlantilla } from '@/lib/servicios/revision-plantillas';
+import { cargarYRevisarPlantilla } from '@/lib/servicios/carga-plantillas';
 import { proponerCorreccionesPlantilla, aplicarCorreccionesPlantilla } from '@/lib/servicios/correccion-plantillas';
 import type { ResultadoAdmin } from '../admin/acciones';
 
@@ -23,20 +23,15 @@ export async function accionCargarPlantilla(_: ResultadoAdmin, f: FormData): Pro
   const s = await revisores();
   const archivo = f.get('archivo');
   if (!(archivo instanceof File) || !archivo.size) return { error: 'Seleccione un archivo .docx.' };
-  const tipoId = t(f, 'tipoId');
-  if (!(await db.tipoEscritura.findUnique({ where: { id: tipoId } }))) return { error: 'Tipo de escritura no válido.' };
   let id: string;
   try {
-    const p = await cargarPlantilla(tipoId, archivo.name.slice(0, 120), Buffer.from(await archivo.arrayBuffer()), s.usuario.id, t(f, 'notas') || undefined);
-    await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_CARGADA', entidad: 'plantilla', entidadId: p.id, detalle: { tipoId, version: p.version, sha256: p.hashSha256 } });
-    id = p.id;
+    // Si el archivo es un caso real, la IA cambia sus datos por variables antes de guardarlo
+    ({ id } = await cargarYRevisarPlantilla(s, { tipoId: t(f, 'tipoId'), nombreArchivo: archivo.name.slice(0, 120), archivo: Buffer.from(await archivo.arrayBuffer()), notas: t(f, 'notas') || undefined, convertir: true }));
   } catch (e) {
     if (e instanceof ErrorPlantilla) return { error: e.message };
     console.error('[plantillas]', e);
     return { error: 'No se pudo cargar la plantilla.' };
   }
-  // La revisión no impide la carga: si la IA falla, el error queda en la versión y se puede repetir
-  await revisarPlantilla(id, s).catch((e) => console.error('[plantillas] revisión', e));
   revalidatePath('/plantillas');
   redirect(`/plantillas/${id}`);
 }

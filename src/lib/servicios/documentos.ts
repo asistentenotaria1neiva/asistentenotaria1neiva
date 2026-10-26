@@ -6,7 +6,7 @@ import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
-import { guardarCifrado, leerCifrado, borrarCifrado } from '../almacenamiento';
+import { guardarCifrado, leerCifrado, borrarCifrado, guardarParte, unirPartes } from '../almacenamiento';
 import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { TIPOS_DOCUMENTALES, esquemaExtraccion, normalizarExtraccion, type TipoDocumental, type ResultadoExtraccion } from '../ia/documentos';
@@ -15,9 +15,11 @@ import { llamarEstructurado, bloqueDocumento, ErrorIA } from '../ia/cliente';
 import { sugerenciasDesdeHechos } from '../ia/sugerencias';
 import { obtenerExpediente, puedeEditar, ErrorNegocio } from './expedientes';
 
-/** Tamaño máximo por archivo. En Vercel debe ser 4 (límite de 4,5 MB por petición). */
-export const LIMITE_CARGA_MB = Math.min(25, Number(process.env.LIMITE_CARGA_MB) || 25);
-const TAMANO_MAXIMO = LIMITE_CARGA_MB * 1024 * 1024;
+/**
+ * Los archivos no tienen tamaño máximo: el navegador los envía en partes (Vercel limita cada
+ * petición a 4,5 MB) y el servidor las une antes de validarlos y cifrarlos.
+ */
+const TAMANO_MAXIMO_PARTE = 4 * 1024 * 1024;
 
 /** Tipo real del archivo por su firma (no se confía en la extensión ni en el tipo declarado) */
 export function tipoPorFirma(b: Buffer): string | null {
@@ -28,19 +30,53 @@ export function tipoPorFirma(b: Buffer): string | null {
   return null;
 }
 
-export async function subirDocumento(s: SesionActiva, expedienteId: string, archivo: File, tipo: string) {
+async function expedienteEditable(s: SesionActiva, expedienteId: string) {
   const e = await obtenerExpediente(s, expedienteId);
   if (!puedeEditar(s, e)) throw new ErrorNegocio('No se pueden cargar documentos en el estado actual del expediente.');
+}
+
+/** Las partes de una carga quedan atadas al usuario y al expediente: otro no puede completarla */
+function claveCarga(s: SesionActiva, expedienteId: string, carga: string): string {
+  if (!/^[0-9a-f-]{36}$/.test(carga)) throw new ErrorNegocio('Carga no válida.');
+  return sha256(`${s.usuario.id}:${expedienteId}:${carga}`).slice(0, 32);
+}
+
+/** Guarda (cifrada) una parte de un archivo que llega en varias peticiones */
+export async function subirParteDocumento(s: SesionActiva, expedienteId: string, carga: string, indice: number, parte: File) {
+  await expedienteEditable(s, expedienteId);
+  if (!parte.size || parte.size > TAMANO_MAXIMO_PARTE) throw new ErrorNegocio('Parte de archivo no válida.');
+  await guardarParte(claveCarga(s, expedienteId, carga), indice, Buffer.from(await parte.arrayBuffer()));
+}
+
+/** Une las partes recibidas y registra el documento */
+export async function completarDocumento(s: SesionActiva, expedienteId: string, carga: string, partes: number, nombre: string, tipo: string) {
+  if (!Number.isInteger(partes) || partes < 1 || partes > 99_999) throw new ErrorNegocio('Carga no válida.');
+  let bytes: Buffer;
+  try {
+    bytes = await unirPartes(claveCarga(s, expedienteId, carga), partes);
+  } catch (e) {
+    if (e instanceof ErrorNegocio) throw e;
+    console.error('[completarDocumento]', e);
+    throw new ErrorNegocio('No llegaron todas las partes del archivo. Cárguelo de nuevo.');
+  }
+  return registrarDocumento(s, expedienteId, nombre, bytes, tipo);
+}
+
+export async function subirDocumento(s: SesionActiva, expedienteId: string, archivo: File, tipo: string) {
+  return registrarDocumento(s, expedienteId, archivo.name, Buffer.from(await archivo.arrayBuffer()), tipo);
+}
+
+async function registrarDocumento(s: SesionActiva, expedienteId: string, nombreOriginal: string, bytes: Buffer, tipo: string) {
+  await expedienteEditable(s, expedienteId);
   // AUTO: la IA identifica el documento al analizarlo (se guarda como OTRO hasta entonces)
   if (tipo === 'AUTO') tipo = 'OTRO';
   if (!(tipo in TIPOS_DOCUMENTALES)) throw new ErrorNegocio('Tipo de documento no válido.');
   if (!(await consumirLimite(`carga:${s.usuario.id}`, 60, 3600)).permitido) throw new ErrorNegocio('Demasiadas cargas en la última hora.');
-  if (archivo.size === 0 || archivo.size > TAMANO_MAXIMO) throw new ErrorNegocio(`El archivo debe pesar entre 1 byte y ${LIMITE_CARGA_MB} MB.`);
-  const bytes = Buffer.from(await archivo.arrayBuffer());
+  if (!bytes.length) throw new ErrorNegocio('El archivo está vacío.');
   const mime = tipoPorFirma(bytes);
   if (!mime) throw new ErrorNegocio('Solo se aceptan PDF o imágenes (JPG, PNG, WEBP).');
   const ruta = await guardarCifrado(bytes, 'documentos');
-  const nombre = archivo.name.replace(/[^\p{L}\p{N} ._()-]/gu, '_').slice(0, 150);
+  const nombre = nombreOriginal.replace(/[^\p{L}\p{N} ._()-]/gu, '_').slice(0, 150);
   const d = await db.documento.create({
     data: { expedienteId, tipoDocumental: tipo, nombreOriginal: nombre, mime, tamano: bytes.length, hashSha256: sha256(bytes), rutaCifrada: ruta, subidoPorId: s.usuario.id },
   });

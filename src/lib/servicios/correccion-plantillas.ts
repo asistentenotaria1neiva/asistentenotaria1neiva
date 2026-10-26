@@ -172,7 +172,8 @@ export async function aplicarCorreccionesPlantilla(s: SesionActiva, id: string, 
     const notas = [`Correcciones de la IA sobre la versión ${p.version}, elegidas por ${s.usuario.nombre}:`,
       ...aplicadas.map((x) => `- ${hallazgos[x.hallazgo]?.mensaje ?? 'Hallazgo'} → «${x.original.slice(0, 150)}» por «${x.corregido.slice(0, 150)}»`),
       ...(fallidas.length ? ['No se pudieron aplicar (corríjalos en Word):', ...fallidas.map((f) => `- ${f}`)] : [])].join('\n');
-    const nueva = await cargarPlantilla(p.tipoId, p.nombreArchivo, r.docx, s.usuario.id, notas.slice(0, 4000));
+    // La conversión del caso real (y sus valores ficticios para la vista de ejemplo) pasa a la nueva versión
+    const nueva = await cargarPlantilla(p.tipoId, p.nombreArchivo, r.docx, s.usuario.id, notas.slice(0, 4000), (p.variabilizacion ?? undefined) as Prisma.InputJsonValue | undefined);
     nuevaId = nueva.id;
     await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_CARGADA', entidad: 'plantilla', entidadId: nueva.id, detalle: { tipoId: p.tipoId, version: nueva.version, sha256: nueva.hashSha256, origen: 'correccion_ia', desde: p.version } });
   }

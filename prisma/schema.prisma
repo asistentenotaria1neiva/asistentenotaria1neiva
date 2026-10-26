@@ -145,6 +145,7 @@ model Plantilla {
   aprobadaEn    DateTime?
   revision      Json? // verificación automática + revisión de la IA (src/lib/servicios/revision-plantillas.ts)
   revisadaEn    DateTime?
+  variabilizacion Json? // caso real convertido en plantilla por la IA (src/lib/servicios/variabilizar-plantilla.ts)
   creadaEn      DateTime         @default(now())
 
   @@unique([tipoId, version])

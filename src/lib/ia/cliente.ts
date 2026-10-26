@@ -99,6 +99,11 @@ export async function llamarEstructurado<T>(opciones: {
 
 /** Bloque de contenido para un documento (PDF o imagen) */
 export function bloqueDocumento(bytes: Buffer, mime: string, titulo: string): Anthropic.Beta.BetaContentBlockParam {
+  // Límites de la API: 32 MB por solicitud (el archivo viaja en base64, un tercio más grande) y 5 MB por imagen.
+  // Los documentos se pueden cargar de cualquier tamaño; solo el análisis con IA queda limitado.
+  const mb = bytes.length / 1024 / 1024;
+  if (mime === 'application/pdf' && mb > 22) throw new ErrorIA(`El PDF pesa ${mb.toFixed(0)} MB y la IA analiza hasta 22 MB: quedó cargado, pero sus datos deben ingresarse a mano (o cárguelo dividido o comprimido).`, 'FORMATO');
+  if (mime !== 'application/pdf' && mb > 5) throw new ErrorIA(`La imagen pesa ${mb.toFixed(1)} MB y la IA analiza hasta 5 MB: quedó cargada, pero sus datos deben ingresarse a mano (o cárguela con menor resolución).`, 'FORMATO');
   const data = bytes.toString('base64');
   if (mime === 'application/pdf') {
     return { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data }, title: titulo };

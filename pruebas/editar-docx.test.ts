@@ -59,4 +59,22 @@ describe('reemplazarEnDocx', () => {
     expect(s.resultados[1]).toBe('APLICADO');
     expect(texto(s.docx)).toBe('Señor {{a.vendedor.nombre}} y el comprador.');
   });
+
+  it('con «todas» reemplaza cada aparición, también varias en un mismo párrafo y partidas entre corridas', () => {
+    const d = docxCon(`<w:p>${r('ANA ROJAS, mayor, y ')}${r('ANA ', NEGRITA)}${r('ROJAS firma.')}</w:p><w:p>${r('Vende ANA ROJAS.')}</w:p>`);
+    const s = reemplazarEnDocx(d, [{ original: 'ANA ROJAS', nuevo: '{{a.vendedor.nombre}}', todas: true }]);
+    expect(s.resultados).toEqual(['APLICADO']);
+    expect(s.veces).toEqual([3]);
+    expect(texto(s.docx)).toBe('{{a.vendedor.nombre}}, mayor, y {{a.vendedor.nombre}} firma.\nVende {{a.vendedor.nombre}}.');
+  });
+
+  it('con «todas» no toma el fragmento dentro de una palabra o número más largo', () => {
+    const d = docxCon(`<w:p>${r('ANA ANALIZA el folio 200-123 y el 200-1234.')}</w:p>`);
+    const s = reemplazarEnDocx(d, [
+      { original: 'ANA', nuevo: '{{nombre}}', todas: true },
+      { original: '200-123', nuevo: '{{matricula}}', todas: true },
+    ]);
+    expect(s.veces).toEqual([1, 1]);
+    expect(texto(s.docx)).toBe('{{nombre}} ANALIZA el folio {{matricula}} y el 200-1234.');
+  });
 });

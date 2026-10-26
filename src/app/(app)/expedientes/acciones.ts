@@ -11,7 +11,7 @@ import {
   crearExpediente, enviarARevision, aprobarExpediente,
   devolverExpediente, marcarFirmada, archivarExpediente, reabrirExpediente, reasignarExpediente, ErrorNegocio,
 } from '@/lib/servicios/expedientes';
-import { subirDocumento, analizarDocumento, eliminarDocumento } from '@/lib/servicios/documentos';
+import { subirParteDocumento, completarDocumento, analizarDocumento, eliminarDocumento } from '@/lib/servicios/documentos';
 import { iniciarAsistente, responderAsistente, continuarConDatos, agregarPregunta, type RespuestasAsistente } from '@/lib/servicios/asistente';
 import { ejecutarRevision, resolverObservacion } from '@/lib/servicios/revision';
 import { proponerCorrecciones, aplicarCorrecciones } from '@/lib/servicios/correccion-ia';
@@ -44,13 +44,22 @@ export async function accionCrearExpediente(_: Resultado, f: FormData): Promise<
 }
 
 
-export async function accionSubirDocumento(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
+/**
+ * Carga de documentos sin límite de tamaño: el navegador manda cada archivo en partes
+ * (accionSubirParte, Vercel limita cada petición a 4,5 MB) y luego pide unirlas (accionCompletarDocumento).
+ */
+export async function accionSubirParte(expedienteId: string, carga: string, indice: number, f: FormData): Promise<Resultado> {
   const s = await requerirSesion();
-  const archivos = f.getAll('archivo').filter((x): x is File => x instanceof File && x.size > 0);
-  if (!archivos.length) return { error: 'Seleccione al menos un archivo.' };
+  const parte = f.get('parte');
+  if (!(parte instanceof File)) return { error: 'Parte de archivo no válida.' };
+  return ejecutar(async () => { await subirParteDocumento(s, expedienteId, carga, indice, parte); });
+}
+
+export async function accionCompletarDocumento(expedienteId: string, carga: string, partes: number, nombre: string, tipo: string): Promise<Resultado> {
+  const s = await requerirSesion();
   return ejecutar(async () => {
-    for (const a of archivos) await subirDocumento(s, expedienteId, a, String(f.get('tipo') ?? 'OTRO'));
-    return `${archivos.length} documento(s) cargado(s) y cifrado(s).`;
+    await completarDocumento(s, expedienteId, carga, partes, String(nombre).slice(0, 300), tipo);
+    return 'Documento cargado y cifrado.';
   }, `/expedientes/${expedienteId}/documentos`);
 }
 
