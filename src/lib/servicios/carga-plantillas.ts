@@ -101,7 +101,7 @@ export async function convertirPlantillaCargada(s: SesionActiva, id: string): Pr
     if (e instanceof ErrorIA) throw new ErrorPlantilla(`La IA no respondió: ${e.message}`);
     throw e;
   }
-  const v = r.variabilizacion;
+  const v: Variabilizacion = { ...r.variabilizacion, intentoPosterior: true };
   if (!v.reemplazos.length) {
     // Queda registrado en la versión: ya se intentó, así que deja de aparecer entre las pendientes
     await db.plantilla.update({ where: { id: p.id }, data: { variabilizacion: v as unknown as Prisma.InputJsonValue } });

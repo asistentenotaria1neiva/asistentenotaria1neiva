@@ -35,6 +35,8 @@ export interface Variabilizacion {
   duracionMs: number;
   /** La IA no respondió: la plantilla se cargó tal como venía */
   error: string | null;
+  /** Conversión pedida después de cargar la versión (lista de plantillas con datos reales): no se vuelve a ofrecer */
+  intentoPosterior?: boolean;
 }
 
 interface RespuestaIA {

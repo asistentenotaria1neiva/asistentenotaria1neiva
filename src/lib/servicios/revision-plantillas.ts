@@ -283,14 +283,14 @@ export async function revisarPlantilla(id: string, s: SesionActiva, conIA = true
 }
 
 /**
- * Versión cargada antes de la conversión automática en la que la revisión encontró datos de un caso
- * real (hallazgos «Dato fijo» que no son solo informativos) o que no tiene ninguna variable. Las
- * versiones que ya pasaron por la conversión (al cargarlas o con un intento posterior) no cuentan:
- * así la lista se vacía y desaparece cuando se terminan de convertir las plantillas antiguas.
+ * Versión en la que la revisión encontró datos de un caso real (hallazgos «Dato fijo» que no son solo
+ * informativos) o que no tiene ninguna variable: las cargadas antes de la conversión automática o
+ * aquellas en que la conversión al cargar falló o quedó incompleta. Cada versión se reintenta una
+ * sola vez (intentoPosterior): así la lista se vacía y desaparece.
  */
 export function tieneDatosReales(p: Pick<Plantilla, 'revision' | 'variabilizacion'>): boolean {
   const revision = p.revision as RevisionPlantilla | null;
-  if (!revision || p.variabilizacion) return false;
+  if (!revision || (p.variabilizacion as Variabilizacion | null)?.intentoPosterior) return false;
   return !!revision.ia?.hallazgos.some((h) => h.categoria === 'DATO_FIJO' && h.nivel !== 'INFORMATIVA')
     || revision.automatica.etiquetas.variables.length === 0;
 }

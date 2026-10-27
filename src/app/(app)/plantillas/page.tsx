@@ -101,11 +101,11 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
 
       {conDatosReales.length > 0 && process.env.ANTHROPIC_API_KEY && (
         <details className="tarjeta carga-nueva">
-          <summary>Plantillas antiguas con datos de un caso real <span className="suave">({conDatosReales.length} por revisar)</span></summary>
+          <summary>Plantillas con datos de un caso real <span className="suave">({conDatosReales.length} por revisar)</span></summary>
           <p className="suave">
-            Se cargaron antes de que la IA cambiara los datos por variables, y su revisión encontró datos de un caso real. Al convertirlas, la IA cambia esos datos por variables
+            La revisión de la IA encontró datos de un caso real que siguen escritos en estas plantillas (se cargaron antes de la conversión automática o la conversión al cargarlas quedó incompleta). Al convertirlas, la IA cambia esos datos por variables
             y cada una queda como una versión nueva pendiente de aprobación: la plantilla sin datos y su vista con datos de ejemplo ficticios. La versión actual no cambia.
-            Cada plantilla se intenta una sola vez y sale de esta lista; cuando no quede ninguna, este recuadro desaparece. Las plantillas que se cargan ahora ya salen convertidas.
+            Cada plantilla se intenta una sola vez y sale de esta lista; cuando no quede ninguna, este recuadro desaparece. Las plantillas que se cargan ahora ya salen convertidas al cargarlas.
           </p>
           <ConvertirDatosReales plantillas={conDatosReales} />
         </details>
