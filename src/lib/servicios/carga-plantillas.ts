@@ -79,6 +79,8 @@ export interface ResultadoConversion {
   nueva: ResultadoCarga | null;
   desde: number;
   mensaje: string;
+  /** Datos que siguen escritos y hay que cambiar en Word */
+  noAplicados: { dato: string; motivo: string }[];
 }
 
 /**
@@ -101,7 +103,15 @@ export async function convertirPlantillaCargada(s: SesionActiva, id: string): Pr
   }
   const v = r.variabilizacion;
   if (!v.reemplazos.length) {
-    return { nueva: null, desde: p.version, mensaje: !v.esCasoReal ? 'La IA no encontró datos de un caso real en esta versión.' : `La IA no pudo cambiar los datos automáticamente${v.noAplicados.length ? ` (${v.noAplicados.length} siguen escritos)` : ''}: corríjalos en Word.` };
+    // Queda registrado en la versión: ya se intentó, así que deja de aparecer entre las pendientes
+    await db.plantilla.update({ where: { id: p.id }, data: { variabilizacion: v as unknown as Prisma.InputJsonValue } });
+    await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_CONVERSION_SIN_CAMBIOS', entidad: 'plantilla', entidadId: p.id, detalle: { tipoId: p.tipoId, version: p.version, casoReal: v.esCasoReal, noAplicados: v.noAplicados.length } });
+    return {
+      nueva: null, desde: p.version, noAplicados: v.noAplicados,
+      mensaje: !v.esCasoReal ? 'La IA no encontró datos de un caso real: la plantilla ya está bien.'
+        : v.noAplicados.length ? `La IA encontró ${v.noAplicados.length} dato(s), pero no pudo cambiarlos solos: corríjalos en Word y cargue la versión.`
+          : 'La IA no pudo cambiar los datos automáticamente: corríjalos en Word.',
+    };
   }
 
   // Los valores ficticios de la conversión anterior (si la hubo) se conservan y se completan con los nuevos
@@ -116,7 +126,8 @@ export async function convertirPlantillaCargada(s: SesionActiva, id: string): Pr
   const revision = await revisarPlantilla(nueva.id, s).catch((e) => { console.error('[carga-plantillas] revisión', e); return null; });
   return {
     desde: p.version,
-    mensaje: `${v.reemplazos.length} dato(s) cambiados por variables en la v${nueva.version}.`,
+    noAplicados: v.noAplicados,
+    mensaje: `${v.reemplazos.length} dato(s) cambiados por variables en la v${nueva.version}${v.noAplicados.length ? `; ${v.noAplicados.length} siguen escritos (cámbielos en Word)` : ''}.`,
     nueva: {
       id: nueva.id, version: nueva.version, tipo: p.tipo.nombre,
       conversion: { esCasoReal: true, reemplazos: v.reemplazos.length, noAplicados: v.noAplicados.length, error: null },

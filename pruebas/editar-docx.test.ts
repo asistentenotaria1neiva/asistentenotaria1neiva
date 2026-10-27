@@ -30,6 +30,17 @@ describe('reemplazarEnDocx', () => {
     expect(p.at(-1)).toMatchObject({ texto: ' el inmueble.', negrita: false });
   });
 
+  it('tolera diferencias de mayúsculas, tildes, comillas y guiones (la IA puede copiarlos distinto)', () => {
+    const d = docxCon(`<w:p>${r('Vende ANA LUCÍA PEÑA, matrícula 200–12345, «Lote Uno».')}</w:p>`);
+    const s = reemplazarEnDocx(d, [
+      { original: 'Ana Lucia Pena', nuevo: '{{nombre}}', todas: true },
+      { original: '200-12345', nuevo: '{{matricula}}', todas: true },
+      { original: '"Lote Uno"', nuevo: '{{predio}}', todas: true },
+    ]);
+    expect(s.resultados).toEqual(['APLICADO', 'APLICADO', 'APLICADO']);
+    expect(texto(s.docx)).toBe('Vende {{nombre}}, matrícula {{matricula}}, {{predio}}.');
+  });
+
   it('tolera diferencias de espacios y escapa los caracteres especiales del XML', () => {
     const d = docxCon(`<w:p>${r('Valor:  &lt;precio&gt;')}</w:p>`);
     const s = reemplazarEnDocx(d, [{ original: 'Valor: <precio>', nuevo: 'Valor & precio <total>' }]);

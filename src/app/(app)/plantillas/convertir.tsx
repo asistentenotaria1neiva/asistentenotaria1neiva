@@ -23,6 +23,16 @@ async function convertir(id: string): Promise<Estado> {
   }
 }
 
+/** Resultado de la conversión, con los datos que siguen escritos */
+function Detalle({ r }: { r: ResultadoConversion }) {
+  return (
+    <div className={r.nueva ? 'suave' : r.noAplicados.length ? 'texto-peligro' : 'suave'} style={{ flexBasis: '100%' }}>
+      {r.mensaje}
+      {r.noAplicados.length > 0 && <ul>{r.noAplicados.map((x, i) => <li key={i}>{x.dato}: {x.motivo}</li>)}</ul>}
+    </div>
+  );
+}
+
 export function ConvertirDatosReales({ plantillas, compacto }: { plantillas: PlantillaConDatos[]; compacto?: boolean }) {
   const router = useRouter();
   const [estados, setEstados] = useState<Record<string, Estado>>({});
@@ -54,8 +64,9 @@ export function ConvertirDatosReales({ plantillas, compacto }: { plantillas: Pla
                   {e.fase === 'error' && <span className="texto-peligro">{e.error}</span>}
                   {e.fase === 'hecha' && (e.r.nueva
                     ? <Link className="boton pequeno" href={`/plantillas/${e.r.nueva.id}`}>Abrir v{e.r.nueva.version}</Link>
-                    : <span className="suave">{e.r.mensaje}</span>)}
+                    : <Link className="boton secundario pequeno" href={`/plantillas/${p.id}`}>Abrir v{p.version}</Link>)}
                 </span>
+                {e.fase === 'hecha' && <Detalle r={e.r} />}
               </li>
             );
           })}
@@ -66,8 +77,8 @@ export function ConvertirDatosReales({ plantillas, compacto }: { plantillas: Pla
         if (e.fase === 'error') return <div key={p.id} className="aviso error" role="alert">{e.error}</div>;
         if (e.fase !== 'hecha') return null;
         return e.r.nueva
-          ? <div key={p.id} className="aviso exito" role="status">{e.r.mensaje} <Link href={`/plantillas/${e.r.nueva.id}`}>Abrir v{e.r.nueva.version}</Link></div>
-          : <div key={p.id} className="aviso alerta" role="status">{e.r.mensaje}</div>;
+          ? <div key={p.id} className="aviso exito" role="status"><Detalle r={e.r} /> <Link href={`/plantillas/${e.r.nueva.id}`}>Abrir v{e.r.nueva.version}</Link></div>
+          : <div key={p.id} className="aviso alerta" role="status"><Detalle r={e.r} /></div>;
       })}
       {enCurso && <div className="aviso info" role="status">La IA está cambiando los datos reales por variables y revisando cada versión nueva. Puede tardar unos minutos; no cierre esta página.</div>}
       {pendientes.length > 0 && (

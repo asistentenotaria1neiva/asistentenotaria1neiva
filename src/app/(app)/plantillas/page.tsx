@@ -22,7 +22,7 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
   const filtro: Filtro = estado in PESTANAS ? (estado as Filtro) : '';
   const tipos = await db.tipoEscritura.findMany({
     orderBy: [{ categoria: 'asc' }, { nombre: 'asc' }],
-    include: { plantillas: { select: { id: true, version: true, estado: true, creadaEn: true, revision: true }, orderBy: { version: 'desc' } } },
+    include: { plantillas: { select: { id: true, version: true, estado: true, creadaEn: true, revision: true, variabilizacion: true }, orderBy: { version: 'desc' } } },
   });
   type Tipo = (typeof tipos)[number];
   // La versión que representa al tipo en la lista: la pendiente, si no la vigente, si no la última
@@ -73,7 +73,7 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
   // La última versión de cada tipo (si no está retirada) en la que la revisión encontró datos de un caso real
   const conDatosReales: PlantillaConDatos[] = tipos.flatMap((t) => {
     const ultima = t.plantillas[0];
-    return ultima && ultima.estado !== 'RETIRADA' && tieneDatosReales(ultima.revision as RevisionPlantilla | null) ? [{ id: ultima.id, nombre: t.nombre, version: ultima.version }] : [];
+    return ultima && ultima.estado !== 'RETIRADA' && tieneDatosReales(ultima) ? [{ id: ultima.id, nombre: t.nombre, version: ultima.version }] : [];
   });
   const enlace = (f: Filtro) => `/plantillas?${new URLSearchParams(Object.entries({ estado: f, q, categoria, prioridad, ia, orden }).filter(([, v]) => v))}`;
 
@@ -101,10 +101,11 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
 
       {conDatosReales.length > 0 && process.env.ANTHROPIC_API_KEY && (
         <details className="tarjeta carga-nueva">
-          <summary>Plantillas con datos de un caso real <span className="suave">({conDatosReales.length} por convertir en variables)</span></summary>
+          <summary>Plantillas antiguas con datos de un caso real <span className="suave">({conDatosReales.length} por revisar)</span></summary>
           <p className="suave">
-            La revisión de la IA encontró datos de un caso real escritos en estas plantillas. Al convertirlas, la IA cambia esos datos por variables
+            Se cargaron antes de que la IA cambiara los datos por variables, y su revisión encontró datos de un caso real. Al convertirlas, la IA cambia esos datos por variables
             y cada una queda como una versión nueva pendiente de aprobación: la plantilla sin datos y su vista con datos de ejemplo ficticios. La versión actual no cambia.
+            Cada plantilla se intenta una sola vez y sale de esta lista; cuando no quede ninguna, este recuadro desaparece. Las plantillas que se cargan ahora ya salen convertidas.
           </p>
           <ConvertirDatosReales plantillas={conDatosReales} />
         </details>

@@ -83,7 +83,7 @@ export function PanelConversion({ conversion: c }: { conversion: Variabilizacion
           <ul>{c.advertencias.map((a, i) => <li key={i}>{a}</li>)}</ul>
         </>
       )}
-      <p className="suave">Los datos reales del archivo no se guardan; la plantilla quedó sin datos y la vista «Con datos de ejemplo» la muestra llenada con datos ficticios.</p>
+      {c.reemplazos.length > 0 && <p className="suave">Los datos reales del archivo no se guardan; la plantilla quedó sin datos y la vista «Con datos de ejemplo» la muestra llenada con datos ficticios.</p>}
     </section>
   );
 }

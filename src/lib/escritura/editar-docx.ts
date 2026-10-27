@@ -31,15 +31,23 @@ function piezas(parrafo: string): { texto: string; piezas: Pieza[] } {
   return { texto, piezas: lista };
 }
 
-/** Expresión que ubica el fragmento tolerando diferencias de espacios (la IA puede normalizarlos) */
-const patron = (fragmento: string) => new RegExp(fragmento.trim().split(/\s+/).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s\\u00a0]+'), 'g');
+/** Letras y signos que se consideran iguales al ubicar un fragmento (la IA puede copiarlos distinto) */
+const EQUIVALENTES = ['aáàäâ', 'eéèëê', 'iíìïî', 'oóòöô', 'uúùüû', 'nñ', '"“”«»', "'‘’´`", '-‐‑–—'];
+const CLASE = new Map(EQUIVALENTES.flatMap((g) => [...g].map((c) => [c, `[${g.replace(/[\]\\^-]/g, '\\$&')}]`] as const)));
+const caracter = (c: string) => CLASE.get(c.toLowerCase()) ?? c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Expresión que ubica el fragmento tolerando diferencias de espacios, mayúsculas, tildes, comillas
+ * y guiones (la IA puede normalizarlos al copiarlo)
+ */
+const patron = (fragmento: string) => new RegExp(fragmento.trim().split(/\s+/).map((p) => [...p].map(caracter).join('')).join('[\\s\\u00a0]+'), 'giu');
 
 /** Igual, pero sin tomar el fragmento dentro de una palabra o número más largo ("ANA" no se toma en "ANALIZA") */
 const patronPalabra = (fragmento: string) => {
   const p = patron(fragmento).source;
   const borde = (c: string) => /[\p{L}\p{N}]/u.test(c);
   const t = fragmento.trim();
-  return new RegExp(`${borde(t[0]) ? '(?<![\\p{L}\\p{N}])' : ''}${p}${borde(t.at(-1)!) ? '(?![\\p{L}\\p{N}])' : ''}`, 'gu');
+  return new RegExp(`${borde(t[0]) ? '(?<![\\p{L}\\p{N}])' : ''}${p}${borde(t.at(-1)!) ? '(?![\\p{L}\\p{N}])' : ''}`, 'giu');
 };
 
 /** Reemplaza [a, b) del texto del párrafo por `nuevo`; null si el rango cruza algo no editable */

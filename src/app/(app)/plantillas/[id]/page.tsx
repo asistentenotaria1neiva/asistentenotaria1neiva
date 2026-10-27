@@ -50,7 +50,7 @@ export default async function VersionPlantilla({ params, searchParams }: { param
   const conEjemplo = tieneEjemplo(p.tipoId, valoresEjemploDe(p));
   const esquema = ESQUEMAS[p.tipoId];
   // Solo en la última versión: si ya hay una más nueva, la conversión se hace sobre esa
-  const conDatosReales = !!process.env.ANTHROPIC_API_KEY && p.estado !== 'RETIRADA' && p.tipo.plantillas[0]?.id === p.id && tieneDatosReales(revision);
+  const conDatosReales = !!process.env.ANTHROPIC_API_KEY && p.estado !== 'RETIRADA' && p.tipo.plantillas[0]?.id === p.id && tieneDatosReales(p);
 
   // Corrección con IA de los hallazgos: elegir → la IA propone (en segundo plano) → aplicar en una versión nueva
   const hallazgos = hallazgosOrdenados(revision);
