@@ -41,6 +41,8 @@ export interface Oficio {
 
 export interface ActoPreparado {
   a: Record<string, unknown>;
+  /** Actos por plantilla: valores de las variables, que van sueltos en el contexto ({{nombre_propietario}}) */
+  plano?: Record<string, unknown>;
   especificacion: { acto: string; valor: string }[];
   unidades: UnidadComparecencia[];
   /** Personas que firman sin estar en una unidad de comparecencia (p. ej. coadyuvante) */
@@ -61,6 +63,8 @@ export interface DefinicionActo {
   registro: boolean;
   /** Se anota en el Libro de Varios (actos del estado civil) */
   libroVarios: boolean;
+  /** Su plantilla es la escritura completa: no lleva la carátula ni el cierre comunes */
+  porPlantilla?: boolean;
   preparar(d: DatosActo, h: Ayudas): ActoPreparado;
 }
 

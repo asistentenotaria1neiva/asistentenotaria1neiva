@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { tieneDatosReales, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
+import { enRevision, tieneDatosReales, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
+import { RefrescoAutomatico } from '../expedientes/formularios';
 import { Tabla, fecha } from '../componentes';
 import { CargaPlantillas, CargaRapida, type TipoCargable } from './carga';
 import { EtiquetaVeredicto } from './componentes';
@@ -77,8 +78,11 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
   });
   const enlace = (f: Filtro) => `/plantillas?${new URLSearchParams(Object.entries({ estado: f, q, categoria, prioridad, ia, orden }).filter(([, v]) => v))}`;
 
+  const revisandose = tipos.some((t) => t.plantillas.some((p) => enRevision(p.revision as RevisionPlantilla | null)));
+
   return (
     <>
+      {revisandose && <RefrescoAutomatico segundos={10} />}
       <div className="encabezado">
         <div>
           <h1>Plantillas</h1>

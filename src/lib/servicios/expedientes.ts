@@ -11,6 +11,7 @@ import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { datosVacios, type DatosExpediente, type Persona, type Inmueble } from '../escritura/tipos';
 import { PASOS_COMUNES, ESQUEMAS } from '../escritura/esquemas';
+import { cargarActosDePlantillas } from './actos-plantilla';
 import { validarPaso, validarCampos, leerRuta, escribirRuta, type Errores } from '../escritura/validar-formulario';
 import { validarDocumento, validarMatricula, validarCedulaCatastral } from '../validaciones/formatos';
 import { registrarCorreccion } from './aprendizaje';
@@ -31,6 +32,7 @@ export function puedeEditar(s: SesionActiva, e: Pick<Expediente, 'responsableId'
 }
 
 export async function obtenerExpediente(s: SesionActiva, id: string) {
+  await cargarActosDePlantillas();
   const e = await db.expediente.findUnique({ where: { id }, include: { tipo: true, responsable: { select: { nombreCompleto: true } }, revisor: { select: { nombreCompleto: true } } } });
   if (!e || !puedeVer(s, e)) throw new ErrorNegocio('Expediente no encontrado o sin permiso.');
   return e;
@@ -49,6 +51,7 @@ function validarActos(actos: string[]): string[] {
 }
 
 export async function crearExpediente(s: SesionActiva, actos: string[]): Promise<string> {
+  await cargarActosDePlantillas();
   const validos = validarActos(actos);
   // Si el catálogo falta (p. ej. tras restaurar un respaldo) se recarga antes de crear
   if (!(await db.tipoEscritura.findUnique({ where: { id: validos[0] } }))) await asegurarCatalogo();

@@ -133,7 +133,8 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
   const entrada = {
     actos_elegidos_por_el_usuario: actosActuales,
     catalogo_actos: Object.values(ESQUEMAS).map((x) => ({ id: x.tipo, titulo: x.titulo, documentos_soporte: x.documentosSoporte.map((d) => `${d.etiqueta}${d.obligatorio ? '' : ' (si aplica)'}`) })),
-    catalogo_campos: catalogo(Object.keys(ESQUEMAS), { sinTerminacion: true }),
+    // Los campos de los actos elegidos (los de plantilla pueden ser muchos); si la IA propone otro acto, sus campos se preguntan al confirmarlo
+    catalogo_campos: catalogo(actosActuales.length ? actosActuales : Object.keys(ESQUEMAS), { sinTerminacion: true }),
     datos_expediente: datos,
     documentos: docs.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: TIPOS_DOCUMENTALES[d.tipoDocumental as TipoDocumental] ?? d.tipoDocumental, estado_analisis: d.estadoAnalisis, hechos: d.hechos })),
     datos_dudosos: dudosos.map((x) => ({ ruta: rutaParaIA(datos, x.campo), motivo: x.motivo, valores: x.valores })),

@@ -38,6 +38,8 @@ export interface EsquemaActo {
   pasos: Paso[];
   documentosSoporte: { tipo: TipoDocumental; etiqueta: string; obligatorio: boolean }[];
   reglas: string[]; // códigos de reglas de cruce (src/lib/reglas/reglas.ts)
+  /** Formulario armado con las variables de la plantilla aprobada (src/lib/escritura/actos-plantilla.ts) */
+  porPlantilla?: { plantillaId: string; version: number };
 }
 
 const SI_NO: Opcion[] = [{ valor: 'true', etiqueta: 'Sí' }, { valor: 'false', etiqueta: 'No' }];
@@ -145,6 +147,12 @@ export const ESQUEMAS: Record<string, EsquemaActo> = {
     reglas: ['R01', 'R02', 'R03-TITULAR', 'R03-MATRICULA', 'R03-GRAVAMEN-VIGENTE', 'R03-LIMITACION-VIGENTE', 'R03-CERT-ANTIGUO', 'R04', 'R05-PRECIO-AVALUO', 'R05-AFECTACION', 'R08', 'R09', 'R12'],
   },
 };
+
+/**
+ * Tipos con formulario propio (programado aquí). Los demás se agregan a ESQUEMAS en cuanto tienen
+ * una plantilla aprobada, con el formulario armado desde sus variables (src/lib/servicios/actos-plantilla.ts).
+ */
+export const TIPOS_CON_FORMULARIO_PROPIO = new Set(Object.keys(ESQUEMAS));
 
 /** Pasos completos de un expediente: comunes + los de cada acto, en orden */
 export function pasosExpediente(actos: string[]): { paso: Paso; acto?: string }[] {

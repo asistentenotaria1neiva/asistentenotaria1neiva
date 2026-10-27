@@ -68,15 +68,23 @@ const textoPlano = (xml: string) => xml
 
 export async function generarBorrador(ctx: ContextoEscritura, cargar: CargadorPlantillas): Promise<ResultadoGeneracion> {
   const faltantes: string[] = [];
-  const caratula = renderizarBloque(await cargar('caratula'), ctx.global, faltantes);
-  const cuerpos = [caratula.cuerpo];
-  for (const acto of ctx.actos) cuerpos.push(renderizarBloque(await cargar(acto.plantilla), acto.contexto, faltantes).cuerpo);
-  cuerpos.push(renderizarBloque(await cargar('cierre'), ctx.global, faltantes).cuerpo);
-  const anexos = [...new Set(ctx.actos.map((a) => a.anexo).filter((x): x is string => !!x))];
-  for (const anexo of anexos) cuerpos.push(renderizarBloque(await cargar(anexo), ctx.global, faltantes).cuerpo);
+  // Si todos los actos son por plantilla, cada plantilla es la escritura completa: sin carátula ni cierre comunes
+  const caratula = ctx.conCaratula === false ? null : renderizarBloque(await cargar('caratula'), ctx.global, faltantes);
+  const cuerpos = caratula ? [caratula.cuerpo] : [];
+  let primero: PizZip | null = null;
+  for (const acto of ctx.actos) {
+    const r = renderizarBloque(await cargar(acto.plantilla), acto.contexto, faltantes);
+    primero ??= r.zip;
+    cuerpos.push(r.cuerpo);
+  }
+  if (caratula) {
+    cuerpos.push(renderizarBloque(await cargar('cierre'), ctx.global, faltantes).cuerpo);
+    const anexos = [...new Set(ctx.actos.map((a) => a.anexo).filter((x): x is string => !!x))];
+    for (const anexo of anexos) cuerpos.push(renderizarBloque(await cargar(anexo), ctx.global, faltantes).cuerpo);
+  }
 
-  // Se usa el paquete de la carátula (estilos, encabezado "Hoja No.", página) como base
-  const zip = caratula.zip;
+  // Se usa el paquete de la carátula (estilos, encabezado "Hoja No.", página) como base; sin ella, el del primer acto
+  const zip = caratula?.zip ?? primero!;
   const xml = zip.file('word/document.xml')!.asText();
   const inicio = xml.indexOf('<w:body>') + '<w:body>'.length;
   const finSeccion = xml.lastIndexOf('<w:sectPr');

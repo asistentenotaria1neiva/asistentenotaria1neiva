@@ -11,7 +11,7 @@ import { after } from 'next/server';
 import { requerirSesion, datosAuditoria } from '@/lib/sesion';
 import { auditar } from '@/lib/auditoria';
 import { aprobarPlantilla, retirarPlantilla, ErrorPlantilla } from '@/lib/servicios/plantillas';
-import { revisarPlantilla } from '@/lib/servicios/revision-plantillas';
+import { iniciarRevisionPlantilla, ErrorRevision } from '@/lib/servicios/revision-plantillas';
 import { cargarYRevisarPlantilla } from '@/lib/servicios/carga-plantillas';
 import { proponerCorreccionesPlantilla, aplicarCorreccionesPlantilla } from '@/lib/servicios/correccion-plantillas';
 import type { ResultadoAdmin } from '../admin/acciones';
@@ -36,16 +36,19 @@ export async function accionCargarPlantilla(_: ResultadoAdmin, f: FormData): Pro
   redirect(`/plantillas/${id}`);
 }
 
+/** Inicia la revisión de la IA en segundo plano: el usuario puede salir de la página mientras tanto */
 export async function accionRevisarPlantilla(_: ResultadoAdmin, f: FormData): Promise<ResultadoAdmin> {
   const s = await revisores();
   const id = t(f, 'id');
   try {
-    const r = await revisarPlantilla(id, s);
-    revalidatePath(`/plantillas/${id}`);
-    return r.errorIA ? { error: `La verificación automática se actualizó, pero la IA no respondió: ${r.errorIA}` } : { ok: 'Revisión actualizada.' };
+    const r = await iniciarRevisionPlantilla(id, s);
+    after(r.tarea);
+    revalidatePath('/plantillas', 'layout');
+    return { ok: 'La IA está revisando la plantilla. Puede salir de esta página: en el listado verá «Analizando con IA…» hasta que termine.' };
   } catch (e) {
+    if (e instanceof ErrorRevision) return { error: e.message };
     console.error('[plantillas]', e);
-    return { error: 'No se pudo revisar la plantilla.' };
+    return { error: 'No se pudo iniciar la revisión de la plantilla.' };
   }
 }
 

@@ -1,6 +1,6 @@
 /** Presentación del panel de plantillas (servidor) */
 import type { Parrafo } from '@/lib/escritura/vista-previa';
-import type { RevisionPlantilla, Veredicto } from '@/lib/servicios/revision-plantillas';
+import { enRevision, type RevisionPlantilla, type Veredicto } from '@/lib/servicios/revision-plantillas';
 import type { Variabilizacion } from '@/lib/servicios/variabilizar-plantilla';
 import { EtiquetaNivel } from '../componentes';
 
@@ -17,6 +17,7 @@ export const CATEGORIA: Record<string, string> = {
 };
 
 export function EtiquetaVeredicto({ revision }: { revision: RevisionPlantilla | null }) {
+  if (enRevision(revision)) return <span className="etiqueta informativa fila" style={{ gap: '0.35rem', display: 'inline-flex' }}><span className="girador pequeno" aria-hidden="true" /> Analizando con IA…</span>;
   if (!revision) return <span className="etiqueta">sin revisar</span>;
   if (!revision.ia) return <span className="etiqueta">IA sin respuesta</span>;
   const [clase, texto] = VEREDICTO[revision.ia.veredicto];

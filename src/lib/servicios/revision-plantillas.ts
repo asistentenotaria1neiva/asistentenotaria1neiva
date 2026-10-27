@@ -17,6 +17,7 @@ import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { obtenerConfig } from '../configuracion';
 import { prepararContexto } from '../escritura/contexto';
 import { ACTOS } from '../escritura/actos';
+import { TIPOS_CON_FORMULARIO_PROPIO } from '../escritura/esquemas';
 import { renderizarPlantilla } from '../escritura/generar';
 import { ErrorDatos } from '../escritura/personas';
 import type { DatosExpediente } from '../escritura/tipos';
@@ -55,6 +56,8 @@ export interface RevisionPlantilla {
   revisadaPor: string;
   /** Corrección con IA de los hallazgos (src/lib/servicios/correccion-plantillas.ts) */
   correccion?: CorreccionPlantilla;
+  /** Inicio (ISO) de una revisión de la IA que corre en segundo plano; se borra al terminar */
+  revisando?: string;
 }
 
 export interface PropuestaPlantilla {
@@ -235,6 +238,9 @@ function solicitud(p: Pick<Plantilla, 'version' | 'nombreArchivo' | 'notas' | 'v
     `VERSIÓN EN REVISIÓN: ${p.version} (archivo ${p.nombreArchivo})`,
     p.notas && `Notas de quien la cargó: ${p.notas}`,
     textoConversion(p.variabilizacion as Variabilizacion | null),
+    p.tipo.esBloque || TIPOS_CON_FORMULARIO_PROPIO.has(p.tipo.id)
+      ? `FORMULARIO: este tipo tiene formulario propio; las variables deben ser las que el sistema conoce.`
+      : `FORMULARIO AUTOMÁTICO: este tipo no tiene formulario propio. Al aprobar la plantilla, cada variable se vuelve un campo del expediente (con el fragmento donde aparece) que la IA llena con los documentos cargados; las condiciones se vuelven preguntas de sí o no. Los datos de la notaría y de la terminación (${'nombre_notario, resolucion_tarifas, numero_escritura_letras, fecha_otorgamiento_letras, hojas_papel_notarial, derechos_notariales, codigo_minuta'}) los pone el sistema.`,
     '',
     'VERIFICACIÓN AUTOMÁTICA:',
     a.comparadaCon
@@ -243,7 +249,7 @@ function solicitud(p: Pick<Plantilla, 'version' | 'nombreArchivo' | 'notas' | 'v
     a.prueba
       ? a.prueba.error
         ? `- Prueba con datos ficticios (${a.prueba.descripcion}): ${a.prueba.error}`
-        : `- Prueba con datos ficticios (${a.prueba.descripcion}): variables que el caso de ejemplo no trae (el formulario del expediente aún no las pide): ${lista([...(a.prueba.deMuestra ?? []), ...a.prueba.faltantes])}.`
+        : `- Prueba con datos ficticios (${a.prueba.descripcion}): variables que el caso de ejemplo no trae (se llenaron con valores genéricos de muestra${p.tipo.esBloque || TIPOS_CON_FORMULARIO_PROPIO.has(p.tipo.id) ? '; el formulario propio no las pide' : '; con formulario automático no es un problema'}): ${lista([...(a.prueba.deMuestra ?? []), ...a.prueba.faltantes])}.`
       : '- No hay caso de datos ficticios para este tipo: no se pudo probar el llenado.',
     '',
     `<plantilla_en_revision>\n${v.texto.slice(0, LIMITE_TEXTO)}\n</plantilla_en_revision>`,
@@ -253,6 +259,39 @@ function solicitud(p: Pick<Plantilla, 'version' | 'nombreArchivo' | 'notas' | 'v
 }
 
 /** Verifica la versión y, si conIA, la hace revisar por la IA. Guarda y audita el resultado. */
+/** Una revisión en curso más antigua que esto se da por interrumpida (p. ej., el servidor se reinició) */
+const LIMITE_REVISION_MS = 10 * 60 * 1000;
+
+/** La IA está revisando esta versión en segundo plano */
+export const enRevision = (revision: RevisionPlantilla | null | undefined) =>
+  !!revision?.revisando && Date.now() - new Date(revision.revisando).getTime() < LIMITE_REVISION_MS;
+
+/**
+ * Deja la revisión EN CURSO y devuelve `tarea`, que la acción programa para después de responder:
+ * así el usuario puede salir de la página mientras la IA revisa (la lista y la plantilla muestran el
+ * avance). Si la versión nunca se había revisado, la verificación automática (rápida) queda de una vez.
+ */
+export async function iniciarRevisionPlantilla(id: string, s: SesionActiva) {
+  const p = await db.plantilla.findUniqueOrThrow({ where: { id }, include: { tipo: true } });
+  const previa = p.revision as RevisionPlantilla | null;
+  if (enRevision(previa)) throw new ErrorRevision('La IA ya está revisando esta versión. Espere a que termine.');
+  const base: RevisionPlantilla = previa ?? { automatica: (await verificar(p)).automatica, ia: null, errorIA: null, revisadaPor: s.usuario.nombre };
+  await db.plantilla.update({ where: { id }, data: { revision: { ...base, revisando: new Date().toISOString() } as unknown as Prisma.InputJsonValue } });
+  const tarea = async () => {
+    try {
+      await revisarPlantilla(id, s);
+    } catch (e) {
+      console.error('[revision-plantillas] revisión en segundo plano', e);
+      const actual = await db.plantilla.findUnique({ where: { id } });
+      const r = actual?.revision as RevisionPlantilla | null;
+      if (r) await db.plantilla.update({ where: { id }, data: { revision: { ...r, revisando: undefined, errorIA: 'No se pudo completar la revisión. Pídala de nuevo.' } as unknown as Prisma.InputJsonValue } });
+    }
+  };
+  return { tarea };
+}
+
+export class ErrorRevision extends Error {}
+
 export async function revisarPlantilla(id: string, s: SesionActiva, conIA = true): Promise<RevisionPlantilla> {
   const p = await db.plantilla.findUniqueOrThrow({ where: { id }, include: { tipo: true } });
   const v = await verificar(p);

@@ -9,6 +9,7 @@ import { prepararInmueble, type InmueblePreparado } from './inmuebles';
 import { ACTOS, type ActoPreparado, type Ayudas, type Oficio, numeroCorto } from './actos';
 import { numeroEscrituraEnLetras, fechaEnLetras, fechaComparecencia, fechaCorta } from '../texto/numeros-a-letras';
 import { unirNombres, generoGrupo } from '../texto/concordancia';
+import { valoresAutomaticos } from './actos-plantilla';
 
 export interface ConfigNotaria {
   codigo: string; // 410010001
@@ -27,6 +28,8 @@ export const NOTARIA_POR_DEFECTO: ConfigNotaria = {
 const ORDINAL_ACTO = ['PRIMER', 'SEGUNDO', 'TERCER', 'CUARTO', 'QUINTO', 'SEXTO', 'SÉPTIMO', 'OCTAVO'];
 
 export interface ContextoEscritura {
+  /** Lleva la carátula y el cierre comunes: no, si todos los actos son por plantilla (su plantilla es la escritura completa) */
+  conCaratula: boolean;
   global: Record<string, unknown>;
   actos: { id: string; plantilla: string; anexo?: string; contexto: Record<string, unknown> }[];
 }
@@ -176,7 +179,9 @@ export function prepararContexto(datos: DatosExpediente, ordenActos: string[], n
   };
 
   const varios = preparados.length > 1;
+  const automaticos = valoresAutomaticos(e, notaria);
   return {
+    conCaratula: preparados.some(({ id }) => !ACTOS[id].porPlantilla),
     global,
     actos: preparados.map(({ id, p }, i) => ({
       id,
@@ -184,6 +189,7 @@ export function prepararContexto(datos: DatosExpediente, ordenActos: string[], n
       anexo: ACTOS[id].anexo,
       contexto: {
         ...global,
+        ...(p.plano ? { ...automaticos, ...p.plano } : {}),
         a: p.a,
         titulo_acto: varios ? `${ORDINAL_ACTO[i]} ACTO - ${p.especificacion.map((x) => x.acto).join(' - ')}` : '',
       },

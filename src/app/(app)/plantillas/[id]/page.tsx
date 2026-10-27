@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { ESQUEMAS } from '@/lib/escritura/esquemas';
+import { ESQUEMAS, TIPOS_CON_FORMULARIO_PROPIO } from '@/lib/escritura/esquemas';
 import { vistaPreviaDocx, etiquetasDe } from '@/lib/escritura/vista-previa';
-import { probarConEjemplo, tieneDatosReales, tieneEjemplo, valoresEjemploDe, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
+import { enRevision, probarConEjemplo, tieneDatosReales, tieneEjemplo, valoresEjemploDe, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import type { Variabilizacion } from '@/lib/servicios/variabilizar-plantilla';
 import { estadoCorreccionPlantilla } from '@/lib/servicios/correccion-plantillas';
 import { accionCargarPlantilla, accionPlantilla, accionRevisarPlantilla, accionProponerCorreccionesPlantilla, accionAplicarCorreccionesPlantilla } from '../acciones';
@@ -49,6 +49,8 @@ export default async function VersionPlantilla({ params, searchParams }: { param
   const admin = s.usuario.rol === 'ADMINISTRADOR';
   const conEjemplo = tieneEjemplo(p.tipoId, valoresEjemploDe(p));
   const esquema = ESQUEMAS[p.tipoId];
+  const revisando = enRevision(revision);
+  const formularioAutomatico = !p.tipo.esBloque && !TIPOS_CON_FORMULARIO_PROPIO.has(p.tipoId);
   // Solo en la última versión: si ya hay una más nueva, la conversión se hace sobre esa
   const conDatosReales = !!process.env.ANTHROPIC_API_KEY && p.estado !== 'RETIRADA' && p.tipo.plantillas[0]?.id === p.id && tieneDatosReales(p);
 
@@ -119,7 +121,7 @@ export default async function VersionPlantilla({ params, searchParams }: { param
                       : <>Datos <strong>ficticios</strong> del caso «{ejemplo.caso.descripcion}»{conversion?.reemplazos.length ? ', completados con los que propuso la IA al convertir el caso real' : ''}.</>}
                     {' '}Se muestra solo esta parte de la escritura, llenada como lo haría el sistema.
                   </div>
-                  {ejemplo.deMuestra.length > 0 && <div className="aviso alerta">El caso de ejemplo no trae {ejemplo.deMuestra.length === 1 ? 'esta variable' : `estas ${ejemplo.deMuestra.length} variables`}, así que se llenaron con valores genéricos de muestra: <code>{ejemplo.deMuestra.join(', ')}</code>. Para generar escrituras reales con esta plantilla, el formulario del expediente debe pedir esos datos.</div>}
+                  {ejemplo.deMuestra.length > 0 && <div className={`aviso ${formularioAutomatico ? 'info' : 'alerta'}`}>El caso de ejemplo no trae {ejemplo.deMuestra.length === 1 ? 'esta variable' : `estas ${ejemplo.deMuestra.length} variables`}, así que se llenaron con valores genéricos de muestra: <code>{ejemplo.deMuestra.join(', ')}</code>. {formularioAutomatico ? 'Al aprobarla, cada una será un campo del formulario del expediente que la IA llena con los documentos.' : 'Para generar escrituras reales con esta plantilla, el formulario del expediente debe pedir esos datos.'}</div>}
                   {ejemplo.faltantes.length > 0 && <div className="aviso error">El sistema no supo llenar: <code>{ejemplo.faltantes.join(', ')}</code>. Revise que esas etiquetas estén bien escritas.</div>}
                   <VisorDocx url={`/api/plantillas/${p.id}?ejemplo=1&vista=1`} />
                 </>
@@ -150,8 +152,15 @@ export default async function VersionPlantilla({ params, searchParams }: { param
             <h2 style={{ marginTop: 0 }}>Revisión</h2>
             {corregida && <div className="aviso info">Esta versión se creó con las correcciones de la IA (ver notas abajo). Revísela con la IA y en Word antes de aprobarla.</div>}
             <PanelRevision revision={revision} revisadaEn={fecha(p.revisadaEn)} ocultarHallazgos={corregible && !propuesta && !enCurso} />
-            <FormAdmin accion={accionRevisarPlantilla} ocultos={{ id: p.id }} botones={[{ texto: revision ? 'Revisar de nuevo con IA' : 'Revisar con IA', clase: 'secundario' }]}
-              mensajePendiente="La IA está revisando la plantilla. Puede tardar uno o dos minutos." />
+            {revisando ? (
+              <>
+                <RefrescoAutomatico segundos={8} />
+                <div className="aviso info" role="status"><span className="girador pequeno" aria-hidden="true" /> La IA está revisando esta versión; tarda uno o dos minutos. Puede salir de esta página: en el listado de plantillas verá «Analizando con IA…» hasta que termine.</div>
+              </>
+            ) : (
+              <FormAdmin accion={accionRevisarPlantilla} ocultos={{ id: p.id }} botones={[{ texto: revision ? 'Revisar de nuevo con IA' : 'Revisar con IA', clase: 'secundario' }]}
+                mensajePendiente="Iniciando la revisión…" />
+            )}
           </section>
 
           {conDatosReales && (
