@@ -135,6 +135,7 @@ export function PanelRevision({ revision, revisadaEn, ocultarHallazgos }: { revi
           {!a.prueba ? <li>No hay caso de datos de ejemplo para este tipo: no se probó el llenado.</li>
             : a.prueba.error ? <li className="texto-peligro">Prueba con datos de ejemplo: {a.prueba.error}</li>
             : a.prueba.faltantes.length ? <li className="texto-peligro">Con datos de ejemplo, el sistema no supo llenar: <code>{a.prueba.faltantes.join(', ')}</code></li>
+            : a.prueba.deMuestra?.length ? <li>Con datos de ejemplo se llenaron todas las variables; {a.prueba.deMuestra.length} con valores genéricos de muestra porque el formulario del expediente aún no las pide: <code>{a.prueba.deMuestra.join(', ')}</code></li>
             : <li>Con datos de ejemplo se llenaron todas las variables.</li>}
         </ul>
       </details>

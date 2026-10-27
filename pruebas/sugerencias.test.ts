@@ -16,6 +16,17 @@ describe('sugerencias desde documentos', () => {
     expect(s.every((x) => !x.revisionManual)).toBe(true);
   });
 
+  it('varias cédulas en un mismo PDF: una persona por cada una', () => {
+    const r: ResultadoExtraccion = { tipo_detectado: 'CEDULA', legible: true, observaciones: [], datos: { cedulas: [
+      { numero: d('1075000111'), nombres: d('ANA'), apellidos: d('PRUEBA') },
+      { numero: d('1075000222'), nombres: d('LUIS'), apellidos: d('EJEMPLO') },
+      { numero: d('1075000333'), nombres: d('MARTA'), apellidos: d('FICTICIA') },
+    ] } };
+    const s = sugerenciasDesdeHechos('CEDULA', r);
+    expect(s.filter((x) => x.campo.endsWith('.numero_documento')).map((x) => x.valor)).toEqual(['1.075.000.111', '1.075.000.222', '1.075.000.333']);
+    expect(s.find((x) => x.campo === 'persona:1075000222.nombre')!.valor).toBe('LUIS EJEMPLO');
+  });
+
   it('confianza baja → revisión manual (la IA no adivina)', () => {
     const r: ResultadoExtraccion = { tipo_detectado: 'CEDULA', legible: true, observaciones: [], datos: { numero: d('1075000111', 'BAJA'), nombres: d('ANA'), apellidos: d('PRUEBA') } };
     const s = sugerenciasDesdeHechos('CEDULA', r).find((x) => x.campo.endsWith('numero_documento'))!;

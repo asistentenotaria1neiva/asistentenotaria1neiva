@@ -29,17 +29,19 @@ export interface ResultadoCarga {
   errorIA: string | null;
 }
 
-export async function cargarYRevisarPlantilla(s: SesionActiva, entrada: { tipoId: string; nombreArchivo: string; archivo: Buffer; notas?: string; convertir: boolean }): Promise<ResultadoCarga> {
+export async function cargarYRevisarPlantilla(s: SesionActiva, entrada: { tipoId: string; nombreArchivo: string; archivo: Buffer; notas?: string; convertir: boolean; otros?: Buffer[] }): Promise<ResultadoCarga> {
   const tipo = await db.tipoEscritura.findUnique({ where: { id: entrada.tipoId } });
   if (!tipo) throw new ErrorPlantilla('Tipo de escritura no válido.');
   const v = validarDocxPlantilla(entrada.archivo);
   if (!v.ok) throw new ErrorPlantilla(v.error);
+  const otros = entrada.otros ?? [];
+  if (otros.some((o) => o.subarray(0, 2).toString() !== 'PK')) throw new ErrorPlantilla('Uno de los otros archivos no es un .docx válido.');
 
   let archivo = entrada.archivo;
   let variabilizacion: Variabilizacion | null = null;
   if (entrada.convertir && process.env.ANTHROPIC_API_KEY) {
     try {
-      const r = await variabilizarPlantilla(tipo, archivo);
+      const r = await variabilizarPlantilla(tipo, archivo, { otros });
       archivo = r.archivo;
       variabilizacion = r.variabilizacion;
     } catch (e) {
@@ -56,7 +58,7 @@ export async function cargarYRevisarPlantilla(s: SesionActiva, entrada: { tipoId
     ...datosAuditoria(s), accion: 'PLANTILLA_CARGADA', entidad: 'plantilla', entidadId: p.id,
     detalle: {
       tipoId: tipo.id, version: p.version, sha256: p.hashSha256,
-      ...(variabilizacion ? { conversion: { casoReal: variabilizacion.esCasoReal, reemplazos: variabilizacion.reemplazos.length, error: variabilizacion.error } } : {}),
+      ...(variabilizacion ? { conversion: { casoReal: variabilizacion.esCasoReal, reemplazos: variabilizacion.reemplazos.length, error: variabilizacion.error, otrosCasos: otros.length } } : {}),
       // Si se convirtió, también queda la huella del archivo tal como se cargó
       ...(convertida ? { sha256Original: sha256(entrada.archivo) } : {}),
     },
@@ -92,7 +94,7 @@ export async function convertirPlantillaCargada(s: SesionActiva, id: string): Pr
   const original = Buffer.from(p.archivo);
   let r: Awaited<ReturnType<typeof variabilizarPlantilla>>;
   try {
-    r = await variabilizarPlantilla(p.tipo, original, p.id);
+    r = await variabilizarPlantilla(p.tipo, original, { excluir: p.id });
   } catch (e) {
     if (e instanceof ErrorIA) throw new ErrorPlantilla(`La IA no respondió: ${e.message}`);
     throw e;

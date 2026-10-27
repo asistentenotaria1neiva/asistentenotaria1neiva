@@ -3,7 +3,8 @@
  * Es un Route Handler y no una acción del servidor porque Next.js ejecuta las acciones de un
  * cliente una por una: así cada archivo va en su propia petición y los análisis corren en paralelo
  * (cada uno con su propio límite de tiempo y de tamaño).
- * Recibe: archivo (.docx), tipoId, notas, convertir ("1" para convertir un caso real en plantilla).
+ * Recibe: archivo (.docx), tipoId, notas, convertir ("1" para convertir un caso real en plantilla) y
+ * otros (.docx de otros casos del mismo tipo, opcionales, para que la IA compare al convertir).
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
       archivo: Buffer.from(await archivo.arrayBuffer()),
       notas: String(f.get('notas') ?? '').trim().slice(0, 4000) || undefined,
       convertir: f.get('convertir') === '1',
+      otros: await Promise.all(f.getAll('otros').filter((o): o is File => o instanceof File && o.size > 0).slice(0, 5).map(async (o) => Buffer.from(await o.arrayBuffer()))),
     });
     revalidatePath('/plantillas', 'layout');
     return NextResponse.json(r);

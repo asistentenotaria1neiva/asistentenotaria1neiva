@@ -118,15 +118,18 @@ const TIPO_ANOTACION = {
 };
 
 const ESQUEMAS: Record<TipoDocumental, Esquema> = {
+  // Un PDF puede traer varias cédulas escaneadas: una entrada por persona
   CEDULA: objeto({
-    numero: dato('string', 'Número de cédula, con los puntos tal como aparece'),
-    nombres: dato('string', 'Nombres'),
-    apellidos: dato('string', 'Apellidos'),
-    sexo: dato('string', 'M o F'),
-    fecha_nacimiento: dato('string', 'AAAA-MM-DD'),
-    lugar_nacimiento: dato('string', 'Lugar de nacimiento'),
-    fecha_expedicion: dato('string', 'AAAA-MM-DD'),
-    lugar_expedicion: dato('string', 'Municipio de expedición'),
+    cedulas: lista(objeto({
+      numero: dato('string', 'Número de cédula, con los puntos tal como aparece'),
+      nombres: dato('string', 'Nombres'),
+      apellidos: dato('string', 'Apellidos'),
+      sexo: dato('string', 'M o F'),
+      fecha_nacimiento: dato('string', 'AAAA-MM-DD'),
+      lugar_nacimiento: dato('string', 'Lugar de nacimiento'),
+      fecha_expedicion: dato('string', 'AAAA-MM-DD'),
+      lugar_expedicion: dato('string', 'Municipio de expedición'),
+    }), 'Una entrada por CADA persona cuya cédula aparece en el documento (un mismo PDF puede traer las cédulas de varias personas; el anverso y el reverso de la misma cédula son una sola entrada)'),
   }),
   REGISTRO_CIVIL_NACIMIENTO: objeto({
     nombre: dato('string', 'Nombre completo del inscrito'),
@@ -276,6 +279,16 @@ export function esquemaExtraccion(tipo: TipoDocumental): Esquema {
 export function normalizarExtraccion(tipo: TipoDocumental, r: ResultadoExtraccion): ResultadoExtraccion {
   const entradas = Array.isArray(r.datos) ? (r.datos as Entrada[]) : [];
   return { ...r, datos: reconstruir(ESQUEMAS[tipo], entradas) };
+}
+
+/**
+ * Cédulas de un documento: la lista «cedulas» o, en los análisis anteriores (una cédula por
+ * documento), los datos sueltos.
+ */
+export function cedulasDe(datos: Record<string, unknown> | null | undefined): Record<string, DatoConFuente | undefined>[] {
+  if (!datos) return [];
+  if (Array.isArray(datos.cedulas)) return datos.cedulas as Record<string, DatoConFuente | undefined>[];
+  return 'numero' in datos ? [datos as Record<string, DatoConFuente | undefined>] : [];
 }
 
 export interface DatoConFuente<T = unknown> {

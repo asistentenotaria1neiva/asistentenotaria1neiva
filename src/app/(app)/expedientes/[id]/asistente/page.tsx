@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { obtenerExpediente, puedeEditar, datosDe, actosDe, bloqueos } from '@/lib/servicios/expedientes';
 import { after } from 'next/server';
-import { estadoAsistente, CODIGO_INCONSISTENCIA } from '@/lib/servicios/asistente';
+import { estadoAsistente, esAdicional, CODIGO_INCONSISTENCIA } from '@/lib/servicios/asistente';
 import { tareaEnCurso, tareaPorReanudar } from '@/lib/servicios/tareas';
 import { ProgresoAnalisis } from '../progreso';
 import { ESQUEMAS, PASOS_COMUNES, CAMPOS_PERSONA, CAMPOS_INMUEBLE, type Campo } from '@/lib/escritura/esquemas';
@@ -71,7 +71,9 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
   const actosRuta = r && !r.actosConfirmados ? r.actosPropuestos : actos;
   const personas = datos.personas.map((p) => ({ valor: p.id, etiqueta: `${p.nombre || '(sin nombre)'} · ${p.numero_documento}` }));
   const inmuebles = datos.inmuebles.map((i) => ({ valor: i.id, etiqueta: `${i.matricula || 'sin matrícula'} · ${i.direccion || i.nombre_corto || ''}` }));
-  const pendientes: PreguntaVista[] = (r?.preguntas ?? []).filter((p) => p.estado === 'PENDIENTE').flatMap((p) => {
+  const pendientes: PreguntaVista[] = (r?.preguntas ?? []).filter((p) => p.estado === 'PENDIENTE').flatMap<PreguntaVista>((p) => {
+    // Pregunta adicional de un caso especial: texto libre
+    if (esAdicional(p.ruta)) return [{ id: p.id, etiqueta: p.etiqueta, pregunta: p.pregunta, motivo: p.motivo, tipo: 'textoLargo', obligatoria: p.obligatoria, inicial: '', sugerido: false, fuente: null }];
     const destino = resolverRuta(datos, actosRuta, p.ruta);
     if (!destino) return [];
     const c = destino.campo;
@@ -188,9 +190,9 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
               <Tabla>
                 <tbody>{respondidas.map((p) => (
                   <tr key={p.id}>
-                    <td className="principal-celda"><strong>{p.etiqueta}</strong></td>
+                    <td className="principal-celda"><strong>{esAdicional(p.ruta) ? p.pregunta : p.etiqueta}</strong></td>
                     <td data-etiqueta="Respuesta">{p.estado === 'OMITIDA' ? <span className="suave">sin respuesta</span> : mostrar(p.respuesta, datos)}</td>
-                    <td>{editable && <BotonAccion accion={accionCorregirDato.bind(null, id, p.ruta, 'Cambio de una respuesta anterior.')} texto="Cambiar" clase="secundario pequeno" />}</td>
+                    <td>{editable && !esAdicional(p.ruta) && <BotonAccion accion={accionCorregirDato.bind(null, id, p.ruta, 'Cambio de una respuesta anterior.')} texto="Cambiar" clase="secundario pequeno" />}</td>
                   </tr>
                 ))}</tbody>
               </Tabla>

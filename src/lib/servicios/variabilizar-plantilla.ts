@@ -46,6 +46,7 @@ interface RespuestaIA {
 
 const LIMITE_TEXTO = 80_000;
 const LIMITE_REFERENCIA = 40_000;
+const LIMITE_OTROS = 60_000; // entre todos los otros casos
 
 const MOTIVOS: Record<Exclude<ResultadoReemplazo, 'APLICADO'>, string> = {
   NO_ENCONTRADO: 'no se encontró tal cual en el texto',
@@ -106,10 +107,14 @@ async function referencias(tipoId: string, excluir?: string) {
  * Pide a la IA los datos del caso y los reemplaza por variables. Devuelve el archivo convertido
  * (el mismo si no era un caso real) y el resumen que se guarda con la versión. Lanza ErrorIA.
  * `excluir`: versión ya guardada que se está convirtiendo (no sirve de referencia de sí misma).
+ * `otros`: escrituras de otros casos del mismo tipo. No se modifican: comparadas con el archivo,
+ * muestran qué texto es fijo y qué cambia de un caso a otro (los datos que van en variables).
  */
-export async function variabilizarPlantilla(tipo: { id: string; nombre: string }, archivo: Buffer, excluir?: string): Promise<{ archivo: Buffer; variabilizacion: Variabilizacion }> {
+export async function variabilizarPlantilla(tipo: { id: string; nombre: string }, archivo: Buffer, opciones: { excluir?: string; otros?: Buffer[] } = {}): Promise<{ archivo: Buffer; variabilizacion: Variabilizacion }> {
   const texto = textoDeParrafos(vistaPreviaDocx(archivo));
-  const { conocidas, referencia } = await referencias(tipo.id, excluir);
+  const { conocidas, referencia } = await referencias(tipo.id, opciones.excluir);
+  const otros = (opciones.otros ?? []).map((o) => textoDeParrafos(vistaPreviaDocx(o)));
+  const limiteOtro = Math.floor(LIMITE_OTROS / Math.max(otros.length, 1));
   const r = await llamarEstructurado<RespuestaIA>({
     proposito: 'REVISION',
     sistema: SISTEMA_VARIABILIZAR_PLANTILLA,
@@ -118,13 +123,17 @@ export async function variabilizarPlantilla(tipo: { id: string; nombre: string }
       `VARIABLES CONOCIDAS (variable = valor ficticio de ejemplo):\n${[...conocidas].map(([v, ej]) => `{{${v}}}${ej ? ` = ${ej}` : ''}`).join('\n') || 'ninguna: cree nombres descriptivos'}`,
       referencia && `<plantilla_de_referencia>\n${referencia.slice(0, LIMITE_REFERENCIA)}\n</plantilla_de_referencia>`,
       `<archivo_cargado>\n${texto.slice(0, LIMITE_TEXTO)}\n</archivo_cargado>`,
-      'Indica si el archivo es un caso real y, si lo es, los reemplazos para convertirlo en plantilla.',
+      ...otros.map((t, i) => `<otro_caso numero="${i + 1}">\n${t.slice(0, limiteOtro)}\n</otro_caso>`),
+      otros.length
+        ? `Hay ${otros.length} escritura(s) de otros casos del mismo tipo: compáralas con el archivo cargado para distinguir el texto fijo de los datos. Indica los reemplazos para convertir el ARCHIVO CARGADO en plantilla.`
+        : 'Indica si el archivo es un caso real y, si lo es, los reemplazos para convertirlo en plantilla.',
     ].filter(Boolean).join('\n\n') }],
     esquema: ESQUEMA_VARIABILIZAR_PLANTILLA as unknown as Record<string, unknown>,
     maxTokens: 32000,
   });
 
   const advertencias = r.datos.advertencias.map((a) => a.slice(0, 500));
+  if (otros.some((t) => t.length > limiteOtro)) advertencias.push('Algún otro caso era muy largo: la IA solo comparó su primera parte.');
   if (texto.length > LIMITE_TEXTO) advertencias.push(`El archivo es muy largo: la IA solo revisó los primeros ${LIMITE_TEXTO.toLocaleString('es-CO')} caracteres. Revise el final en Word.`);
   const resultado: Variabilizacion = {
     esCasoReal: r.datos.es_caso_real, resumen: r.datos.resumen.slice(0, 1000), reemplazos: [], noAplicados: [], nuevas: [],
@@ -142,7 +151,9 @@ export async function variabilizarPlantilla(tipo: { id: string; nombre: string }
   const hecho = reemplazarEnDocx(archivo, lista.map((x) => ({ original: x.original, nuevo: x.nuevo, todas: true })), aceptar);
 
   const textoFinal = normalizar(textoDeParrafos(vistaPreviaDocx(hecho.docx)));
-  const textoOriginal = normalizar(texto);
+  // Un valor ficticio se descarta si coincide con un dato real del caso (no basta con que la palabra aparezca en el texto: «casado», «compraventa»…)
+  const reales = lista.map((x) => normalizar(x.original)).filter((x) => x.length >= 4);
+  const esDatoReal = (valor: string) => { const v = normalizar(valor); return reales.some((r) => r === v || (v.length >= 6 && (r.includes(v) || v.includes(r)))); };
   const porVariable = new Map<string, Variabilizacion['reemplazos'][number]>();
   lista.forEach((x, i) => {
     const res = hecho.resultados[i];
@@ -157,7 +168,7 @@ export async function variabilizarPlantilla(tipo: { id: string; nombre: string }
     else porVariable.set(variable, { dato: x.dato.slice(0, 200), variable: x.nuevo, veces: hecho.veces[i] });
     const valor = x.valor_ejemplo.trim().slice(0, 500);
     const ruta = base(variable);
-    if (valor && /^[\w.]+$/.test(ruta) && !(valor.length >= 4 && textoOriginal.includes(normalizar(valor)))) resultado.valoresEjemplo[ruta] ??= valor;
+    if (valor && /^[\w.]+$/.test(ruta) && !esDatoReal(valor)) resultado.valoresEjemplo[ruta] ??= valor;
   });
   resultado.reemplazos = [...porVariable.values()];
   const bases = new Set([...conocidas.keys()].map(base));

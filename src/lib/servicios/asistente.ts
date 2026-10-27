@@ -10,6 +10,8 @@
  *      o continuar con los datos que tiene (queda registrado como observación justificada).
  * El número, la fecha, las hojas, los derechos y la retención no se preguntan: quedan en blanco en
  * el Word para el funcionario que hace la terminación.
+ * Si el caso tiene algo poco común, la IA hace además preguntas adicionales que ningún campo del
+ * formulario responde: se contestan con texto libre y quedan como observación para el revisor.
  */
 import 'server-only';
 import type { Prisma } from '@prisma/client';
@@ -32,6 +34,10 @@ import { ejecutarRevision, resolverObservacion } from './revision';
 
 /** Código de las observaciones que crea el asistente */
 export const CODIGO_INCONSISTENCIA = 'IA-ASISTENTE';
+/** Observación con la respuesta a una pregunta adicional (caso especial) */
+export const CODIGO_PREGUNTA_ADICIONAL = 'IA-PREGUNTA-ADICIONAL';
+/** Ruta de las preguntas adicionales: no corresponden a un campo del formulario */
+export const esAdicional = (ruta: string) => ruta.startsWith('adicional:');
 const JUSTIFICACION_CONTINUAR = 'El funcionario decidió continuar con los datos actuales (asistente de IA).';
 
 export interface PreguntaAsistente {
@@ -68,6 +74,7 @@ interface RespuestaIA {
   documentos_faltantes: { documento: string; motivo: string }[];
   inconsistencias: { nivel: 'ADVERTENCIA' | 'INFORMATIVA'; mensaje: string; evidencia: string; documento_id: string | null }[];
   preguntas: { ruta: string; pregunta: string; motivo: string; valor_sugerido_json: string | null; fuente: string | null }[];
+  preguntas_adicionales: { pregunta: string; motivo: string; obligatoria: boolean }[];
 }
 
 /**
@@ -118,6 +125,9 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
   const datos = datosDe(actual);
   const actosActuales = actosDe(actual);
   const docs = await db.documento.findMany({ where: { expedienteId }, orderBy: { creadoEn: 'asc' } });
+  // Las preguntas adicionales ya respondidas en un análisis anterior no se repiten
+  const previo = (await estadoAsistente(expedienteId)).resultado;
+  const adicionalesPrevias = (previo?.preguntas ?? []).filter((p) => esAdicional(p.ruta) && p.estado === 'RESPONDIDA');
 
   // 3. La IA: tipo, inconsistencias y preguntas
   const entrada = {
@@ -128,11 +138,12 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
     documentos: docs.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: TIPOS_DOCUMENTALES[d.tipoDocumental as TipoDocumental] ?? d.tipoDocumental, estado_analisis: d.estadoAnalisis, hechos: d.hechos })),
     datos_dudosos: dudosos.map((x) => ({ ruta: rutaParaIA(datos, x.campo), motivo: x.motivo, valores: x.valores })),
     documentos_con_error: erroresDocumentos,
+    respuestas_adicionales_previas: adicionalesPrevias.map((p) => ({ pregunta: p.pregunta, respuesta: p.respuesta })),
   };
   const r = await llamarEstructurado<RespuestaIA>({
     proposito: 'REVISION',
     sistema: SISTEMA_ASISTENTE + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
-    contenido: [{ type: 'text', text: `<expediente>\n${JSON.stringify(entrada)}\n</expediente>\nDetermina el tipo de escritura, las inconsistencias y las preguntas.` }],
+    contenido: [{ type: 'text', text: `<expediente>\n${JSON.stringify(entrada)}\n</expediente>\nDetermina el tipo de escritura, las inconsistencias y todas las preguntas, incluidas las adicionales si el caso tiene algo poco común.` }],
     esquema: esquemaAsistente(Object.keys(ESQUEMAS)),
   });
 
@@ -168,6 +179,17 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
       origen: 'REGLAS', obligatoria: !!destino.campo.obligatorio, valorSugerido: sugerido && 'valor' in sugerido ? sugerido.valor : null, fuente: x.valores[0]?.documento ?? null, estado: 'PENDIENTE',
     });
   }
+  // Preguntas del caso especial que ningún campo responde: texto libre
+  for (const p of r.datos.preguntas_adicionales ?? []) {
+    const texto = p.pregunta.trim().slice(0, 500);
+    if (!texto || preguntas.some((x) => x.pregunta === texto)) continue;
+    preguntas.push({
+      id: `p${preguntas.length + 1}`, ruta: `adicional:${preguntas.length + 1}`, etiqueta: 'Pregunta adicional del caso', pregunta: texto, motivo: p.motivo.slice(0, 500),
+      origen: 'IA', obligatoria: !!p.obligatoria, valorSugerido: null, fuente: null, estado: 'PENDIENTE',
+    });
+  }
+  // Las ya respondidas se conservan, para verlas y para que un análisis posterior no las repita
+  for (const p of adicionalesPrevias) if (!preguntas.some((x) => x.pregunta === p.pregunta)) preguntas.push({ ...p, id: `p${preguntas.length + 1}`, ruta: `adicional:${preguntas.length + 1}` });
   preguntas.push(...preguntasDeReglas(datos, actos, preguntas));
 
   // Las inconsistencias quedan como observaciones; las de un análisis anterior sin decidir se reemplazan
@@ -190,7 +212,7 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
     erroresDocumentos,
   };
   await db.analisisIA.update({ where: { id: analisisId }, data: { estado: 'COMPLETADO', modelo: r.modelo, versionInstruccion: instr.version, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs, resultado: resultado as unknown as Prisma.InputJsonValue } });
-  await auditar({ ...datosAuditoria(s), accion: 'ASISTENTE_ANALISIS', entidad: 'expediente', entidadId: expedienteId, detalle: { actos, preguntas: preguntas.length, inconsistencias: r.datos.inconsistencias.length, aplicadas, documentosConError: erroresDocumentos.length } });
+  await auditar({ ...datosAuditoria(s), accion: 'ASISTENTE_ANALISIS', entidad: 'expediente', entidadId: expedienteId, detalle: { actos, preguntas: preguntas.length, adicionales: preguntas.filter((p) => esAdicional(p.ruta) && p.estado === 'PENDIENTE').length, inconsistencias: r.datos.inconsistencias.length, aplicadas, documentosConError: erroresDocumentos.length } });
   return { numeroInterno: e.numeroInterno, obligatoriasPendientes: preguntas.filter((p) => p.obligatoria && p.estado === 'PENDIENTE').length, actosConfirmados: resultado.actosConfirmados };
 }
 
@@ -228,6 +250,24 @@ export async function responderAsistente(s: SesionActiva, expedienteId: string, 
   let respondidas = 0;
   for (const p of r.preguntas) {
     if (p.estado !== 'PENDIENTE') continue;
+    if (esAdicional(p.ruta)) {
+      // Texto libre: queda en la pregunta y como observación para el revisor y el notario
+      if (entrada.omitidas.includes(p.id)) {
+        if (p.obligatoria) errores[p.id] = 'Esta pregunta es obligatoria: no se puede dejar sin respuesta.';
+        else p.estado = 'OMITIDA';
+        continue;
+      }
+      const texto = String(entrada.respuestas[p.id] ?? '').trim().slice(0, 2000);
+      if (!texto) continue;
+      await db.observacion.create({ data: {
+        expedienteId, origen: 'IA', codigo: CODIGO_PREGUNTA_ADICIONAL, nivel: 'INFORMATIVA', mensaje: `Caso especial: ${p.pregunta}`.slice(0, 2000),
+        evidencia: { detalle: p.motivo }, estado: 'JUSTIFICADA', justificacion: texto, resueltaEn: new Date(),
+      } });
+      p.estado = 'RESPONDIDA';
+      p.respuesta = texto;
+      respondidas++;
+      continue;
+    }
     const destino = resolverRuta(datos, actos, p.ruta);
     if (!destino) {
       // P. ej. una pregunta de un acto que el usuario retiró al confirmar el tipo

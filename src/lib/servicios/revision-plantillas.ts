@@ -44,7 +44,8 @@ export interface VerificacionAutomatica {
   comparadaCon: number | null; // versión aprobada contra la que se compararon las variables
   nuevas: string[];
   eliminadas: string[];
-  prueba: { caso: string; descripcion: string; faltantes: string[]; error?: string } | null;
+  /** deMuestra: variables que el caso de ejemplo no trae y se llenaron con un valor genérico de muestra */
+  prueba: { caso: string; descripcion: string; faltantes: string[]; deMuestra?: string[]; error?: string } | null;
 }
 
 export interface RevisionPlantilla {
@@ -118,10 +119,54 @@ function completarContexto(contexto: Record<string, unknown>, valores: Record<st
 }
 
 export type PruebaEjemplo =
-  | { caso: { clave: string; descripcion: string }; docx: Buffer; parrafos: Parrafo[]; faltantes: string[] }
+  | { caso: { clave: string; descripcion: string }; docx: Buffer; parrafos: Parrafo[]; faltantes: string[]; deMuestra: string[] }
   | { caso: { clave: string; descripcion: string }; error: string };
 
-/** Llena la plantilla con datos ficticios. null si no hay caso de ejemplo ni valores de la conversión. */
+/** Nombre base de una etiqueta: "a.vendedores | El:'vendedor'" → "a.vendedores" */
+const base = (etiqueta: string) => etiqueta.split('|')[0].trim();
+
+/** Valor genérico de muestra según el nombre de la variable, para que la vista con datos de ejemplo quede completa */
+export function valorDeMuestra(ruta: string): string {
+  const n = (ruta.split('.').pop() ?? ruta).toLowerCase();
+  const reglas: [RegExp, string][] = [
+    [/estado_civil/, 'SOLTERO(A) SIN UNIÓN MARITAL DE HECHO'],
+    [/cedula_catastral|codigo_catastral|ficha_catastral/, '01-02-0003-0004-000'],
+    [/matricula/, '200-000000'],
+    [/correo|email/, 'ejemplo@correo.com'],
+    [/telefono|celular/, '300 000 0000'],
+    [/documento|cedula|identificacion|^nit|_nit/, '1.234.567.890'],
+    [/lugar_expedicion|expedida/, 'Neiva (Huila)'],
+    [/fecha.*letras|letras.*fecha/, 'quince (15) de marzo de dos mil veinte (2020)'],
+    [/fecha/, '15 de marzo de 2020'],
+    [/anio.*letras/, 'dos mil veinte'],
+    [/anio/, '2020'],
+    [/dia.*letras/, 'quince'],
+    [/^dia|_dia/, '15'],
+    [/mes/, 'marzo'],
+    [/numero.*letras|letras.*numero/, 'mil doscientos treinta y cuatro'],
+    [/numero|^no_|radicado/, '1234'],
+    [/modo_adquisicion|titulo_adquisicion/, 'compraventa'],
+    [/notaria/, 'Notaría Segunda del Círculo de Ejemplo'],
+    [/juzgado/, 'Juzgado Primero Civil Municipal de Ejemplo'],
+    [/letras/, 'CIEN MILLONES DE PESOS'],
+    [/valor|precio|avaluo|cuantia|derechos|monto|saldo|cuota|tarifa/, '$100.000.000'],
+    [/area/, '100,00 m²'],
+    [/coeficiente|porcentaje/, '1,25 %'],
+    [/lindero/, 'Por el norte, con predio de ejemplo; por el sur, con vía pública de ejemplo.'],
+    [/direccion/, 'Calle 1 # 2-34'],
+    [/municipio|ciudad|domicilio/, 'Neiva'],
+    [/departamento/, 'Huila'],
+    [/actividad|ocupacion|profesion/, 'empleado(a)'],
+    [/nombre|propietario|conyuge|companer|tradente|vendedor|comprador|apoderado|otorgante|deudor|acreedor|notario/, 'PERSONA DE EJEMPLO'],
+  ];
+  return reglas.find(([r]) => r.test(n))?.[1] ?? `${n.replace(/_/g, ' ')} de ejemplo`;
+}
+
+/**
+ * Llena la plantilla con datos ficticios. null si no hay caso de ejemplo ni valores de la conversión.
+ * Las variables que el caso no trae se llenan con un valor genérico de muestra (deMuestra), así la
+ * vista queda completa; en faltantes solo quedan las que ni así se pudieron llenar.
+ */
 export async function probarConEjemplo(tipoId: string, archivo: Buffer, valores?: ValoresEjemplo): Promise<PruebaEjemplo | null> {
   if (!tieneEjemplo(tipoId, valores)) return null;
   const caso = casoPara(tipoId);
@@ -129,8 +174,11 @@ export async function probarConEjemplo(tipoId: string, archivo: Buffer, valores?
   try {
     let contexto = (await contextoEjemplo(tipoId)) ?? {};
     if (valores) contexto = completarContexto(contexto, valores);
-    const r = renderizarPlantilla(archivo, contexto);
-    return { caso: info, docx: r.docx, parrafos: vistaPreviaDocx(r.docx, { marcarFaltantes: true }), faltantes: r.faltantes };
+    let r = renderizarPlantilla(archivo, contexto);
+    const muestra = Object.fromEntries(r.faltantes.map(base).filter((v) => /^[\w.]+$/.test(v)).map((v) => [v, valorDeMuestra(v)]));
+    const deMuestra = Object.keys(muestra);
+    if (deMuestra.length) r = renderizarPlantilla(archivo, completarContexto(contexto, muestra));
+    return { caso: info, docx: r.docx, parrafos: vistaPreviaDocx(r.docx, { marcarFaltantes: true }), faltantes: r.faltantes, deMuestra };
   } catch (e) {
     if (e instanceof ErrorDatos) return { caso: info, error: `El caso de ejemplo no tiene: ${e.faltantes.join(', ')}` };
     return { caso: info, error: `La plantilla no se pudo llenar: ${mensajeError(e)}` };
@@ -156,7 +204,7 @@ async function verificar(p: Pick<Plantilla, 'id' | 'tipoId' | 'archivo' | 'varia
     eliminadas: previas ? previas.filter((x) => !todas(etiquetas).includes(x)) : [],
     prueba: prueba && ('error' in prueba
       ? { caso: prueba.caso.clave, descripcion: prueba.caso.descripcion, faltantes: [], error: prueba.error }
-      : { caso: prueba.caso.clave, descripcion: prueba.caso.descripcion, faltantes: prueba.faltantes }),
+      : { caso: prueba.caso.clave, descripcion: prueba.caso.descripcion, faltantes: prueba.faltantes, deMuestra: prueba.deMuestra }),
   };
   return {
     automatica,
@@ -195,7 +243,7 @@ function solicitud(p: Pick<Plantilla, 'version' | 'nombreArchivo' | 'notas' | 'v
     a.prueba
       ? a.prueba.error
         ? `- Prueba con datos ficticios (${a.prueba.descripcion}): ${a.prueba.error}`
-        : `- Prueba con datos ficticios (${a.prueba.descripcion}): variables que el sistema no supo llenar: ${lista(a.prueba.faltantes)}.`
+        : `- Prueba con datos ficticios (${a.prueba.descripcion}): variables que el caso de ejemplo no trae (el formulario del expediente aún no las pide): ${lista([...(a.prueba.deMuestra ?? []), ...a.prueba.faltantes])}.`
       : '- No hay caso de datos ficticios para este tipo: no se pudo probar el llenado.',
     '',
     `<plantilla_en_revision>\n${v.texto.slice(0, LIMITE_TEXTO)}\n</plantilla_en_revision>`,

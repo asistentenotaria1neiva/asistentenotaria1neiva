@@ -11,7 +11,7 @@
  *   INFORMATIVA ... sugerencia
  */
 import type { DatosExpediente, Persona, Inmueble } from '../escritura/tipos';
-import type { ResultadoExtraccion, TipoDocumental, DatoConFuente } from '../ia/documentos';
+import { cedulasDe, type ResultadoExtraccion, type TipoDocumental, type DatoConFuente } from '../ia/documentos';
 import {
   validarDocumento, validarMatricula, validarCedulaCatastral, validarFecha,
 } from '../validaciones/formatos';
@@ -232,7 +232,7 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
   }
 
   // R08 – Cédulas cargadas vs. personas del formulario
-  for (const ced of docs('CEDULA')) {
+  for (const ced of docs('CEDULA').flatMap((d) => cedulasDe(d.hechos?.datos).map((datos) => ({ ...d, hechos: { ...d.hechos!, datos } })))) {
     const num = soloDigitos(v(ced.hechos, 'numero')?.valor);
     if (!num) continue;
     const p = e.datos.personas.find((x) => soloDigitos(x.numero_documento) === num);

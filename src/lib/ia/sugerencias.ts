@@ -12,7 +12,7 @@
  * Cada sugerencia queda marcada para revisión manual si la confianza es BAJA o si el
  * valor no pasa la validación de formato. Nunca se aplica sola: el usuario la acepta o corrige.
  */
-import type { DatoConFuente, ResultadoExtraccion, TipoDocumental } from './documentos';
+import { cedulasDe, type DatoConFuente, type ResultadoExtraccion, type TipoDocumental } from './documentos';
 import { validarCedula, validarMatricula, validarCedulaCatastral, validarNit, validarFecha, validarNuip } from '../validaciones/formatos';
 
 export interface Sugerencia {
@@ -56,18 +56,21 @@ export function sugerenciasDesdeHechos(tipo: TipoDocumental, r: ResultadoExtracc
 
   switch (tipoReal) {
     case 'CEDULA': {
-      const num = digitos(D('numero')?.valor);
-      if (!num) break;
-      const p = `persona:${num}`;
-      const nom = D('nombres'), ape = D('apellidos');
-      if (nom?.valor || ape?.valor) {
-        const peor = [nom?.confianza, ape?.confianza].includes('BAJA') ? 'BAJA' : [nom?.confianza, ape?.confianza].includes('MEDIA') ? 'MEDIA' : 'ALTA';
-        s.push(crear(`${p}.nombre`, { valor: `${nom?.valor ?? ''} ${ape?.valor ?? ''}`, pagina: nom?.pagina ?? ape?.pagina ?? null, fragmento: [nom?.fragmento, ape?.fragmento].filter(Boolean).join(' / '), confianza: peor }, may));
+      // Una persona por cada cédula del documento (un PDF puede traer varias)
+      for (const c of cedulasDe(r.datos)) {
+        const num = digitos(c.numero?.valor);
+        if (!num) continue;
+        const p = `persona:${num}`;
+        const nom = c.nombres, ape = c.apellidos;
+        if (nom?.valor || ape?.valor) {
+          const peor = [nom?.confianza, ape?.confianza].includes('BAJA') ? 'BAJA' : [nom?.confianza, ape?.confianza].includes('MEDIA') ? 'MEDIA' : 'ALTA';
+          s.push(crear(`${p}.nombre`, { valor: `${nom?.valor ?? ''} ${ape?.valor ?? ''}`, pagina: nom?.pagina ?? ape?.pagina ?? null, fragmento: [nom?.fragmento, ape?.fragmento].filter(Boolean).join(' / '), confianza: peor }, may));
+        }
+        s.push({ campo: `${p}.tipo_documento`, valor: 'CC', pagina: c.numero?.pagina ?? null, fragmento: null, confianza: 'ALTA', revisionManual: false });
+        s.push(crear(`${p}.numero_documento`, c.numero, (v) => validarCedula(String(v)).normalizado ?? v, validarCedula));
+        s.push(crear(`${p}.lugar_expedicion`, c.lugar_expedicion, (v) => String(v).trim()));
+        s.push(crear(`${p}.genero`, c.sexo, genero));
       }
-      s.push({ campo: `${p}.tipo_documento`, valor: 'CC', pagina: D('numero')?.pagina ?? null, fragmento: null, confianza: 'ALTA', revisionManual: false });
-      s.push(crear(`${p}.numero_documento`, D('numero'), (v) => validarCedula(String(v)).normalizado ?? v, validarCedula));
-      s.push(crear(`${p}.lugar_expedicion`, D('lugar_expedicion'), (v) => String(v).trim()));
-      s.push(crear(`${p}.genero`, D('sexo'), genero));
       break;
     }
     case 'REGISTRO_CIVIL_NACIMIENTO': {
