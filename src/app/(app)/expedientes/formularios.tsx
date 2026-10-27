@@ -106,13 +106,33 @@ export function FormularioNuevo({ accion, actos }: { accion: (r: Resultado, f: F
 
 /** Tamaño de cada parte: Vercel limita cada petición a 4,5 MB (incluido el sobre del formulario) */
 const TAMANO_PARTE = 3 * 1024 * 1024;
+/** Partes que se suben a la vez */
+const PARTES_EN_PARALELO = 4;
+
+/** Sube una parte (api/documentos/partes); reintenta una vez si se cae la conexión. Devuelve el error, si lo hay. */
+async function subirParte(expedienteId: string, carga: string, indice: number, parte: Blob): Promise<string | null> {
+  for (let intento = 0; ; intento++) {
+    const f = new FormData();
+    f.set('expedienteId', expedienteId);
+    f.set('carga', carga);
+    f.set('indice', String(indice));
+    f.set('parte', parte);
+    try {
+      const r = await fetch('/api/documentos/partes', { method: 'POST', body: f });
+      if (r.ok) return null;
+      if (r.status < 500 || intento) return ((await r.json().catch(() => ({}))) as { error?: string }).error ?? 'No se pudo subir el archivo.';
+    } catch {
+      if (intento) return 'Se perdió la conexión con el servidor.';
+    }
+  }
+}
 
 /**
- * Carga de documentos sin límite de tamaño: cada archivo se envía en partes de 3 MB y el servidor
- * las une, lo valida y lo cifra al recibir la última.
+ * Carga de documentos sin límite de tamaño: cada archivo se envía en partes de 3 MB, varias a la vez,
+ * y el servidor las une, lo valida y lo cifra al recibir todas.
  */
-export function FormularioCarga({ subirParte, completar, tipos }: {
-  subirParte: (carga: string, indice: number, f: FormData) => Promise<Resultado>;
+export function FormularioCarga({ expedienteId, completar, tipos }: {
+  expedienteId: string;
   completar: (carga: string, partes: number, nombre: string, tipo: string) => Promise<Resultado>;
   tipos: [string, string][];
 }) {
@@ -132,13 +152,21 @@ export function FormularioCarga({ subirParte, completar, tipos }: {
         for (const [n, a] of archivos.entries()) {
           const carga = crypto.randomUUID();
           const partes = Math.max(1, Math.ceil(a.size / TAMANO_PARTE));
-          for (let i = 0; i < partes; i++) {
-            setAvance(`Cargando «${a.name}» (${n + 1} de ${archivos.length})${partes > 1 ? ` · ${Math.round((i / partes) * 100)} %` : ''}`);
-            const f = new FormData();
-            f.set('parte', a.slice(i * TAMANO_PARTE, (i + 1) * TAMANO_PARTE));
-            const res = await subirParte(carga, i, f);
-            if (res.error) { setAvance(undefined); return fallo(a, res.error); }
-          }
+          const mostrar = (hechas: number) => setAvance(`Cargando «${a.name}» (${n + 1} de ${archivos.length})${partes > 1 ? ` · ${Math.round((hechas / partes) * 100)} %` : ''}`);
+          mostrar(0);
+          let siguiente = 0;
+          let hechas = 0;
+          let error: string | null = null;
+          // Cada trabajador toma la siguiente parte libre hasta que no queden (o una falle)
+          await Promise.all(Array.from({ length: Math.min(PARTES_EN_PARALELO, partes) }, async () => {
+            while (!error && siguiente < partes) {
+              const i = siguiente++;
+              const e = await subirParte(expedienteId, carga, i, a.slice(i * TAMANO_PARTE, (i + 1) * TAMANO_PARTE));
+              if (e) error ??= e;
+              else mostrar(++hechas);
+            }
+          }));
+          if (error) { setAvance(undefined); return fallo(a, error); }
           setAvance(`Cifrando «${a.name}» (${n + 1} de ${archivos.length})…`);
           const res = await completar(carga, partes, a.name, tipo);
           if (res.error) { setAvance(undefined); return fallo(a, res.error); }

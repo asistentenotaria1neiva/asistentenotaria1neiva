@@ -6,7 +6,7 @@ import { obtenerExpediente, puedeEditar, actosDe } from '@/lib/servicios/expedie
 import { tareaEnCurso, tareaPorReanudar, recuperarDocumentosTrabados } from '@/lib/servicios/tareas';
 import { TIPOS_DOCUMENTALES, type DatoConFuente } from '@/lib/ia/documentos';
 import { ESQUEMAS } from '@/lib/escritura/esquemas';
-import { accionSubirParte, accionCompletarDocumento, accionAnalizarDocumento, accionAnalizarPendientes, accionEliminarDocumento } from '../../acciones';
+import { accionCompletarDocumento, accionAnalizarDocumento, accionAnalizarPendientes, accionEliminarDocumento } from '../../acciones';
 import { FormularioCarga, BotonAccion } from '../../formularios';
 import { ProgresoAnalisis } from '../progreso';
 
@@ -79,7 +79,7 @@ export default async function Documentos({ params }: { params: Promise<{ id: str
         <section className="tarjeta">
           <h2>Cargar documentos</h2>
           <p className="suave">Los archivos se cifran al guardarse y solo el servidor puede leerlos. Para el análisis se envían a la API de Claude (ver docs/seguridad.md).</p>
-          <FormularioCarga subirParte={accionSubirParte.bind(null, id)} completar={accionCompletarDocumento.bind(null, id)} tipos={[['AUTO', 'Detectar automáticamente (la IA identifica el documento)'], ...Object.entries(TIPOS_DOCUMENTALES)]} />
+          <FormularioCarga expedienteId={id} completar={accionCompletarDocumento.bind(null, id)} tipos={[['AUTO', 'Detectar automáticamente (la IA identifica el documento)'], ...Object.entries(TIPOS_DOCUMENTALES)]} />
           {!iaDisponible && <div className="aviso alerta">El análisis con IA no está disponible: falta configurar la clave de la API en el servidor.</div>}
           {tarea && <ProgresoAnalisis tarea={tarea} />}
           {iaDisponible && !tarea && pendientes > 0 && <BotonAccion accion={accionAnalizarPendientes.bind(null, id)} texto={`Analizar con IA los ${pendientes} documento(s) pendiente(s)`} textoPendiente="Iniciando…" />}

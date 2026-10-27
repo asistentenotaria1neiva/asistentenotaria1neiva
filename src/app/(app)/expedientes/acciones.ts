@@ -11,7 +11,7 @@ import {
   crearExpediente, enviarARevision, aprobarExpediente,
   devolverExpediente, marcarFirmada, archivarExpediente, reabrirExpediente, reasignarExpediente, ErrorNegocio,
 } from '@/lib/servicios/expedientes';
-import { subirParteDocumento, completarDocumento, analizarDocumento, eliminarDocumento } from '@/lib/servicios/documentos';
+import { completarDocumento, analizarDocumento, eliminarDocumento } from '@/lib/servicios/documentos';
 import { responderAsistente, continuarConDatos, agregarPregunta, type RespuestasAsistente } from '@/lib/servicios/asistente';
 import { iniciarTarea } from '@/lib/servicios/tareas';
 import { urlAplicacion } from '@/lib/seguridad/red';
@@ -47,16 +47,9 @@ export async function accionCrearExpediente(_: Resultado, f: FormData): Promise<
 
 
 /**
- * Carga de documentos sin límite de tamaño: el navegador manda cada archivo en partes
- * (accionSubirParte, Vercel limita cada petición a 4,5 MB) y luego pide unirlas (accionCompletarDocumento).
+ * Carga de documentos sin límite de tamaño: el navegador manda cada archivo en partes, varias a la vez
+ * (api/documentos/partes; Vercel limita cada petición a 4,5 MB), y luego pide unirlas.
  */
-export async function accionSubirParte(expedienteId: string, carga: string, indice: number, f: FormData): Promise<Resultado> {
-  const s = await requerirSesion();
-  const parte = f.get('parte');
-  if (!(parte instanceof File)) return { error: 'Parte de archivo no válida.' };
-  return ejecutar(async () => { await subirParteDocumento(s, expedienteId, carga, indice, parte); });
-}
-
 export async function accionCompletarDocumento(expedienteId: string, carga: string, partes: number, nombre: string, tipo: string): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {

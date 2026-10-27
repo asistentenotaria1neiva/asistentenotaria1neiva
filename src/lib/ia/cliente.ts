@@ -12,8 +12,10 @@ export type Proposito = 'EXTRACCION' | 'REVISION';
 export function configuracionModelo(proposito: Proposito): { modelo: string; esfuerzo: Esfuerzo } {
   const sufijo = proposito === 'EXTRACCION' ? 'EXTRACCION' : 'REVISION';
   const modelo = process.env[`CLAUDE_MODELO_${sufijo}`] || 'claude-opus-5-5';
-  const e = (process.env[`CLAUDE_ESFUERZO_${sufijo}`] || 'high') as Esfuerzo;
-  return { modelo, esfuerzo: ['low', 'medium', 'high', 'xhigh', 'max'].includes(e) ? e : 'high' };
+  // Leer documentos (extracción) no necesita tanto razonamiento como revisar el expediente, y con menos tarda menos
+  const predeterminado: Esfuerzo = proposito === 'EXTRACCION' ? 'medium' : 'high';
+  const e = (process.env[`CLAUDE_ESFUERZO_${sufijo}`] || predeterminado) as Esfuerzo;
+  return { modelo, esfuerzo: ['low', 'medium', 'high', 'xhigh', 'max'].includes(e) ? e : predeterminado };
 }
 
 let cliente: Anthropic | undefined;

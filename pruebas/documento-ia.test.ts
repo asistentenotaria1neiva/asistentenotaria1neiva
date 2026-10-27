@@ -39,4 +39,15 @@ describe('documento para la IA', () => {
     await d.liberar();
     expect(borrados).toEqual(['file_prueba']);
   });
+
+  it('lee documentos con esfuerzo medium y revisa con high, salvo que la configuración diga otra cosa', async () => {
+    const { configuracionModelo } = await import('@/lib/ia/cliente');
+    delete process.env.CLAUDE_ESFUERZO_EXTRACCION;
+    delete process.env.CLAUDE_ESFUERZO_REVISION;
+    expect(configuracionModelo('EXTRACCION').esfuerzo).toBe('medium');
+    expect(configuracionModelo('REVISION').esfuerzo).toBe('high');
+    process.env.CLAUDE_ESFUERZO_EXTRACCION = 'high';
+    expect(configuracionModelo('EXTRACCION').esfuerzo).toBe('high');
+    delete process.env.CLAUDE_ESFUERZO_EXTRACCION;
+  });
 });
