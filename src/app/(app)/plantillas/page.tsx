@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import type { RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
+import { tieneDatosReales, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import { Tabla, fecha } from '../componentes';
 import { CargaPlantillas, CargaRapida, type TipoCargable } from './carga';
 import { EtiquetaVeredicto } from './componentes';
+import { ConvertirDatosReales, type PlantillaConDatos } from './convertir';
 import { FiltrosPlantillas } from './filtros';
 
 const PESTANAS = { '': 'Todas', pendiente: 'Pendientes de aprobación', aprobada: 'Aprobadas', sin_plantilla: 'Sin plantilla' } as const;
@@ -69,6 +70,11 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
       id: t.id, nombre: t.esBloque ? `[Parte común] ${t.nombre}` : t.nombre, grupo: t.plantillas.length ? 'version' : 'nueva',
       detalle: t.plantillas.length ? `será la v${Math.max(...t.plantillas.map((p) => p.version)) + 1}` : `prioridad ${t.prioridad.toLowerCase()}`,
     }));
+  // La última versión de cada tipo (si no está retirada) en la que la revisión encontró datos de un caso real
+  const conDatosReales: PlantillaConDatos[] = tipos.flatMap((t) => {
+    const ultima = t.plantillas[0];
+    return ultima && ultima.estado !== 'RETIRADA' && tieneDatosReales(ultima.revision as RevisionPlantilla | null) ? [{ id: ultima.id, nombre: t.nombre, version: ultima.version }] : [];
+  });
   const enlace = (f: Filtro) => `/plantillas?${new URLSearchParams(Object.entries({ estado: f, q, categoria, prioridad, ia, orden }).filter(([, v]) => v))}`;
 
   return (
@@ -92,6 +98,17 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
         </p>
         <CargaPlantillas tipos={cargables} inicial={nuevo} />
       </details>
+
+      {conDatosReales.length > 0 && process.env.ANTHROPIC_API_KEY && (
+        <details className="tarjeta carga-nueva">
+          <summary>Plantillas con datos de un caso real <span className="suave">({conDatosReales.length} por convertir en variables)</span></summary>
+          <p className="suave">
+            La revisión de la IA encontró datos de un caso real escritos en estas plantillas. Al convertirlas, la IA cambia esos datos por variables
+            y cada una queda como una versión nueva pendiente de aprobación: la plantilla sin datos y su vista con datos de ejemplo ficticios. La versión actual no cambia.
+          </p>
+          <ConvertirDatosReales plantillas={conDatosReales} />
+        </details>
+      )}
 
       <FiltrosPlantillas valores={{ q, estado: filtro, categoria, prioridad, ia, orden }} activos={filtrosActivos}
         categorias={categorias.map((c) => [c, c === 'Bloques comunes' ? 'Partes comunes' : c])} />

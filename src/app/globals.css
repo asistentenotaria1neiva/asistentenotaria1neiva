@@ -419,3 +419,8 @@ details.tarjeta { padding: 0.85rem 1.25rem; }
 .ventana::backdrop { background: rgba(16, 24, 40, 0.45); }
 .ventana h2 { margin-top: 0; }
 .ventana .aviso .fila { margin-top: 0.4rem; }
+
+/* Plantillas con datos de un caso real por convertir */
+.lista-conversion { list-style: none; padding: 0; margin: 0 0 0.75rem; }
+.lista-conversion li { padding: 0.45rem 0; border-bottom: 1px solid var(--borde-suave); gap: 0.5rem; flex-wrap: wrap; }
+.lista-conversion li:last-child { border-bottom: 0; }

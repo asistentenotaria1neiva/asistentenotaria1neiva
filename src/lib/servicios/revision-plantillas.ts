@@ -233,3 +233,13 @@ export async function revisarPlantilla(id: string, s: SesionActiva, conIA = true
   });
   return revision;
 }
+
+/**
+ * La revisión encontró datos de un caso real escritos en la plantilla (hallazgos «Dato fijo» que no
+ * son solo informativos) o la plantilla no tiene ninguna variable: hay que convertirla en plantilla.
+ */
+export function tieneDatosReales(revision: RevisionPlantilla | null): boolean {
+  if (!revision) return false;
+  return !!revision.ia?.hallazgos.some((h) => h.categoria === 'DATO_FIJO' && h.nivel !== 'INFORMATIVA')
+    || revision.automatica.etiquetas.variables.length === 0;
+}

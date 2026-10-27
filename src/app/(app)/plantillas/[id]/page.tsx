@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { ESQUEMAS } from '@/lib/escritura/esquemas';
 import { vistaPreviaDocx, etiquetasDe } from '@/lib/escritura/vista-previa';
-import { probarConEjemplo, tieneEjemplo, valoresEjemploDe, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
+import { probarConEjemplo, tieneDatosReales, tieneEjemplo, valoresEjemploDe, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import type { Variabilizacion } from '@/lib/servicios/variabilizar-plantilla';
 import { estadoCorreccionPlantilla } from '@/lib/servicios/correccion-plantillas';
 import { accionCargarPlantilla, accionPlantilla, accionRevisarPlantilla, accionProponerCorreccionesPlantilla, accionAplicarCorreccionesPlantilla } from '../acciones';
@@ -19,6 +19,7 @@ const TEXTOS_CORRECCION = {
   sinCorreccion: 'Se corrigen a mano en Word',
 };
 import { VisorDocx } from '../VisorDocx';
+import { ConvertirDatosReales } from '../convertir';
 
 // La revisión de la IA puede tardar uno o dos minutos
 export const maxDuration = 300;
@@ -48,6 +49,8 @@ export default async function VersionPlantilla({ params, searchParams }: { param
   const admin = s.usuario.rol === 'ADMINISTRADOR';
   const conEjemplo = tieneEjemplo(p.tipoId, valoresEjemploDe(p));
   const esquema = ESQUEMAS[p.tipoId];
+  // Solo en la última versión: si ya hay una más nueva, la conversión se hace sobre esa
+  const conDatosReales = !!process.env.ANTHROPIC_API_KEY && p.estado !== 'RETIRADA' && p.tipo.plantillas[0]?.id === p.id && tieneDatosReales(revision);
 
   // Corrección con IA de los hallazgos: elegir → la IA propone (en segundo plano) → aplicar en una versión nueva
   const hallazgos = hallazgosOrdenados(revision);
@@ -149,6 +152,14 @@ export default async function VersionPlantilla({ params, searchParams }: { param
             <FormAdmin accion={accionRevisarPlantilla} ocultos={{ id: p.id }} botones={[{ texto: revision ? 'Revisar de nuevo con IA' : 'Revisar con IA', clase: 'secundario' }]}
               mensajePendiente="La IA está revisando la plantilla. Puede tardar uno o dos minutos." />
           </section>
+
+          {conDatosReales && (
+            <section className="tarjeta">
+              <h2 style={{ marginTop: 0 }}>Datos de un caso real</h2>
+              <p className="suave">La revisión encontró datos de un caso real escritos en esta versión. La IA puede cambiarlos por variables: se crea la v{Math.max(...p.tipo.plantillas.map((v) => v.version)) + 1}, sin datos y con su vista con datos de ejemplo ficticios, pendiente de aprobación. Esta versión no cambia.</p>
+              <ConvertirDatosReales compacto plantillas={[{ id: p.id, nombre: p.tipo.nombre, version: p.version }]} />
+            </section>
+          )}
 
           {conversion && <PanelConversion conversion={conversion} />}
 

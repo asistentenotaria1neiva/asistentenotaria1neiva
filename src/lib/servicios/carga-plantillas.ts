@@ -6,6 +6,7 @@
  *   4. La verificación automática y la revisión de la IA (revision-plantillas.ts).
  * La usan la carga de una versión (acción) y la de varias a la vez (api/plantillas/cargar), que
  * manda una petición por archivo para que los análisis corran en paralelo.
+ * También la conversión de versiones ya cargadas que siguen con datos reales (api/plantillas/convertir).
  */
 import 'server-only';
 import type { Prisma } from '@prisma/client';
@@ -68,5 +69,57 @@ export async function cargarYRevisarPlantilla(s: SesionActiva, entrada: { tipoId
     conversion: variabilizacion && { esCasoReal: variabilizacion.esCasoReal, reemplazos: variabilizacion.reemplazos.length, noAplicados: variabilizacion.noAplicados.length, error: variabilizacion.error },
     veredicto: revision?.ia?.veredicto ?? null,
     errorIA: revision ? revision.errorIA : 'No se pudo completar la revisión.',
+  };
+}
+
+export interface ResultadoConversion {
+  /** Versión nueva con los datos cambiados por variables; null si la IA no encontró datos que cambiar */
+  nueva: ResultadoCarga | null;
+  desde: number;
+  mensaje: string;
+}
+
+/**
+ * Convierte una versión ya cargada que todavía tiene datos de un caso real: la IA cambia los datos
+ * por variables y queda una versión NUEVA (sin datos, con sus valores de ejemplo ficticios),
+ * pendiente de aprobación y revisada por la IA. La versión original no cambia.
+ */
+export async function convertirPlantillaCargada(s: SesionActiva, id: string): Promise<ResultadoConversion> {
+  const p = await db.plantilla.findUnique({ where: { id }, include: { tipo: true } });
+  if (!p) throw new ErrorPlantilla('La plantilla no existe.');
+  if (p.estado === 'RETIRADA') throw new ErrorPlantilla('La versión está retirada.');
+  if (!process.env.ANTHROPIC_API_KEY) throw new ErrorPlantilla('La IA no está configurada.');
+  const original = Buffer.from(p.archivo);
+  let r: Awaited<ReturnType<typeof variabilizarPlantilla>>;
+  try {
+    r = await variabilizarPlantilla(p.tipo, original, p.id);
+  } catch (e) {
+    if (e instanceof ErrorIA) throw new ErrorPlantilla(`La IA no respondió: ${e.message}`);
+    throw e;
+  }
+  const v = r.variabilizacion;
+  if (!v.reemplazos.length) {
+    return { nueva: null, desde: p.version, mensaje: !v.esCasoReal ? 'La IA no encontró datos de un caso real en esta versión.' : `La IA no pudo cambiar los datos automáticamente${v.noAplicados.length ? ` (${v.noAplicados.length} siguen escritos)` : ''}: corríjalos en Word.` };
+  }
+
+  // Los valores ficticios de la conversión anterior (si la hubo) se conservan y se completan con los nuevos
+  const previos = (p.variabilizacion as Variabilizacion | null)?.valoresEjemplo ?? {};
+  v.valoresEjemplo = { ...previos, ...v.valoresEjemplo };
+  const notas = `Datos del caso real cambiados por variables con la IA, a partir de la v${p.version}.${p.notas ? `\n${p.notas}` : ''}`;
+  const nueva = await cargarPlantilla(p.tipoId, p.nombreArchivo, r.archivo, s.usuario.id, notas.slice(0, 4000), v as unknown as Prisma.InputJsonValue);
+  await auditar({
+    ...datosAuditoria(s), accion: 'PLANTILLA_CARGADA', entidad: 'plantilla', entidadId: nueva.id,
+    detalle: { tipoId: p.tipoId, version: nueva.version, sha256: nueva.hashSha256, origen: 'conversion_caso_real', desde: p.version, conversion: { reemplazos: v.reemplazos.length, noAplicados: v.noAplicados.length } },
+  });
+  const revision = await revisarPlantilla(nueva.id, s).catch((e) => { console.error('[carga-plantillas] revisión', e); return null; });
+  return {
+    desde: p.version,
+    mensaje: `${v.reemplazos.length} dato(s) cambiados por variables en la v${nueva.version}.`,
+    nueva: {
+      id: nueva.id, version: nueva.version, tipo: p.tipo.nombre,
+      conversion: { esCasoReal: true, reemplazos: v.reemplazos.length, noAplicados: v.noAplicados.length, error: null },
+      veredicto: revision?.ia?.veredicto ?? null,
+      errorIA: revision ? revision.errorIA : 'No se pudo completar la revisión.',
+    },
   };
 }

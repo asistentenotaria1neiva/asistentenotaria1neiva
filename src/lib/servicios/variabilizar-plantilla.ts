@@ -82,8 +82,8 @@ function aplanar(obj: Record<string, unknown>, prefijo = '', salida = new Map<st
  * Lo que la IA necesita para elegir las variables: las que ya usan las versiones del tipo y su modelo
  * limpio (con el valor del caso de ejemplo, si lo hay) y un texto de referencia que las use.
  */
-async function referencias(tipoId: string) {
-  const versiones = await db.plantilla.findMany({ where: { tipoId }, orderBy: { version: 'desc' }, select: { archivo: true, estado: true } });
+async function referencias(tipoId: string, excluir?: string) {
+  const versiones = await db.plantilla.findMany({ where: { tipoId, ...(excluir ? { id: { not: excluir } } : {}) }, orderBy: { version: 'desc' }, select: { archivo: true, estado: true } });
   const vigente = versiones.find((v) => v.estado === 'APROBADA') ?? versiones[0];
   const textoVigente = vigente ? textoDeParrafos(vistaPreviaDocx(Buffer.from(vigente.archivo))) : null;
   const modelo = await modeloLimpio(tipoId);
@@ -105,10 +105,11 @@ async function referencias(tipoId: string) {
 /**
  * Pide a la IA los datos del caso y los reemplaza por variables. Devuelve el archivo convertido
  * (el mismo si no era un caso real) y el resumen que se guarda con la versión. Lanza ErrorIA.
+ * `excluir`: versión ya guardada que se está convirtiendo (no sirve de referencia de sí misma).
  */
-export async function variabilizarPlantilla(tipo: { id: string; nombre: string }, archivo: Buffer): Promise<{ archivo: Buffer; variabilizacion: Variabilizacion }> {
+export async function variabilizarPlantilla(tipo: { id: string; nombre: string }, archivo: Buffer, excluir?: string): Promise<{ archivo: Buffer; variabilizacion: Variabilizacion }> {
   const texto = textoDeParrafos(vistaPreviaDocx(archivo));
-  const { conocidas, referencia } = await referencias(tipo.id);
+  const { conocidas, referencia } = await referencias(tipo.id, excluir);
   const r = await llamarEstructurado<RespuestaIA>({
     proposito: 'REVISION',
     sistema: SISTEMA_VARIABILIZAR_PLANTILLA,
