@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import type { RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import { Tabla, fecha } from '../componentes';
-import { CargaPlantillas, type TipoCargable } from './carga';
+import { CargaPlantillas, CargaRapida, type TipoCargable } from './carga';
 import { EtiquetaVeredicto } from './componentes';
 import { FiltrosPlantillas } from './filtros';
 
@@ -144,7 +144,7 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
                           <Link className="boton pequeno" href={`/plantillas/${principal.id}`}>Abrir</Link>
                           <a className="boton secundario pequeno" href={`/api/plantillas/${principal.id}`}>Descargar</a>
                         </>
-                      ) : <Link className="boton secundario pequeno" href={`/plantillas?nuevo=${t.id}#cargar`}>Cargar</Link>}
+                      ) : <CargaRapida tipoId={t.id} nombre={t.nombre} />}
                     </td>
                   </tr>
                 );

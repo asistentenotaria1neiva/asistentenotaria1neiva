@@ -413,3 +413,9 @@ details.tarjeta { padding: 0.85rem 1.25rem; }
   .tabla { border: 0; box-shadow: none; overflow: visible; }
   a { color: inherit; text-decoration: none; }
 }
+
+/* Ventana emergente (dialog nativo) */
+.ventana { border: 0; border-radius: var(--radio); padding: 1.25rem; box-shadow: 0 20px 40px rgba(8, 20, 45, 0.3); width: min(520px, calc(100vw - 32px)); background: var(--superficie); color: var(--texto); }
+.ventana::backdrop { background: rgba(16, 24, 40, 0.45); }
+.ventana h2 { margin-top: 0; }
+.ventana .aviso .fila { margin-top: 0.4rem; }
