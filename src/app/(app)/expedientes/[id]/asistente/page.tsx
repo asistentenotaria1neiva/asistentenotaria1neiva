@@ -135,6 +135,11 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
           <h3>Documentos</h3>
           <p className="suave">{r.resumenDocumentos}</p>
           {r.aplicadasAutomaticamente > 0 && <p className="suave">Se llevaron al expediente {r.aplicadasAutomaticamente} dato(s) leídos con confianza de los documentos. Puede revisarlos y corregirlos en «Datos de la escritura», más abajo.</p>}
+          {!!r.completadosDesdeDocumentos?.length && (
+            <details><summary>Datos que la IA llenó desde los documentos sin preguntar ({r.completadosDesdeDocumentos.length})</summary>
+              <ul>{r.completadosDesdeDocumentos.map((c, i) => <li key={i}><strong>{c.etiqueta}</strong>: {c.valor.length > 120 ? `${c.valor.slice(0, 120)}…` : c.valor} <span className="suave">({c.fuente})</span></li>)}</ul>
+            </details>
+          )}
           {r.erroresDocumentos.length > 0 && <div className="aviso error">No se pudieron analizar: {r.erroresDocumentos.join(' · ')}</div>}
           {r.documentosFaltantes.length > 0 && (
             <div className="aviso alerta">

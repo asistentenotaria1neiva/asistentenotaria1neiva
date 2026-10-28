@@ -14,6 +14,7 @@ import { PASOS_COMUNES, ESQUEMAS } from '../escritura/esquemas';
 import { cargarActosDePlantillas } from './actos-plantilla';
 import { validarPaso, validarCampos, leerRuta, escribirRuta, type Errores } from '../escritura/validar-formulario';
 import { validarDocumento, validarMatricula, validarCedulaCatastral } from '../validaciones/formatos';
+import { mismoValor, claveMatricula, documentoQueManda } from '../escritura/comparar';
 import { registrarCorreccion } from './aprendizaje';
 import { notificar } from './notificaciones';
 import { asegurarCatalogo } from './inicializacion';
@@ -185,7 +186,7 @@ export function resolverDestino(datos: DatosExpediente, campo: string): { ruta: 
     return { ruta: `personas.${i}.${subcampo}`, base: 'persona', indice: i, subcampo };
   }
   if (tipo === 'inmueble') {
-    const i = datos.inmuebles.findIndex((x) => (x.matricula ?? '').toUpperCase() === clave.toUpperCase());
+    const i = datos.inmuebles.findIndex((x) => !!claveMatricula(x.matricula) && claveMatricula(x.matricula) === claveMatricula(clave));
     return { ruta: `inmuebles.${i}.${subcampo}`, base: 'inmueble', indice: i, subcampo };
   }
   if (tipo === 'catastral') {
@@ -208,11 +209,16 @@ async function detectarCorrecciones(s: SesionActiva, e: Expediente, despues: Dat
   }
 }
 
-/** Escribe el valor de una sugerencia en los datos; crea la persona o el inmueble si no existe. false = no aplicable. */
-function aplicarEnDatos(datos: DatosExpediente, campo: string, valor: unknown): boolean {
+/**
+ * Escribe el valor de una sugerencia en los datos; crea la persona o el inmueble si no existe, salvo
+ * con `crear: false` (los inmuebles de una escritura anterior: el título puede describir otros que no
+ * son de esta escritura). false = no aplicable.
+ */
+function aplicarEnDatos(datos: DatosExpediente, campo: string, valor: unknown, crear = true): boolean {
   let destino = resolverDestino(datos, campo);
   if (!destino) return false;
   if (destino.indice < 0) {
+    if (!crear) return false;
     const clave = campo.split(':')[1].split('.')[0];
     if (destino.base === 'persona') datos.personas.push({ id: crypto.randomUUID(), tipo_persona: 'NATURAL', nombre: '', tipo_documento: 'CC', numero_documento: clave, domicilio: 'la ciudad de Neiva (H)' } as Persona);
     else if (destino.base === 'inmueble') datos.inmuebles.push({ id: crypto.randomUUID(), tipo_inmueble: 'LOTE', direccion: '', municipio: 'Neiva', departamento: 'Huila', linderos: '', matricula: campo.startsWith('inmueble:') ? clave : '', orip: 'NEIVA - HUILA', cedula_catastral: campo.startsWith('catastral:') ? clave : '', tradicion: { modo: 'COMPRA', tradente: '', escritura_numero: '', escritura_fecha: '', notaria: '' }, fecha_certificado_tradicion: '' } as Inmueble);
@@ -225,6 +231,8 @@ function aplicarEnDatos(datos: DatosExpediente, campo: string, valor: unknown): 
 /** Orden de aplicación: primero los inmuebles del certificado, para que el paz y salvo encuentre su cédula catastral */
 const ORDEN_SUGERENCIA = ['inmueble:', 'persona:', 'catastral:', 'acto:'];
 const ordenSugerencia = (campo: string) => ORDEN_SUGERENCIA.findIndex((p) => campo.startsWith(p));
+/** Dentro de cada grupo, la matrícula primero: es la que crea el inmueble al que van los demás datos */
+const compararSugerencias = (a: string, b: string) => ordenSugerencia(a) - ordenSugerencia(b) || Number(b.endsWith('.matricula')) - Number(a.endsWith('.matricula'));
 
 /**
  * Asistente de IA: aplica de una vez las sugerencias confiables (confianza alta o media y formato
@@ -235,25 +243,35 @@ export async function aplicarSugerenciasConfiables(s: SesionActiva, expedienteId
   const e = await obtenerExpediente(s, expedienteId);
   if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede editar en su estado actual.');
   const datos = datosDe(e);
-  const pendientes = await db.datoExtraido.findMany({ where: { expedienteId, estado: 'PENDIENTE' }, include: { documento: { select: { nombreOriginal: true } } }, orderBy: { creadoEn: 'asc' } });
+  const pendientes = await db.datoExtraido.findMany({ where: { expedienteId, estado: 'PENDIENTE' }, include: { documento: { select: { nombreOriginal: true, tipoDocumental: true } } }, orderBy: { creadoEn: 'asc' } });
   const porCampo = new Map<string, typeof pendientes>();
   for (const d of pendientes) porCampo.set(d.campo, [...(porCampo.get(d.campo) ?? []), d]);
-  const aceptados: typeof pendientes = [];
+  const aceptados: { d: (typeof pendientes)[number]; valor: unknown }[] = [];
+  const aceptar = (grupo: typeof pendientes, valor: unknown) => aceptados.push(...grupo.map((d) => ({ d, valor })));
   const dudosos: { campo: string; valores: { valor: unknown; documento: string; confianza: string }[]; motivo: string }[] = [];
-  const iguales = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-  for (const [campo, grupo] of [...porCampo].sort(([a], [b]) => ordenSugerencia(a) - ordenSugerencia(b))) {
+  for (const [campo, todos] of [...porCampo].sort(([a], [b]) => compararSugerencias(a, b))) {
+    const subcampo = campo.split('.').slice(1).join('.');
+    const destino = resolverDestino(datos, campo);
+    // Lo de una escritura anterior solo va a un inmueble que ya tiene el expediente (no se crean inmuebles por ella)
+    const crear = todos.some((d) => d.documento?.tipoDocumental !== 'ESCRITURA_ANTERIOR');
+    if (destino && destino.indice < 0 && destino.base === 'inmueble' && !crear) continue;
+    // Si el documento que manda para este dato lo trae con buena confianza, vale ese
+    const manda = documentoQueManda(campo);
+    const delQueManda = todos.filter((d) => d.documento?.tipoDocumental === manda && !d.revisionManual);
+    const grupo = delQueManda.length && todos.some((d) => d.documento?.tipoDocumental !== manda) ? delQueManda : todos;
     const valores = grupo.map((d) => ({ valor: d.valor, documento: d.documento?.nombreOriginal ?? 'documento', confianza: d.confianza }));
     if (grupo.some((d) => d.revisionManual)) { dudosos.push({ campo, valores, motivo: 'confianza baja o formato dudoso' }); continue; }
-    if (grupo.some((d) => !iguales(d.valor, grupo[0].valor))) { dudosos.push({ campo, valores, motivo: 'los documentos no coinciden' }); continue; }
-    const destino = resolverDestino(datos, campo);
+    if (grupo.some((d) => !mismoValor(subcampo, d.valor, grupo[0].valor))) { dudosos.push({ campo, valores, motivo: 'los documentos no coinciden' }); continue; }
     const actual = destino && destino.indice >= 0 ? leerRuta(datos, destino.ruta) : undefined;
-    if (actual !== undefined && actual !== '' && !iguales(actual, grupo[0].valor)) { dudosos.push({ campo, valores: [...valores, { valor: actual, documento: 'dato ya digitado', confianza: 'ALTA' }], motivo: 'el documento no coincide con lo digitado' }); continue; }
-    if (aplicarEnDatos(datos, campo, grupo[0].valor)) aceptados.push(...grupo);
+    // Lo digitado que dice lo mismo (con o sin puntos, en otro orden…) se deja como está
+    if (actual !== undefined && actual !== null && actual !== '' && mismoValor(subcampo, actual, grupo[0].valor)) { aceptar(todos, actual); continue; }
+    if (actual !== undefined && actual !== null && actual !== '') { dudosos.push({ campo, valores: [...valores, { valor: actual, documento: 'dato ya digitado', confianza: 'ALTA' }], motivo: 'el documento no coincide con lo digitado' }); continue; }
+    if (aplicarEnDatos(datos, campo, grupo[0].valor, crear)) aceptar(todos, grupo[0].valor);
   }
   if (aceptados.length) {
     await db.$transaction([
       db.expediente.update({ where: { id: e.id }, data: { datos: datos as unknown as Prisma.InputJsonValue } }),
-      ...aceptados.map((d) => db.datoExtraido.update({ where: { id: d.id }, data: { estado: 'ACEPTADO', valorFinal: d.valor as Prisma.InputJsonValue } })),
+      ...aceptados.map(({ d, valor }) => db.datoExtraido.update({ where: { id: d.id }, data: { estado: 'ACEPTADO', valorFinal: valor as Prisma.InputJsonValue } })),
     ]);
     await sincronizarEntidades(e.id, datos);
     await auditar({ ...datosAuditoria(s), accion: 'SUGERENCIAS_APLICADAS_ASISTENTE', entidad: 'expediente', entidadId: e.id, detalle: { aplicadas: aceptados.length, dudosas: dudosos.length } });
@@ -274,7 +292,7 @@ export async function cerrarSugerenciasRespondidas(s: SesionActiva, expedienteId
     if (!destino || destino.indice < 0) continue;
     const actual = leerRuta(datos, destino.ruta);
     if (actual === undefined || actual === null || actual === '') continue;
-    const coincide = JSON.stringify(actual) === JSON.stringify(d.valor);
+    const coincide = mismoValor(d.campo.split('.').slice(1).join('.'), actual, d.valor);
     await db.datoExtraido.update({ where: { id: d.id }, data: { estado: coincide ? 'ACEPTADO' : 'CORREGIDO', valorFinal: actual as Prisma.InputJsonValue } });
     if (!coincide) await registrarCorreccion({ expedienteId, tipoId: e.tipoId, categoria: 'EXTRACCION', campo: d.campo, valorIA: d.valor, valorCorregido: actual, creadoPorId: s.usuario.id, datos });
   }

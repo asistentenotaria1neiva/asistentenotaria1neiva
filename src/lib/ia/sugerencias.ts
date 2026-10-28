@@ -96,6 +96,16 @@ export function sugerenciasDesdeHechos(tipo: TipoDocumental, r: ResultadoExtracc
       s.push(crear(`${i}.direccion`, D('direccion'), may));
       s.push(crear(`${i}.municipio`, D('municipio'), (v) => String(v).trim()));
       s.push(crear(`${i}.fecha_certificado_tradicion`, D('fecha_impresion'), fecha10, (v) => validarFecha(v)));
+      s.push(crear(`${i}.linderos`, D('linderos'), (v) => String(v).trim()));
+      s.push(crear(`${i}.area_terreno`, D('area_terreno'), Number));
+      s.push(crear(`${i}.area_construida`, D('area_construida'), Number));
+      // Los titulares actuales (quienes venden): su documento y su nombre
+      for (const p of (r.datos.propietarios as Record<string, DatoConFuente>[] | undefined) ?? []) {
+        const num = digitos(p.documento?.valor);
+        if (!num) continue;
+        s.push(crear(`persona:${num}.nombre`, p.nombre, may));
+        s.push(crear(`persona:${num}.numero_documento`, p.documento, (v) => validarCedula(String(v)).normalizado ?? v));
+      }
       const ua = r.datos.ultima_adquisicion as Record<string, DatoConFuente> | undefined;
       if (ua) {
         s.push(crear(`${i}.tradicion.tradente`, ua.de, may));
@@ -116,12 +126,18 @@ export function sugerenciasDesdeHechos(tipo: TipoDocumental, r: ResultadoExtracc
       break;
     }
     case 'ESCRITURA_ANTERIOR': {
-      const mat = D('matricula')?.valor ? String(D('matricula')!.valor).toUpperCase().replace(/\s/g, '') : '';
-      if (!mat) break;
-      const i = `inmueble:${mat}`;
-      s.push(crear(`${i}.linderos`, D('linderos'), (v) => String(v).trim()));
-      s.push(crear(`${i}.area_terreno`, D('area_terreno'), Number));
-      s.push(crear(`${i}.area_construida`, D('area_construida'), Number));
+      // Cada inmueble descrito, por su matrícula (o su cédula catastral). Solo se llevan los que
+      // también tiene el expediente: los demás inmuebles del título no son de esta escritura.
+      const lista = Array.isArray(r.datos.inmuebles) ? (r.datos.inmuebles as Record<string, DatoConFuente>[]) : [r.datos as Record<string, DatoConFuente>];
+      for (const x of lista) {
+        const mat = x.matricula?.valor ? String(x.matricula.valor).toUpperCase().replace(/\s/g, '') : '';
+        const cat = digitos(x.cedula_catastral?.valor);
+        const i = mat ? `inmueble:${mat}` : cat ? `catastral:${cat}` : '';
+        if (!i) continue;
+        s.push(crear(`${i}.linderos`, x.linderos, (v) => String(v).trim()));
+        s.push(crear(`${i}.area_terreno`, x.area_terreno, Number));
+        s.push(crear(`${i}.area_construida`, x.area_construida, Number));
+      }
       break;
     }
     case 'PODER': {

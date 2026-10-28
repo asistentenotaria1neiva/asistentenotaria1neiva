@@ -45,8 +45,10 @@ describe('normalización de la extracción', () => {
     expect(prop[1].documento.valor).toBeNull();
     expect((cert.datos.anotaciones_vigentes as Record<string, unknown>[])[0].tipo).toBe('HIPOTECA');
     expect((cert.datos.ultima_adquisicion as Record<string, { valor: unknown }>).escritura_numero.valor).toBe('1014');
-    const esc = r('ESCRITURA_ANTERIOR', [d('afecta_vivienda_familiar', 'false'), d('area_terreno', '88,00')]);
+    const esc = r('ESCRITURA_ANTERIOR', [d('afecta_vivienda_familiar', 'false'), d('inmuebles.area_terreno', '88,00', 0), d('inmuebles.matricula', '200-1', 1)]);
     expect(esc.datos.afecta_vivienda_familiar).toMatchObject({ valor: false });
-    expect(esc.datos.area_terreno).toMatchObject({ valor: 88 });
+    const inm = esc.datos.inmuebles as Record<string, { valor: unknown }>[];
+    expect(inm[0].area_terreno).toMatchObject({ valor: 88 });
+    expect(inm[1].matricula.valor).toBe('200-1');
   });
 });

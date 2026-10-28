@@ -19,7 +19,7 @@ import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { ESQUEMAS } from '../escritura/esquemas';
-import { escribirRuta } from '../escritura/validar-formulario';
+import { escribirRuta, leerRuta } from '../escritura/validar-formulario';
 import { resolverRuta, validarValor, catalogo, convertirRespuesta, datosFaltantes, CAMPOS_TERMINACION } from '../escritura/rutas';
 import type { DatosExpediente } from '../escritura/tipos';
 import { TIPOS_DOCUMENTALES, type TipoDocumental } from '../ia/documentos';
@@ -63,6 +63,8 @@ export interface ResultadoAsistente {
   documentosFaltantes: { documento: string; motivo: string }[];
   preguntas: PreguntaAsistente[];
   aplicadasAutomaticamente: number;
+  /** Campos que la IA llenó desde los documentos sin preguntar (el funcionario los ve en el formulario) */
+  completadosDesdeDocumentos?: { etiqueta: string; valor: string; fuente: string }[];
   erroresDocumentos: string[];
 }
 
@@ -73,6 +75,7 @@ interface RespuestaIA {
   resumen_documentos: string;
   documentos_faltantes: { documento: string; motivo: string }[];
   inconsistencias: { nivel: 'ADVERTENCIA' | 'INFORMATIVA'; mensaje: string; evidencia: string; documento_id: string | null }[];
+  datos_desde_documentos?: { ruta: string; valor_json: string; fuente: string }[];
   preguntas: { ruta: string; pregunta: string; motivo: string; valor_sugerido_json: string | null; fuente: string | null }[];
   preguntas_adicionales: { pregunta: string; motivo: string; obligatoria: boolean }[];
 }
@@ -108,6 +111,38 @@ function rutaParaIA(datos: DatosExpediente, campo: string): string {
   if (!d || d.indice < 0 || d.base === 'acto') return campo;
   const id = d.base === 'persona' ? datos.personas[d.indice].id : datos.inmuebles[d.indice].id;
   return `${d.base}:${id}.${d.subcampo}`;
+}
+
+/**
+ * Llena los campos vacíos que la IA tomó literalmente de los documentos (linderos del inmueble que
+ * corresponde, datos de una plantilla…), por los mismos pasos del formulario, para no preguntarlos.
+ * Nunca sobrescribe un dato ni toca uno dudoso. `datos` queda con los valores guardados.
+ */
+async function completarDesdeDocumentos(s: SesionActiva, expedienteId: string, datos: DatosExpediente, actos: string[], propuestos: { ruta: string; valor_json: string; fuente: string }[], dudosas: Set<string>) {
+  const completados: { etiqueta: string; valor: string; fuente: string }[] = [];
+  const pasos = new Set<string>();
+  for (const x of propuestos) {
+    const destino = resolverRuta(datos, actos, x.ruta);
+    if (!destino || destino.campo.tipo === 'lista' || dudosas.has(x.ruta)) continue;
+    if (destino.paso === 'escritura' && CAMPOS_TERMINACION.includes(destino.campo.id)) continue;
+    const actual = leerRuta(datos, destino.rutaDatos);
+    if (actual !== undefined && actual !== null && actual !== '') continue;
+    let valor: unknown;
+    try { valor = JSON.parse(x.valor_json); } catch { valor = x.valor_json; }
+    const v = validarValor(destino.campo, valor, datos);
+    if ('error' in v || v.valor === '' || v.valor === null) continue;
+    escribirRuta(datos as unknown as Record<string, unknown>, destino.rutaDatos, v.valor);
+    pasos.add(typeof destino.paso === 'string' ? destino.paso : `acto:${destino.paso.acto}`);
+    completados.push({ etiqueta: destino.etiqueta, valor: String(v.valor).slice(0, 300), fuente: x.fuente.slice(0, 300) });
+  }
+  for (const p of pasos) {
+    await guardarPaso(s, expedienteId, p === 'escritura' ? { paso: 'escritura', valor: datos.escritura }
+      : p === 'personas' ? { paso: 'personas', valor: datos.personas }
+        : p === 'inmuebles' ? { paso: 'inmuebles', valor: datos.inmuebles }
+          : { paso: 'acto', acto: p.slice(5), valor: (datos.actos[p.slice(5)] ?? {}) as Record<string, unknown> });
+  }
+  if (completados.length) await auditar({ ...datosAuditoria(s), accion: 'ASISTENTE_DATOS_DOCUMENTOS', entidad: 'expediente', entidadId: expedienteId, detalle: { campos: completados.map((c) => c.etiqueta) } });
+  return completados;
 }
 
 /**
@@ -152,11 +187,17 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
   // 4. Se valida la respuesta contra los esquemas
   const propuestos = [...new Set(r.datos.actos.filter((a) => ESQUEMAS[a]))];
   const actos = propuestos.length ? propuestos : actosActuales;
+  const rutasDudosas = new Set(dudosos.map((x) => rutaParaIA(datos, x.campo)));
+  const vacio = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length);
+  // Los campos de un acto que el usuario aún no confirmó no se llenan: se preguntan al confirmarlo
+  const completados = await completarDesdeDocumentos(s, expedienteId, datos, actos.filter((a) => actosActuales.includes(a)), r.datos.datos_desde_documentos ?? [], rutasDudosas);
   const preguntas: PreguntaAsistente[] = [];
   for (const p of r.datos.preguntas) {
     const destino = resolverRuta(datos, actos, p.ruta);
     if (!destino || destino.campo.tipo === 'lista' || preguntas.some((x) => x.ruta === p.ruta)) continue;
     if (destino.paso === 'escritura' && CAMPOS_TERMINACION.includes(destino.campo.id)) continue;
+    // Lo que ya tiene valor (digitado, de los documentos o recién llenado) no se pregunta, salvo que sea dudoso
+    if (!rutasDudosas.has(p.ruta) && !vacio(leerRuta(datos, destino.rutaDatos))) continue;
     let sugerido: unknown = null;
     if (p.valor_sugerido_json) {
       let v: unknown;
@@ -210,7 +251,8 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
     resumenDocumentos: r.datos.resumen_documentos.slice(0, 2000),
     documentosFaltantes: r.datos.documentos_faltantes.slice(0, 20).map((d) => ({ documento: d.documento.slice(0, 300), motivo: d.motivo.slice(0, 500) })),
     preguntas,
-    aplicadasAutomaticamente: aplicadas,
+    aplicadasAutomaticamente: aplicadas + completados.length,
+    completadosDesdeDocumentos: completados,
     erroresDocumentos,
   };
   await db.analisisIA.update({ where: { id: analisisId }, data: { estado: 'COMPLETADO', modelo: r.modelo, versionInstruccion: instr.version, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs, resultado: resultado as unknown as Prisma.InputJsonValue } });

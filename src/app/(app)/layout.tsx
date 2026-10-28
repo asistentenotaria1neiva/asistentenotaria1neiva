@@ -2,6 +2,7 @@ import { requerirSesion } from '@/lib/sesion';
 import { accionCerrarSesion } from '../(acceso)/acciones';
 import { MenuLateral, type EnlaceMenu } from './navegacion';
 import { Avisos } from './notificaciones/Avisos';
+import { Actividad } from './Actividad';
 import { noLeidas } from '@/lib/servicios/notificaciones';
 
 const ROL: Record<string, string> = { ADMINISTRADOR: 'Administrador', REVISOR: 'Revisor', DIGITADOR: 'Digitador' };
@@ -38,6 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </MenuLateral>
       <main className="principal">{children}</main>
+      <Actividad />
     </div>
   );
 }
