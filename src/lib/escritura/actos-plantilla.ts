@@ -42,7 +42,9 @@ export function valoresAutomaticos(e: Partial<DatosEscritura>, notaria: ConfigNo
     codigo_minuta: e.codigo_minuta ?? '',
   };
 }
-const AUTOMATICAS = new Set(Object.keys(valoresAutomaticos({}, { codigo: '', titular: '', resolucion_tarifas: '' })));
+/** Nombres de las variables que pone el sistema (notaría y terminación) */
+export const VARIABLES_AUTOMATICAS = Object.keys(valoresAutomaticos({}, { codigo: '', titular: '', resolucion_tarifas: '' }));
+const AUTOMATICAS = new Set(VARIABLES_AUTOMATICAS);
 
 /** Raíces del contexto general de la escritura: las variables que empiezan así no se preguntan */
 const RAICES_SISTEMA = new Set(['notaria', 'escritura', 'intervinientes', 'especificacion', 'inmuebles_caratula', 'comprobantes', 'firmantes', 'oficios', 'a', 'ord()', 'titulo_acto', 'otorgantes_titulo']);

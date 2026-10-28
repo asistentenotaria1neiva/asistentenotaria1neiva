@@ -116,12 +116,14 @@ export default async function VersionPlantilla({ params, searchParams }: { param
               : (
                 <>
                   <div className="aviso info">
-                    {ejemplo.caso.clave === 'conversion_ia'
-                      ? <>Datos <strong>ficticios</strong> que propuso la IA al convertir el caso real en plantilla (el tipo aún no tiene caso de ejemplo).</>
-                      : <>Datos <strong>ficticios</strong> del caso «{ejemplo.caso.descripcion}»{conversion?.reemplazos.length ? ', completados con los que propuso la IA al convertir el caso real' : ''}.</>}
-                    {' '}Se muestra solo esta parte de la escritura, llenada como lo haría el sistema.
+                    {ejemplo.caso.clave === 'valores_ia'
+                      ? <>Datos <strong>ficticios</strong> que propuso la IA para esta plantilla.</>
+                      : ejemplo.caso.clave === 'muestra'
+                        ? <>Datos <strong>ficticios</strong> genéricos de muestra. Pulse «Revisar con IA» para que la IA proponga datos de ejemplo más realistas para cada variable.</>
+                        : <>Datos <strong>ficticios</strong> del caso «{ejemplo.caso.descripcion}»{conversion?.reemplazos.length ? ', completados con los que propuso la IA' : ''}.</>}
+                    {' '}Así se vería la escritura llenada por el sistema.
                   </div>
-                  {ejemplo.deMuestra.length > 0 && <div className={`aviso ${formularioAutomatico ? 'info' : 'alerta'}`}>El caso de ejemplo no trae {ejemplo.deMuestra.length === 1 ? 'esta variable' : `estas ${ejemplo.deMuestra.length} variables`}, así que se llenaron con valores genéricos de muestra: <code>{ejemplo.deMuestra.join(', ')}</code>. {formularioAutomatico ? 'Al aprobarla, cada una será un campo del formulario del expediente que la IA llena con los documentos.' : 'Para generar escrituras reales con esta plantilla, el formulario del expediente debe pedir esos datos.'}</div>}
+                  {ejemplo.deMuestra.length > 0 && !formularioAutomatico && <div className="aviso alerta">El caso de ejemplo no trae {ejemplo.deMuestra.length === 1 ? 'esta variable' : `estas ${ejemplo.deMuestra.length} variables`}, así que se llenaron con valores genéricos de muestra: <code>{ejemplo.deMuestra.join(', ')}</code>. {formularioAutomatico ? 'Al aprobarla, cada una será un campo del formulario del expediente que la IA llena con los documentos.' : 'Para generar escrituras reales con esta plantilla, el formulario del expediente debe pedir esos datos.'}</div>}
                   {ejemplo.faltantes.length > 0 && <div className="aviso error">El sistema no supo llenar: <code>{ejemplo.faltantes.join(', ')}</code>. Revise que esas etiquetas estén bien escritas.</div>}
                   <VisorDocx url={`/api/plantillas/${p.id}?ejemplo=1&vista=1`} />
                 </>

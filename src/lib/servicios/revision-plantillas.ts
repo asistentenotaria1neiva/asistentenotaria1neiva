@@ -18,6 +18,7 @@ import { obtenerConfig } from '../configuracion';
 import { prepararContexto } from '../escritura/contexto';
 import { ACTOS } from '../escritura/actos';
 import { TIPOS_CON_FORMULARIO_PROPIO } from '../escritura/esquemas';
+import { valoresAutomaticos } from '../escritura/actos-plantilla';
 import { renderizarPlantilla } from '../escritura/generar';
 import { ErrorDatos } from '../escritura/personas';
 import type { DatosExpediente } from '../escritura/tipos';
@@ -51,7 +52,7 @@ export interface VerificacionAutomatica {
 
 export interface RevisionPlantilla {
   automatica: VerificacionAutomatica;
-  ia: { veredicto: Veredicto; resumen: string; cambios: string[]; hallazgos: HallazgoPlantilla[]; modelo: string; duracionMs: number } | null;
+  ia: { veredicto: Veredicto; resumen: string; cambios: string[]; hallazgos: HallazgoPlantilla[]; valores_ejemplo?: { variable: string; valor: string }[]; modelo: string; duracionMs: number } | null;
   errorIA: string | null;
   revisadaPor: string;
   /** Corrección con IA de los hallazgos (src/lib/servicios/correccion-plantillas.ts) */
@@ -96,10 +97,14 @@ function casoPara(tipoId: string): CasoEjemplo | undefined {
 /** Valores ficticios que propuso la IA al convertir un caso real en plantilla (variable → valor) */
 export type ValoresEjemplo = Record<string, string> | null | undefined;
 
-const CASO_CONVERSION = { clave: 'conversion_ia', descripcion: 'valores ficticios que propuso la IA al convertir el caso real en plantilla' };
+const CASO_IA = { clave: 'valores_ia', descripcion: 'valores ficticios que propuso la IA para esta plantilla' };
+const CASO_MUESTRA = { clave: 'muestra', descripcion: 'valores genéricos de muestra' };
 
-/** Hay datos ficticios para probar este tipo de plantilla: un caso de ejemplo o los valores de la conversión */
-export const tieneEjemplo = (tipoId: string, valores?: ValoresEjemplo) => !!casoPara(tipoId) || !!(valores && Object.keys(valores).length);
+/** Siempre hay datos ficticios para ver una plantilla llenada: el caso de ejemplo, los que propuso la IA o los de muestra */
+export const tieneEjemplo = (_tipoId?: string, _valores?: ValoresEjemplo) => true;
+
+/** Escritura de muestra para llenar los datos de la notaría y de la terminación en la vista de ejemplo */
+const ESCRITURA_MUESTRA = { autoriza: 'TITULAR' as const, numero: 1234, fecha_otorgamiento: '2026-03-15', hojas: 'Aa000000001, Aa000000002', derechos: '$ 250.000', retefuente: '$ 0', codigo_minuta: 'MIN-0001' };
 
 /** Contexto del caso de ejemplo de este tipo (null si no hay); también orienta la conversión de casos reales */
 export async function contextoEjemplo(tipoId: string): Promise<Record<string, unknown> | null> {
@@ -171,11 +176,11 @@ export function valorDeMuestra(ruta: string): string {
  * vista queda completa; en faltantes solo quedan las que ni así se pudieron llenar.
  */
 export async function probarConEjemplo(tipoId: string, archivo: Buffer, valores?: ValoresEjemplo): Promise<PruebaEjemplo | null> {
-  if (!tieneEjemplo(tipoId, valores)) return null;
   const caso = casoPara(tipoId);
-  const info = caso ? { clave: caso.clave, descripcion: caso.descripcion } : CASO_CONVERSION;
+  const info = caso ? { clave: caso.clave, descripcion: caso.descripcion } : valores && Object.keys(valores).length ? CASO_IA : CASO_MUESTRA;
   try {
-    let contexto = (await contextoEjemplo(tipoId)) ?? {};
+    // Sin caso de ejemplo: los datos de la notaría y una escritura de muestra (número, fecha, hojas…)
+    let contexto = (await contextoEjemplo(tipoId)) ?? valoresAutomaticos(ESCRITURA_MUESTRA, await obtenerConfig('notaria'));
     if (valores) contexto = completarContexto(contexto, valores);
     let r = renderizarPlantilla(archivo, contexto);
     const muestra = Object.fromEntries(r.faltantes.map(base).filter((v) => /^[\w.]+$/.test(v)).map((v) => [v, valorDeMuestra(v)]));
@@ -188,11 +193,18 @@ export async function probarConEjemplo(tipoId: string, archivo: Buffer, valores?
   }
 }
 
-/** Valores ficticios guardados con la versión al convertir un caso real */
-export const valoresEjemploDe = (p: Pick<Plantilla, 'variabilizacion'>): ValoresEjemplo =>
-  (p.variabilizacion as { valoresEjemplo?: Record<string, string> } | null)?.valoresEjemplo;
+/**
+ * Valores ficticios de la versión: los que propuso la IA al revisarla y, encima, los de la conversión
+ * del caso real (si la hubo)
+ */
+export const valoresEjemploDe = (p: Pick<Plantilla, 'variabilizacion' | 'revision'>): ValoresEjemplo => {
+  const deRevision = Object.fromEntries(((p.revision as RevisionPlantilla | null)?.ia?.valores_ejemplo ?? [])
+    .map((x) => [base(x.variable.replace(/[{}#^/]/g, '')), x.valor.trim()] as const)
+    .filter(([v, valor]) => /^[\w.]+$/.test(v) && valor));
+  return { ...deRevision, ...((p.variabilizacion as { valoresEjemplo?: Record<string, string> } | null)?.valoresEjemplo ?? {}) };
+};
 
-async function verificar(p: Pick<Plantilla, 'id' | 'tipoId' | 'archivo' | 'variabilizacion'>) {
+async function verificar(p: Pick<Plantilla, 'id' | 'tipoId' | 'archivo' | 'variabilizacion' | 'revision'>) {
   const parrafos = vistaPreviaDocx(Buffer.from(p.archivo));
   const etiquetas = etiquetasDe(parrafos);
   const aprobada = await db.plantilla.findFirst({ where: { tipoId: p.tipoId, estado: 'APROBADA', id: { not: p.id } }, orderBy: { version: 'desc' } });

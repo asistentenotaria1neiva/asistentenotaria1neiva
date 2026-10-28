@@ -19,6 +19,8 @@ import { llamarEstructurado, ErrorIA } from '../ia/cliente';
 import { SISTEMA_CORRECCION_PLANTILLA, ESQUEMA_CORRECCION_PLANTILLA } from '../ia/instrucciones';
 import { validarDocxPlantilla, cargarPlantilla, ErrorPlantilla } from './plantillas';
 import { revisarPlantilla, type RevisionPlantilla, type CorreccionPlantilla, type PropuestaPlantilla } from './revision-plantillas';
+import { TIPOS_CON_FORMULARIO_PROPIO } from '../escritura/esquemas';
+import { VARIABLES_AUTOMATICAS } from '../escritura/actos-plantilla';
 
 /** Una corrección EN_CURSO más antigua que esto se da por interrumpida (p. ej., el servidor se reinició) */
 const LIMITE_CORRECCION_MS = 30 * 60 * 1000;
@@ -46,12 +48,15 @@ async function etiquetasConocidas(tipoId: string, archivo: Buffer): Promise<stri
   return [...conjunto].sort();
 }
 
-/** Valida el documento después de un cambio: etiquetas bien formadas y solo variables conocidas */
-function validador(conocidas: string[]) {
+/**
+ * Valida el documento después de un cambio: etiquetas bien formadas y solo variables conocidas. Con
+ * formulario automático se aceptan variables nuevas (cada una será un campo), con nombre válido.
+ */
+function validador(conocidas: string[], automatico: boolean) {
   return (doc: Buffer): string | null => {
     const v = validarDocxPlantilla(doc);
     if (!v.ok) return `dejaría la plantilla con etiquetas mal formadas (${v.error})`;
-    const nuevas = etiquetasEn(textoDeParrafos(vistaPreviaDocx(doc))).filter((e) => !conocidas.includes(e));
+    const nuevas = etiquetasEn(textoDeParrafos(vistaPreviaDocx(doc))).filter((e) => !conocidas.includes(e) && !(automatico && /^[a-z0-9_]+$/.test(e)));
     return nuevas.length ? `usa variables que el sistema no conoce: ${[...new Set(nuevas)].map((e) => `{{${e}}}`).join(', ')}` : null;
   };
 }
@@ -96,7 +101,9 @@ export async function proponerCorreccionesPlantilla(s: SesionActiva, id: string,
   const tarea = async () => {
     let correccion: CorreccionPlantilla;
     try {
-      const conocidas = await etiquetasConocidas(p.tipoId, archivo);
+      // Con formulario automático la IA puede crear variables (cada una será un campo) y conoce las del sistema
+      const automatico = !p.tipo.esBloque && !TIPOS_CON_FORMULARIO_PROPIO.has(p.tipoId);
+      const conocidas = [...new Set([...(await etiquetasConocidas(p.tipoId, archivo)), ...(automatico ? VARIABLES_AUTOMATICAS : [])])].sort();
       const texto = textoDeParrafos(vistaPreviaDocx(archivo));
       const lista = elegidos.map((i) => ({ hallazgo: i, ...revision.ia!.hallazgos[i] }));
       const r = await llamarEstructurado<{ correcciones: { hallazgo: number; original: string; corregido: string; explicacion: string }[]; sin_correccion: { hallazgo: number; motivo: string }[] }>({
@@ -104,7 +111,9 @@ export async function proponerCorreccionesPlantilla(s: SesionActiva, id: string,
         sistema: SISTEMA_CORRECCION_PLANTILLA,
         contenido: [{ type: 'text', text: [
           `TIPO: ${p.tipo.nombre} (${p.tipoId}) · versión ${p.version}`,
-          `ETIQUETAS CONOCIDAS (las únicas que puede usar): ${conocidas.map((e) => `{{${e}}}`).join(', ') || 'ninguna'}`,
+          automatico
+            ? `FORMULARIO AUTOMÁTICO: puede crear variables y condiciones nuevas. Variables del sistema (notaría y terminación): ${VARIABLES_AUTOMATICAS.map((e) => `{{${e}}}`).join(', ')}. Etiquetas que ya usa: ${conocidas.filter((e) => !VARIABLES_AUTOMATICAS.includes(e)).map((e) => `{{${e}}}`).join(', ') || 'ninguna'}`
+            : `ETIQUETAS CONOCIDAS (las únicas que puede usar): ${conocidas.map((e) => `{{${e}}}`).join(', ') || 'ninguna'}`,
           `HALLAZGOS A CORREGIR:\n${JSON.stringify(lista)}`,
           `<plantilla>\n${texto.slice(0, LIMITE_TEXTO)}\n</plantilla>`,
           'Propón las correcciones de los hallazgos recibidos.',
@@ -114,7 +123,7 @@ export async function proponerCorreccionesPlantilla(s: SesionActiva, id: string,
       });
 
       // Cada propuesta se prueba sola sobre la versión actual: solo quedan las que se pueden aplicar
-      const aceptar = validador(conocidas);
+      const aceptar = validador(conocidas, automatico);
       const propuestas: PropuestaPlantilla[] = [];
       const sinCorreccion: CorreccionPlantilla['sinCorreccion'] = [];
       for (const c of r.datos.correcciones) {
@@ -145,7 +154,7 @@ export async function proponerCorreccionesPlantilla(s: SesionActiva, id: string,
  * que queda con la verificación automática hecha. Sin índices, descarta la propuesta.
  */
 export async function aplicarCorreccionesPlantilla(s: SesionActiva, id: string, indices: number[]): Promise<{ nuevaId: string | null; aplicadas: number; fallidas: string[] }> {
-  const p = await db.plantilla.findUniqueOrThrow({ where: { id } });
+  const p = await db.plantilla.findUniqueOrThrow({ where: { id }, include: { tipo: true } });
   const revision = p.revision as RevisionPlantilla | null;
   const c = revision?.correccion;
   if (!revision || c?.estado !== 'COMPLETADA') throw new ErrorPlantilla('La propuesta de corrección ya no existe.');
@@ -153,7 +162,7 @@ export async function aplicarCorreccionesPlantilla(s: SesionActiva, id: string, 
   const elegidas = c.propuestas.map((x, i) => ({ x, i })).filter(({ x, i }) => x.estado === 'PENDIENTE' && indices.includes(i));
   const archivo = Buffer.from(p.archivo);
   const r = elegidas.length
-    ? reemplazarEnDocx(archivo, elegidas.map(({ x }) => ({ original: x.original, nuevo: x.corregido })), validador(await etiquetasConocidas(p.tipoId, archivo)))
+    ? reemplazarEnDocx(archivo, elegidas.map(({ x }) => ({ original: x.original, nuevo: x.corregido })), validador([...(await etiquetasConocidas(p.tipoId, archivo)), ...VARIABLES_AUTOMATICAS], !p.tipo.esBloque && !TIPOS_CON_FORMULARIO_PROPIO.has(p.tipoId)))
     : null;
   const fallidas: string[] = [];
   c.propuestas.forEach((x, i) => {
