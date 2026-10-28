@@ -2,6 +2,7 @@
 /**
  * Acciones del panel de plantillas.
  *  - Administrador y revisor: cargar versiones y pedir la revisión de la IA.
+ *  - Administrador y revisor: eliminar una versión o la plantilla completa (no las usadas en borradores).
  *  - Solo el administrador (con doble factor): aprobar y retirar, por indicación del notario.
  * Todo queda en la auditoría.
  */
@@ -10,7 +11,8 @@ import { redirect } from 'next/navigation';
 import { after } from 'next/server';
 import { requerirSesion, datosAuditoria } from '@/lib/sesion';
 import { auditar } from '@/lib/auditoria';
-import { aprobarPlantilla, retirarPlantilla, ErrorPlantilla } from '@/lib/servicios/plantillas';
+import { aprobarPlantilla, retirarPlantilla, eliminarVersionPlantilla, eliminarPlantillaCompleta, ErrorPlantilla } from '@/lib/servicios/plantillas';
+import { db } from '@/lib/db';
 import { iniciarRevisionPlantilla, ErrorRevision } from '@/lib/servicios/revision-plantillas';
 import { cargarYRevisarPlantilla } from '@/lib/servicios/carga-plantillas';
 import { proponerCorreccionesPlantilla, aplicarCorreccionesPlantilla } from '@/lib/servicios/correccion-plantillas';
@@ -82,6 +84,32 @@ export async function accionAplicarCorreccionesPlantilla(id: string, indices: nu
     return { error: 'No se pudieron aplicar las correcciones.' };
   }
   redirect(`/plantillas/${nuevaId}?corregida=1`);
+}
+
+/** Elimina una versión o la plantilla completa (todas sus versiones) de un tipo; el tipo de escritura queda */
+export async function accionEliminarPlantilla(_: ResultadoAdmin, f: FormData): Promise<ResultadoAdmin> {
+  const s = await revisores();
+  const id = t(f, 'id');
+  let destino = '/plantillas';
+  try {
+    if (t(f, 'operacion') === 'completa') {
+      const tipoId = t(f, 'tipoId');
+      const versiones = await eliminarPlantillaCompleta(tipoId);
+      await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_ELIMINADA', entidad: 'tipo_escritura', entidadId: tipoId, detalle: { tipoId, versiones } });
+    } else {
+      const p = await eliminarVersionPlantilla(id);
+      await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_VERSION_ELIMINADA', entidad: 'plantilla', entidadId: id, detalle: { tipoId: p.tipoId, version: p.version, estado: p.estado, sha256: p.hashSha256 } });
+      // Se sigue en la versión más reciente que quede, si hay
+      const otra = await db.plantilla.findFirst({ where: { tipoId: p.tipoId }, orderBy: { version: 'desc' }, select: { id: true } });
+      if (otra) destino = `/plantillas/${otra.id}`;
+    }
+  } catch (e) {
+    if (e instanceof ErrorPlantilla) return { error: e.message };
+    console.error('[plantillas]', e);
+    return { error: 'No se pudo eliminar la plantilla.' };
+  }
+  revalidatePath('/plantillas', 'layout');
+  redirect(destino);
 }
 
 export async function accionPlantilla(_: ResultadoAdmin, f: FormData): Promise<ResultadoAdmin> {

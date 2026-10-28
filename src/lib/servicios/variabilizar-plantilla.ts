@@ -21,6 +21,10 @@ import { contextoEjemplo } from './revision-plantillas';
 
 export interface Variabilizacion {
   esCasoReal: boolean;
+  /** El archivo es una escritura del tipo elegido; undefined en las versiones convertidas antes de esta verificación */
+  tipoCorrecto?: boolean;
+  /** Qué tipo de escritura es el archivo, según la IA */
+  motivoTipo?: string;
   resumen: string;
   /** Dato (descripción, sin el valor real) → etiqueta que lo reemplazó y cuántas veces */
   reemplazos: { dato: string; variable: string; veces: number }[];
@@ -28,6 +32,7 @@ export interface Variabilizacion {
   noAplicados: { dato: string; motivo: string }[];
   /** Variables que la IA creó y el sistema aún no sabe llenar */
   nuevas: string[];
+  /** Ya no se generan al cargar (solo se arma la plantilla); quedan en las versiones antiguas */
   advertencias: string[];
   /** Variable → valor ficticio, para ver la plantilla llenada aunque el tipo no tenga caso de ejemplo */
   valoresEjemplo: Record<string, string>;
@@ -40,10 +45,11 @@ export interface Variabilizacion {
 }
 
 interface RespuestaIA {
+  corresponde_al_tipo: boolean;
+  motivo_tipo: string;
   es_caso_real: boolean;
   resumen: string;
   reemplazos: { dato: string; original: string; nuevo: string; valor_ejemplo: string }[];
-  advertencias: string[];
 }
 
 const LIMITE_TEXTO = 80_000;
@@ -127,19 +133,17 @@ export async function variabilizarPlantilla(tipo: { id: string; nombre: string }
       `<archivo_cargado>\n${texto.slice(0, LIMITE_TEXTO)}\n</archivo_cargado>`,
       ...otros.map((t, i) => `<otro_caso numero="${i + 1}">\n${t.slice(0, limiteOtro)}\n</otro_caso>`),
       otros.length
-        ? `Hay ${otros.length} escritura(s) de otros casos del mismo tipo: compáralas con el archivo cargado para distinguir el texto fijo de los datos. Indica los reemplazos para convertir el ARCHIVO CARGADO en plantilla.`
-        : 'Indica si el archivo es un caso real y, si lo es, los reemplazos para convertirlo en plantilla.',
+        ? `Hay ${otros.length} escritura(s) de otros casos del mismo tipo: compáralas con el archivo cargado para distinguir el texto fijo de los datos. Indica si el archivo cargado corresponde al tipo y los reemplazos para convertirlo en plantilla.`
+        : 'Indica si el archivo corresponde al tipo, si es un caso real y, si lo es, los reemplazos para convertirlo en plantilla.',
     ].filter(Boolean).join('\n\n') }],
     esquema: ESQUEMA_VARIABILIZAR_PLANTILLA as unknown as Record<string, unknown>,
     maxTokens: 32000,
   });
 
-  const advertencias = r.datos.advertencias.map((a) => a.slice(0, 500));
-  if (otros.some((t) => t.length > limiteOtro)) advertencias.push('Algún otro caso era muy largo: la IA solo comparó su primera parte.');
-  if (texto.length > LIMITE_TEXTO) advertencias.push(`El archivo es muy largo: la IA solo revisó los primeros ${LIMITE_TEXTO.toLocaleString('es-CO')} caracteres. Revise el final en Word.`);
   const resultado: Variabilizacion = {
-    esCasoReal: r.datos.es_caso_real, resumen: r.datos.resumen.slice(0, 1000), reemplazos: [], noAplicados: [], nuevas: [],
-    advertencias, valoresEjemplo: {}, modelo: r.modelo, duracionMs: r.duracionMs, error: null,
+    esCasoReal: r.datos.es_caso_real, tipoCorrecto: r.datos.corresponde_al_tipo, motivoTipo: r.datos.motivo_tipo.slice(0, 500),
+    resumen: r.datos.resumen.slice(0, 1000), reemplazos: [], noAplicados: [], nuevas: [],
+    advertencias: [], valoresEjemplo: {}, modelo: r.modelo, duracionMs: r.duracionMs, error: null,
   };
   if (!r.datos.es_caso_real) return { archivo, variabilizacion: resultado };
 

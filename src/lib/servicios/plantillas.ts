@@ -68,3 +68,29 @@ export async function aprobarPlantilla(id: string, usuarioId: string) {
 export async function retirarPlantilla(id: string) {
   return db.plantilla.update({ where: { id }, data: { estado: 'RETIRADA' } });
 }
+
+/** Versiones de un tipo con las que ya se generó algún borrador: se conservan para saber con qué se hizo */
+async function versionesUsadas(tipoId: string): Promise<Set<number>> {
+  const borradores = await db.borrador.findMany({ select: { plantillasUsadas: true } });
+  return new Set(borradores.flatMap((b) => (Array.isArray(b.plantillasUsadas) ? b.plantillasUsadas as { tipoId?: string; version?: number }[] : []))
+    .filter((u) => u.tipoId === tipoId && typeof u.version === 'number').map((u) => u.version!));
+}
+
+/** Elimina una versión (el tipo de escritura y las demás versiones quedan). Devuelve la versión eliminada. */
+export async function eliminarVersionPlantilla(id: string) {
+  const p = await db.plantilla.findUnique({ where: { id }, select: { id: true, tipoId: true, version: true, estado: true, hashSha256: true } });
+  if (!p) throw new ErrorPlantilla('La plantilla no existe.');
+  if ((await versionesUsadas(p.tipoId)).has(p.version)) throw new ErrorPlantilla(`Con la versión ${p.version} ya se generaron borradores: no se puede eliminar. Puede retirarla.`);
+  await db.plantilla.delete({ where: { id } });
+  return p;
+}
+
+/** Elimina todas las versiones de la plantilla de un tipo; el tipo de escritura queda (se le puede cargar otra) */
+export async function eliminarPlantillaCompleta(tipoId: string) {
+  const versiones = await db.plantilla.findMany({ where: { tipoId }, select: { version: true, estado: true, hashSha256: true } });
+  if (!versiones.length) throw new ErrorPlantilla('Este tipo no tiene plantillas.');
+  const usadas = await versionesUsadas(tipoId);
+  if (versiones.some((v) => usadas.has(v.version))) throw new ErrorPlantilla(`Con las versiones ${[...usadas].sort((a, b) => a - b).join(', ')} ya se generaron borradores: no se pueden eliminar. Elimine las demás una por una o retírelas.`);
+  await db.plantilla.deleteMany({ where: { tipoId } });
+  return versiones;
+}

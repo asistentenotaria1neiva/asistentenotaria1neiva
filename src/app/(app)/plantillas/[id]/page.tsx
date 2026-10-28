@@ -7,7 +7,7 @@ import { vistaPreviaDocx, etiquetasDe } from '@/lib/escritura/vista-previa';
 import { enRevision, probarConEjemplo, tieneDatosReales, tieneEjemplo, valoresEjemploDe, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import type { Variabilizacion } from '@/lib/servicios/variabilizar-plantilla';
 import { estadoCorreccionPlantilla } from '@/lib/servicios/correccion-plantillas';
-import { accionCargarPlantilla, accionPlantilla, accionRevisarPlantilla, accionProponerCorreccionesPlantilla, accionAplicarCorreccionesPlantilla } from '../acciones';
+import { accionCargarPlantilla, accionPlantilla, accionEliminarPlantilla, accionRevisarPlantilla, accionProponerCorreccionesPlantilla, accionAplicarCorreccionesPlantilla } from '../acciones';
 import { FormAdmin } from '../../admin/formularios';
 import { PanelCorreccionIA, RefrescoAutomatico } from '../../expedientes/formularios';
 import { fecha } from '../../componentes';
@@ -241,6 +241,20 @@ export default async function VersionPlantilla({ params, searchParams }: { param
               )}
             </section>
           )}
+
+          <section className="tarjeta">
+            <h2 style={{ marginTop: 0 }}>Eliminar</h2>
+            <p className="suave">Se borra de forma definitiva (queda constancia en la auditoría). El tipo de escritura «{p.tipo.nombre}» se conserva para cargarle otra plantilla. Las versiones con las que ya se generaron borradores no se pueden eliminar.</p>
+            <FormAdmin accion={accionEliminarPlantilla} ocultos={{ id: p.id, tipoId: p.tipoId }}
+              botones={[
+                { operacion: 'version', texto: `Eliminar la versión ${p.version}`, clase: 'peligro' },
+                ...(p.tipo.plantillas.length > 1 ? [{ operacion: 'completa', texto: `Eliminar la plantilla completa (${p.tipo.plantillas.length} versiones)`, clase: 'peligro' }] : []),
+              ]}
+              confirmar={{
+                version: `¿Eliminar definitivamente la versión ${p.version}${p.estado === 'APROBADA' ? ', que es la VIGENTE? Sin una versión aprobada no se podrán generar borradores de este tipo' : ''}?`,
+                completa: `¿Eliminar definitivamente las ${p.tipo.plantillas.length} versiones de la plantilla de «${p.tipo.nombre}»? No se podrán generar borradores de este tipo hasta cargar y aprobar otra.`,
+              }} />
+          </section>
         </aside>
       </div>
     </>

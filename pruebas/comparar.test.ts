@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mismoValor, claveMatricula, documentoQueManda } from '@/lib/escritura/comparar';
+import { mismoValor, mismaCatastral, claveMatricula, documentoQueManda } from '@/lib/escritura/comparar';
 import { sugerenciasDesdeHechos } from '@/lib/ia/sugerencias';
 import type { ResultadoExtraccion } from '@/lib/ia/documentos';
 
@@ -17,15 +17,23 @@ describe('comparación sin diferencias de forma', () => {
     expect(mismoValor('matricula', '200-12345', '200-12346')).toBe(false);
   });
 
+  it('cédula catastral del certificado y del paz y salvo en formatos distintos', () => {
+    expect(mismaCatastral('4100101060000037800130000000000', '010600000378001300000000')).toBe(true);
+    expect(mismaCatastral('4100101060000037800130000000000', '010600000037800130000000000')).toBe(true);
+    expect(mismaCatastral('41020000000000000004428000000000', '410200000000000004428000000000')).toBe(true);
+    expect(mismaCatastral('4100101060000037800130000000000', '010600000379001300000000')).toBe(false);
+  });
+
   it('nombres con los apellidos primero, tildes y mayúsculas', () => {
     expect(mismoValor('nombre', 'PÉREZ GÓMEZ JUAN CARLOS', 'Juan Carlos Perez Gomez')).toBe(true);
     expect(mismoValor('nombre', 'PEREZ GOMEZ JUAN', 'JUAN CARLOS PEREZ GOMEZ')).toBe(false);
     expect(mismoValor('direccion', 'Calle 5 # 10-20', 'CALLE 5 10 20')).toBe(true);
   });
 
-  it('el documento que manda: la cédula para la persona, el título para los linderos', () => {
+  it('el documento que manda: la cédula para la persona, el certificado para los linderos, el título para las áreas', () => {
     expect(documentoQueManda('persona:123.nombre')).toBe('CEDULA');
-    expect(documentoQueManda('inmueble:200-1.linderos')).toBe('ESCRITURA_ANTERIOR');
+    expect(documentoQueManda('inmueble:200-1.linderos')).toBe('CERTIFICADO_TRADICION');
+    expect(documentoQueManda('inmueble:200-1.area_terreno')).toBe('ESCRITURA_ANTERIOR');
     expect(documentoQueManda('inmueble:200-1.cedula_catastral')).toBe('CERTIFICADO_TRADICION');
     expect(documentoQueManda('persona:123.estado_civil')).toBeNull();
   });

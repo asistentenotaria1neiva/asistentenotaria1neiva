@@ -1,9 +1,10 @@
 /**
  * Carga de una versión de plantilla, de principio a fin:
  *   1. Valida el .docx.
- *   2. Si es un caso real, la IA lo convierte en plantilla (variabilizar-plantilla.ts).
+ *   2. La IA verifica que sea del tipo elegido y, si es un caso real, lo convierte en plantilla (variabilizar-plantilla.ts).
  *   3. Guarda la versión, pendiente de aprobación, y la audita.
- *   4. La verificación automática y la revisión de la IA (revision-plantillas.ts).
+ *   4. La verificación automática (revision-plantillas.ts). La revisión de la IA, con sus hallazgos, no corre al cargar:
+ *      se pide después desde la versión.
  * La usan la carga de una versión (acción) y la de varias a la vez (api/plantillas/cargar), que
  * manda una petición por archivo para que los análisis corran en paralelo.
  * También la conversión de versiones ya cargadas que siguen con datos reales (api/plantillas/convertir).
@@ -17,7 +18,7 @@ import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { ErrorIA } from '../ia/cliente';
 import { cargarPlantilla, validarDocxPlantilla, ErrorPlantilla } from './plantillas';
 import { variabilizarPlantilla, type Variabilizacion } from './variabilizar-plantilla';
-import { revisarPlantilla, type Veredicto } from './revision-plantillas';
+import { revisarPlantilla } from './revision-plantillas';
 
 export interface ResultadoCarga {
   id: string;
@@ -25,8 +26,9 @@ export interface ResultadoCarga {
   tipo: string;
   /** Resumen de la conversión del caso real; null si no se pidió o no hay IA */
   conversion: { esCasoReal: boolean; reemplazos: number; noAplicados: number; error: string | null } | null;
-  veredicto: Veredicto | null;
-  errorIA: string | null;
+  /** La IA confirmó que el archivo es del tipo elegido; null si no se verificó (sin IA o sin conversión) */
+  tipoCorrecto: boolean | null;
+  motivoTipo: string | null;
 }
 
 export async function cargarYRevisarPlantilla(s: SesionActiva, entrada: { tipoId: string; nombreArchivo: string; archivo: Buffer; notas?: string; convertir: boolean; otros?: Buffer[] }): Promise<ResultadoCarga> {
@@ -45,7 +47,7 @@ export async function cargarYRevisarPlantilla(s: SesionActiva, entrada: { tipoId
       archivo = r.archivo;
       variabilizacion = r.variabilizacion;
     } catch (e) {
-      // Sin conversión la plantilla se carga tal como vino; la revisión de la IA señalará los datos fijos
+      // Sin conversión la plantilla se carga tal como vino; si se pide la revisión de la IA, señalará los datos fijos
       if (!(e instanceof ErrorIA)) console.error('[carga-plantillas] conversión', e);
       variabilizacion = { esCasoReal: false, resumen: '', reemplazos: [], noAplicados: [], nuevas: [], advertencias: [], valoresEjemplo: {}, modelo: '', duracionMs: 0,
         error: e instanceof ErrorIA ? e.message : 'Error inesperado al convertir el caso real en plantilla.' };
@@ -64,13 +66,12 @@ export async function cargarYRevisarPlantilla(s: SesionActiva, entrada: { tipoId
     },
   });
 
-  // La revisión no impide la carga: si la IA falla, el error queda en la versión y se puede repetir
-  const revision = await revisarPlantilla(p.id, s).catch((e) => { console.error('[carga-plantillas] revisión', e); return null; });
+  // Solo la verificación automática: la revisión de la IA (hallazgos y advertencias) se pide después desde la versión
+  await revisarPlantilla(p.id, s, false).catch((e) => { console.error('[carga-plantillas] revisión', e); return null; });
   return {
     id: p.id, version: p.version, tipo: tipo.nombre,
     conversion: variabilizacion && { esCasoReal: variabilizacion.esCasoReal, reemplazos: variabilizacion.reemplazos.length, noAplicados: variabilizacion.noAplicados.length, error: variabilizacion.error },
-    veredicto: revision?.ia?.veredicto ?? null,
-    errorIA: revision ? revision.errorIA : 'No se pudo completar la revisión.',
+    tipoCorrecto: variabilizacion?.tipoCorrecto ?? null, motivoTipo: variabilizacion?.motivoTipo ?? null,
   };
 }
 
@@ -86,7 +87,7 @@ export interface ResultadoConversion {
 /**
  * Convierte una versión ya cargada que todavía tiene datos de un caso real: la IA cambia los datos
  * por variables y queda una versión NUEVA (sin datos, con sus valores de ejemplo ficticios),
- * pendiente de aprobación y revisada por la IA. La versión original no cambia.
+ * pendiente de aprobación. La versión original no cambia.
  */
 export async function convertirPlantillaCargada(s: SesionActiva, id: string): Promise<ResultadoConversion> {
   const p = await db.plantilla.findUnique({ where: { id }, include: { tipo: true } });
@@ -123,7 +124,7 @@ export async function convertirPlantillaCargada(s: SesionActiva, id: string): Pr
     ...datosAuditoria(s), accion: 'PLANTILLA_CARGADA', entidad: 'plantilla', entidadId: nueva.id,
     detalle: { tipoId: p.tipoId, version: nueva.version, sha256: nueva.hashSha256, origen: 'conversion_caso_real', desde: p.version, conversion: { reemplazos: v.reemplazos.length, noAplicados: v.noAplicados.length } },
   });
-  const revision = await revisarPlantilla(nueva.id, s).catch((e) => { console.error('[carga-plantillas] revisión', e); return null; });
+  await revisarPlantilla(nueva.id, s, false).catch((e) => { console.error('[carga-plantillas] revisión', e); return null; });
   return {
     desde: p.version,
     noAplicados: v.noAplicados,
@@ -131,8 +132,7 @@ export async function convertirPlantillaCargada(s: SesionActiva, id: string): Pr
     nueva: {
       id: nueva.id, version: nueva.version, tipo: p.tipo.nombre,
       conversion: { esCasoReal: true, reemplazos: v.reemplazos.length, noAplicados: v.noAplicados.length, error: null },
-      veredicto: revision?.ia?.veredicto ?? null,
-      errorIA: revision ? revision.errorIA : 'No se pudo completar la revisión.',
+      tipoCorrecto: v.tipoCorrecto ?? null, motivoTipo: v.motivoTipo ?? null,
     },
   };
 }

@@ -14,7 +14,7 @@ import { PASOS_COMUNES, ESQUEMAS } from '../escritura/esquemas';
 import { cargarActosDePlantillas } from './actos-plantilla';
 import { validarPaso, validarCampos, leerRuta, escribirRuta, type Errores } from '../escritura/validar-formulario';
 import { validarDocumento, validarMatricula, validarCedulaCatastral } from '../validaciones/formatos';
-import { mismoValor, claveMatricula, documentoQueManda } from '../escritura/comparar';
+import { mismoValor, mismaCatastral, claveMatricula, documentoQueManda } from '../escritura/comparar';
 import { registrarCorreccion } from './aprendizaje';
 import { notificar } from './notificaciones';
 import { asegurarCatalogo } from './inicializacion';
@@ -190,7 +190,7 @@ export function resolverDestino(datos: DatosExpediente, campo: string): { ruta: 
     return { ruta: `inmuebles.${i}.${subcampo}`, base: 'inmueble', indice: i, subcampo };
   }
   if (tipo === 'catastral') {
-    const i = datos.inmuebles.findIndex((x) => [x.cedula_catastral, x.cedula_catastral_paz_salvo].some((c) => dig(c) && (dig(c).endsWith(clave) || clave.endsWith(dig(c)))));
+    const i = datos.inmuebles.findIndex((x) => [x.cedula_catastral, x.cedula_catastral_paz_salvo].some((c) => mismaCatastral(c, clave)));
     return { ruta: `inmuebles.${i}.${subcampo}`, base: 'inmueble', indice: i, subcampo };
   }
   return { ruta: `actos.${clave}.${subcampo}`, base: 'acto', indice: 0, subcampo };
@@ -218,7 +218,8 @@ function aplicarEnDatos(datos: DatosExpediente, campo: string, valor: unknown, c
   let destino = resolverDestino(datos, campo);
   if (!destino) return false;
   if (destino.indice < 0) {
-    if (!crear) return false;
+    // Un paz y salvo cuyo predio no se reconoce no crea un inmueble vacío si ya están los del certificado
+    if (!crear || (campo.startsWith('catastral:') && datos.inmuebles.length)) return false;
     const clave = campo.split(':')[1].split('.')[0];
     if (destino.base === 'persona') datos.personas.push({ id: crypto.randomUUID(), tipo_persona: 'NATURAL', nombre: '', tipo_documento: 'CC', numero_documento: clave, domicilio: 'la ciudad de Neiva (H)' } as Persona);
     else if (destino.base === 'inmueble') datos.inmuebles.push({ id: crypto.randomUUID(), tipo_inmueble: 'LOTE', direccion: '', municipio: 'Neiva', departamento: 'Huila', linderos: '', matricula: campo.startsWith('inmueble:') ? clave : '', orip: 'NEIVA - HUILA', cedula_catastral: campo.startsWith('catastral:') ? clave : '', tradicion: { modo: 'COMPRA', tradente: '', escritura_numero: '', escritura_fecha: '', notaria: '' }, fecha_certificado_tradicion: '' } as Inmueble);

@@ -31,7 +31,7 @@ function mostrar(v: unknown, datos: DatosExpediente): string {
   if (typeof v === 'boolean') return v ? 'Sí' : 'No';
   if (Array.isArray(v)) return v.map((x) => mostrar(x, datos)).join(', ');
   const persona = datos.personas.find((p) => p.id === v);
-  if (persona) return persona.nombre;
+  if (persona) return persona.nombre || `Persona ${persona.numero_documento}`;
   const inmueble = datos.inmuebles.find((i) => i.id === v);
   if (inmueble) return inmueble.matricula || inmueble.direccion;
   return String(v);
@@ -56,12 +56,13 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
   const reanudar = editable ? await tareaPorReanudar(id) : null;
   if (reanudar) after(reanudar);
   const tarea = await tareaEnCurso(id);
-  const [estado, nDocs, inconsistencias, b, ultimoBorrador] = await Promise.all([
+  const [estado, nDocs, inconsistencias, b, ultimoBorrador, nombresLeidos] = await Promise.all([
     estadoAsistente(id),
     db.documento.count({ where: { expedienteId: id } }),
     db.observacion.findMany({ where: { expedienteId: id, codigo: CODIGO_INCONSISTENCIA, estado: 'ABIERTA' }, orderBy: { creadaEn: 'asc' } }),
     bloqueos(id),
     db.borrador.findFirst({ where: { expedienteId: id }, orderBy: { version: 'desc' } }),
+    db.datoExtraido.findMany({ where: { expedienteId: id, estado: 'PENDIENTE', campo: { startsWith: 'persona:', endsWith: '.nombre' } }, select: { campo: true, valor: true } }),
   ]);
   const iaDisponible = !!process.env.ANTHROPIC_API_KEY;
   const r = estado.resultado;
@@ -69,7 +70,14 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
 
   // Preguntas pendientes con el control que corresponde a su campo
   const actosRuta = r && !r.actosConfirmados ? r.actosPropuestos : actos;
-  const personas = datos.personas.map((p) => ({ valor: p.id, etiqueta: `${p.nombre || '(sin nombre)'} · ${p.numero_documento}` }));
+  // Persona sin nombre guardado (el nombre quedó por confirmar): se muestra el que leyó la IA de los documentos
+  const dig = (x: unknown) => String(x ?? '').replace(/\D/g, '');
+  const nombreLeido = (p: DatosExpediente['personas'][number]) => {
+    const v = nombresLeidos.find((d) => dig(d.campo.split(':')[1].split('.')[0]) === dig(p.numero_documento))?.valor;
+    return typeof v === 'string' && v.trim() ? `${v.trim().toUpperCase()} (nombre por confirmar)` : '';
+  };
+  const nombreDe = (p: DatosExpediente['personas'][number]) => p.nombre || nombreLeido(p) || '(sin nombre)';
+  const personas = datos.personas.map((p) => ({ valor: p.id, etiqueta: `${nombreDe(p)} · ${p.numero_documento}` }));
   const inmuebles = datos.inmuebles.map((i) => ({ valor: i.id, etiqueta: `${i.matricula || 'sin matrícula'} · ${i.direccion || i.nombre_corto || ''}` }));
   const pendientes: PreguntaVista[] = (r?.preguntas ?? []).filter((p) => p.estado === 'PENDIENTE').flatMap<PreguntaVista>((p) => {
     // Pregunta adicional de un caso especial: texto libre
@@ -102,7 +110,7 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
   const grupos = [
     { titulo: 'Escritura', filas: filas(PASOS_COMUNES[0].campos.filter((c) => !CAMPOS_TERMINACION.includes(c.id)), datos.escritura as unknown as Record<string, unknown>, 'escritura') },
     ...actos.filter((a) => ESQUEMAS[a]).map((a) => ({ titulo: titulo(a), filas: filas(ESQUEMAS[a].pasos.flatMap((p) => p.campos), (datos.actos[a] ?? {}) as Record<string, unknown>, `acto:${a}`) })),
-    ...datos.personas.map((p) => ({ titulo: `${p.nombre || 'Persona sin nombre'} · ${p.numero_documento}`, filas: filas(CAMPOS_PERSONA, p as unknown as Record<string, unknown>, `persona:${p.id}`) })),
+    ...datos.personas.map((p) => ({ titulo: `${p.nombre || nombreLeido(p) || 'Persona sin nombre'} · ${p.numero_documento}`, filas: filas(CAMPOS_PERSONA, p as unknown as Record<string, unknown>, `persona:${p.id}`) })),
     ...datos.inmuebles.map((i) => ({ titulo: `Inmueble ${i.matricula || i.nombre_corto || i.direccion}`, filas: filas(CAMPOS_INMUEBLE, i as unknown as Record<string, unknown>, `inmueble:${i.id}`) })),
   ].filter((g) => g.filas.length);
 

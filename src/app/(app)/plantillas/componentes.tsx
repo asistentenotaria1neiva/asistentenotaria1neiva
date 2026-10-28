@@ -19,7 +19,7 @@ export const CATEGORIA: Record<string, string> = {
 export function EtiquetaVeredicto({ revision }: { revision: RevisionPlantilla | null }) {
   if (enRevision(revision)) return <span className="etiqueta informativa fila" style={{ gap: '0.35rem', display: 'inline-flex' }}><span className="girador pequeno" aria-hidden="true" /> Analizando con IA…</span>;
   if (!revision) return <span className="etiqueta">sin revisar</span>;
-  if (!revision.ia) return <span className="etiqueta">IA sin respuesta</span>;
+  if (!revision.ia) return <span className="etiqueta">{revision.errorIA ? 'IA sin respuesta' : 'sin revisión IA'}</span>;
   const [clase, texto] = VEREDICTO[revision.ia.veredicto];
   return <span className={`etiqueta ${clase}`}>{texto}</span>;
 }
@@ -58,6 +58,8 @@ export function PanelConversion({ conversion: c }: { conversion: Variabilizacion
   return (
     <section className="tarjeta">
       <h2 style={{ marginTop: 0 }}>Conversión de caso real</h2>
+      {c.tipoCorrecto === true && <p><span className="etiqueta ok">Corresponde al tipo de escritura</span>{c.motivoTipo ? <span className="suave"> {c.motivoTipo}</span> : null}</p>}
+      {c.tipoCorrecto === false && <div className="aviso error">El archivo <strong>no corresponde</strong> a este tipo de escritura{c.motivoTipo ? `: ${c.motivoTipo}` : '.'}</div>}
       {c.error ? <div className="aviso alerta">La IA no pudo convertir el archivo ({c.error}); se cargó tal como venía. Si tiene datos de un caso, la revisión los señala como «Dato fijo».</div>
         : !c.esCasoReal ? <p className="suave">La IA no encontró datos de un caso real: el archivo se cargó tal como venía.{c.resumen ? ` ${c.resumen}` : ''}</p>
         : (
@@ -78,12 +80,6 @@ export function PanelConversion({ conversion: c }: { conversion: Variabilizacion
             )}
           </>
         )}
-      {c.advertencias.length > 0 && (
-        <>
-          <h3>Para revisar</h3>
-          <ul>{c.advertencias.map((a, i) => <li key={i}>{a}</li>)}</ul>
-        </>
-      )}
       {c.reemplazos.length > 0 && <p className="suave">Los datos reales del archivo no se guardan; la plantilla quedó sin datos y la vista «Con datos de ejemplo» la muestra llenada con datos ficticios.</p>}
     </section>
   );

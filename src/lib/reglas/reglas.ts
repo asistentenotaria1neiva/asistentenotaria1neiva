@@ -12,6 +12,7 @@
  */
 import type { DatosExpediente, Persona, Inmueble } from '../escritura/tipos';
 import { cedulasDe, type ResultadoExtraccion, type TipoDocumental, type DatoConFuente } from '../ia/documentos';
+import { mismaCatastral } from '../escritura/comparar';
 import {
   validarDocumento, validarMatricula, validarCedulaCatastral, validarFecha,
 } from '../validaciones/formatos';
@@ -168,7 +169,7 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
       }
       // Cédula catastral del certificado
       const catCert = soloDigitos(v(cert.hechos, 'cedula_catastral')?.valor);
-      if (catCert && ![soloDigitos(inm.cedula_catastral), soloDigitos(inm.cedula_catastral_paz_salvo)].some((x) => x && (x.endsWith(catCert) || catCert.endsWith(x)))) {
+      if (catCert && ![inm.cedula_catastral, inm.cedula_catastral_paz_salvo].some((x) => mismaCatastral(x, catCert))) {
         h.push({ codigo: 'R03-CATASTRAL', nivel: 'ADVERTENCIA', mensaje: `La cédula catastral del certificado (${catCert}) no corresponde a la del formulario (${inm.cedula_catastral}).`, campo: `inmuebles.${idI}.cedula_catastral`, evidencia: evid(cert, v(cert.hechos, 'cedula_catastral')) });
       }
       // Gravámenes y limitaciones vigentes
@@ -200,7 +201,7 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
   }
   for (const ps of docs('PAZ_Y_SALVO')) {
     const cat = soloDigitos(v(ps.hechos, 'cedula_catastral')?.valor);
-    const inm = e.datos.inmuebles.find((i) => [i.cedula_catastral, i.cedula_catastral_paz_salvo].some((x) => soloDigitos(x) && cat && (soloDigitos(x).endsWith(cat) || cat.endsWith(soloDigitos(x)))));
+    const inm = e.datos.inmuebles.find((i) => [i.cedula_catastral, i.cedula_catastral_paz_salvo].some((x) => mismaCatastral(x, cat)));
     if (!inm) {
       if (cat) h.push({ codigo: 'R04-PAZ-SALVO-PREDIO', nivel: 'ADVERTENCIA', mensaje: `El paz y salvo "${ps.nombre}" (catastral ${cat}) no corresponde a ningún inmueble del formulario.`, evidencia: evid(ps, v(ps.hechos, 'cedula_catastral')) });
       continue;

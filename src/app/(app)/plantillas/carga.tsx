@@ -17,10 +17,6 @@ export interface TipoCargable { id: string; nombre: string; grupo: 'nueva' | 've
 type Estado = { fase: 'lista' } | { fase: 'cargando' } | { fase: 'hecha'; r: ResultadoCarga } | { fase: 'error'; error: string };
 interface Fila { clave: string; archivo: File; tipoId: string; notas: string; estado: Estado }
 
-const VEREDICTO: Record<string, [string, string]> = {
-  APTA: ['ok', 'IA: apta'], APTA_CON_OBSERVACIONES: ['advertencia', 'IA: con observaciones'], NO_APTA: ['critica', 'IA: no apta'],
-};
-
 const sinTildes = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
 /** Tipo cuyo id aparece en el nombre del archivo ("compraventa_hipoteca v2.docx" → compraventa_hipoteca) */
@@ -29,7 +25,7 @@ function adivinarTipo(nombre: string, tipos: TipoCargable[]): string {
   return tipos.filter((t) => n.includes(` ${t.id.replace(/_/g, ' ')} `)).sort((a, b) => b.id.length - a.id.length)[0]?.id ?? '';
 }
 
-/** Sube un archivo a api/plantillas/cargar; la respuesta trae la conversión y el veredicto de la IA */
+/** Sube un archivo a api/plantillas/cargar; la respuesta trae la conversión y si el archivo es del tipo elegido */
 async function enviar(f: Pick<Fila, 'archivo' | 'tipoId' | 'notas'> & { otros?: File[] }, convertir: boolean): Promise<Estado> {
   const datos = new FormData();
   datos.set('archivo', f.archivo);
@@ -50,11 +46,17 @@ function Resultado({ r }: { r: ResultadoCarga }) {
   return (
     <div className="fila" style={{ gap: '0.3rem' }}>
       <Conversion c={r.conversion} />
-      {r.veredicto
-        ? <span className={`etiqueta ${VEREDICTO[r.veredicto][0]}`}>{VEREDICTO[r.veredicto][1]}</span>
-        : <span className="etiqueta" title={r.errorIA ?? undefined}>IA sin respuesta</span>}
+      <TipoVerificado r={r} />
     </div>
   );
+}
+
+/** Lo único que la IA verifica al cargar: que el archivo sea del tipo de escritura elegido */
+function TipoVerificado({ r }: { r: ResultadoCarga }) {
+  if (r.tipoCorrecto === null) return null;
+  return r.tipoCorrecto
+    ? <span className="etiqueta ok" title={r.motivoTipo ?? undefined}>Es {r.tipo}</span>
+    : <span className="etiqueta critica" title={r.motivoTipo ?? undefined}>No es {r.tipo}{r.motivoTipo ? `: ${r.motivoTipo}` : ''}</span>;
 }
 
 function Conversion({ c }: { c: ResultadoCarga['conversion'] }) {
