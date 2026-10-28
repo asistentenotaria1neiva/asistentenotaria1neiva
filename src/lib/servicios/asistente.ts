@@ -124,7 +124,8 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
   const actual = await obtenerExpediente(s, expedienteId);
   const datos = datosDe(actual);
   const actosActuales = actosDe(actual);
-  const docs = await db.documento.findMany({ where: { expedienteId }, orderBy: { creadoEn: 'asc' } });
+  // Un PDF separado en partes no cuenta: sus documentos son las partes
+  const docs = await db.documento.findMany({ where: { expedienteId, estadoAnalisis: { not: 'DIVIDIDO' } }, orderBy: { creadoEn: 'asc' } });
   // Las preguntas adicionales ya respondidas en un análisis anterior no se repiten
   const previo = (await estadoAsistente(expedienteId)).resultado;
   const adicionalesPrevias = (previo?.preguntas ?? []).filter((p) => esAdicional(p.ruta) && p.estado === 'RESPONDIDA');

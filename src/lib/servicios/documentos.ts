@@ -2,16 +2,17 @@
  * Documentos soporte: carga (cifrada), análisis con IA y descarga auditada.
  */
 import 'server-only';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { guardarCifrado, leerCifrado, borrarCifrado, guardarParte, unirPartes } from '../almacenamiento';
 import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
-import { TIPOS_DOCUMENTALES, esquemaExtraccion, normalizarExtraccion, type TipoDocumental, type ResultadoExtraccion } from '../ia/documentos';
-import { SISTEMA_EXTRACCION, VERSION_INSTRUCCIONES_BASE } from '../ia/instrucciones';
+import { TIPOS_DOCUMENTALES, esquemaExtraccion, normalizarExtraccion, ESQUEMA_SEPARACION, normalizarSeparacion, type TipoDocumental, type ResultadoExtraccion, type ParteDocumento } from '../ia/documentos';
+import { SISTEMA_EXTRACCION, SISTEMA_SEPARACION, VERSION_INSTRUCCIONES_BASE } from '../ia/instrucciones';
 import { llamarEstructurado, configuracionModelo, prepararDocumento, ErrorIA } from '../ia/cliente';
+import { abrirPdf, extraerPaginas } from '../pdf';
 import { sugerenciasDesdeHechos } from '../ia/sugerencias';
 import { obtenerExpediente, puedeEditar, ErrorNegocio } from './expedientes';
 
@@ -75,13 +76,26 @@ async function registrarDocumento(s: SesionActiva, expedienteId: string, nombreO
   if (!bytes.length) throw new ErrorNegocio('El archivo está vacío.');
   const mime = tipoPorFirma(bytes);
   if (!mime) throw new ErrorNegocio('Solo se aceptan PDF o imágenes (JPG, PNG, WEBP).');
+  return crearDocumento(s, expedienteId, nombreOriginal, bytes, mime, tipo);
+}
+
+async function crearDocumento(s: SesionActiva, expedienteId: string, nombreOriginal: string, bytes: Buffer, mime: string, tipo: string, parte?: { origenId: string; desde: number; hasta: number }) {
   const ruta = await guardarCifrado(bytes, 'documentos');
   const nombre = nombreOriginal.replace(/[^\p{L}\p{N} ._()-]/gu, '_').slice(0, 150);
   const d = await db.documento.create({
-    data: { expedienteId, tipoDocumental: tipo, nombreOriginal: nombre, mime, tamano: bytes.length, hashSha256: sha256(bytes), rutaCifrada: ruta, subidoPorId: s.usuario.id },
+    data: {
+      expedienteId, tipoDocumental: tipo, nombreOriginal: nombre, mime, tamano: bytes.length, hashSha256: sha256(bytes), rutaCifrada: ruta, subidoPorId: s.usuario.id,
+      ...(parte ? { origenId: parte.origenId, paginaDesde: parte.desde, paginaHasta: parte.hasta } : {}),
+    },
   });
-  await auditar({ ...datosAuditoria(s), accion: 'DOCUMENTO_CARGADO', entidad: 'documento', entidadId: d.id, detalle: { expedienteId, tipo, tamano: bytes.length, sha256: d.hashSha256 } });
+  await auditar({ ...datosAuditoria(s), accion: 'DOCUMENTO_CARGADO', entidad: 'documento', entidadId: d.id, detalle: { expedienteId, tipo, tamano: bytes.length, sha256: d.hashSha256, ...(parte ?? {}) } });
   return d;
+}
+
+/** Nombre de una parte: el del archivo con sus páginas, p. ej. «soportes (págs. 3-5).pdf» */
+function nombreParte(original: string, p: ParteDocumento): string {
+  const base = original.replace(/\.pdf$/i, '').slice(0, 110);
+  return `${base} (${p.desde === p.hasta ? `pág. ${p.desde}` : `págs. ${p.desde}-${p.hasta}`}).pdf`;
 }
 
 /** Instrucciones adicionales aprobadas por el administrador (entrenamiento) para la extracción */
@@ -93,11 +107,19 @@ async function instruccionesAprobadas(proposito: 'EXTRACCION' | 'REVISION', tipo
   return { texto: vigentes.map((f) => f.contenido).join('\n\n'), version: [VERSION_INSTRUCCIONES_BASE, ...vigentes.map((f) => `${f.tipoId ?? 'general'}-v${f.version}`)].join('+') };
 }
 
-export async function analizarDocumento(s: SesionActiva, documentoId: string) {
+/**
+ * Analiza un documento con la IA. Un PDF de varias páginas cargado sin tipo («detectar
+ * automáticamente») puede traer varios documentos escaneados juntos: primero la IA dice de qué
+ * página a qué página va cada uno; si son varios, el PDF se separa en partes (cada una un documento
+ * nuevo, pendiente de análisis, con el tipo ya identificado) y el original queda DIVIDIDO.
+ * Devuelve los ids de las partes para analizarlas a continuación.
+ */
+export async function analizarDocumento(s: SesionActiva, documentoId: string): Promise<{ sugerencias: number; partes: string[] }> {
   const doc = await db.documento.findUniqueOrThrow({ where: { id: documentoId } });
   const e = await obtenerExpediente(s, doc.expedienteId);
   if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede modificar en su estado actual.');
   if (doc.estadoAnalisis === 'EN_CURSO') throw new ErrorNegocio('El documento ya se está analizando.');
+  if (doc.estadoAnalisis === 'DIVIDIDO') throw new ErrorNegocio('Este archivo ya se separó en documentos: analice cada parte.');
   if (!(await consumirLimite(`ia:${s.usuario.id}`, 100, 3600)).permitido) throw new ErrorNegocio('Límite de análisis por hora alcanzado.');
   let tipo = doc.tipoDocumental as TipoDocumental;
   const instr = await instruccionesAprobadas('EXTRACCION', Array.isArray(e.actos) ? (e.actos as string[]) : []);
@@ -106,9 +128,44 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string) {
   // Un PDF grande se sube a Anthropic (Files API) una sola vez y se borra al terminar, también si falla
   let liberar = async () => {};
   try {
-    const preparado = await prepararDocumento(await leerCifrado(doc.rutaCifrada), doc.mime, doc.nombreOriginal);
+    const bytes = await leerCifrado(doc.rutaCifrada);
+    const preparado = await prepararDocumento(bytes, doc.mime, doc.nombreOriginal);
     liberar = preparado.liberar;
     const bloque = (t: TipoDocumental) => (preparado.bloque.type === 'document' ? { ...preparado.bloque, title: `${TIPOS_DOCUMENTALES[t]} – ${doc.nombreOriginal}` } : preparado.bloque);
+    const consumo = { tokensEntrada: 0, tokensSalida: 0, tokensCacheLectura: 0, duracionMs: 0 };
+    const sumar = (x: typeof consumo) => { consumo.tokensEntrada += x.tokensEntrada; consumo.tokensSalida += x.tokensSalida; consumo.tokensCacheLectura += x.tokensCacheLectura; consumo.duracionMs += x.duracionMs; };
+
+    // Sin tipo declarado y con varias páginas: ¿cuántos documentos trae el PDF y dónde va cada uno?
+    const pdf = tipo === 'OTRO' && doc.mime === 'application/pdf' && !doc.origenId ? await abrirPdf(bytes) : null;
+    const paginas = pdf?.getPageCount() ?? 0;
+    if (pdf && paginas >= 2) {
+      const sep = await llamarEstructurado<{ documentos: unknown }>({
+        proposito: 'EXTRACCION',
+        sistema: SISTEMA_SEPARACION,
+        contenido: [preparado.bloque, { type: 'text', text: `El archivo tiene ${paginas} páginas. Indica los documentos que contiene y de qué página a qué página va cada uno.` }],
+        esquema: ESQUEMA_SEPARACION,
+        maxTokens: 8000,
+      });
+      sumar(sep);
+      const partes = normalizarSeparacion(sep.datos, paginas);
+      if (partes.length > 1) {
+        const creadas: string[] = [];
+        for (const p of partes) {
+          const d = await crearDocumento(s, e.id, nombreParte(doc.nombreOriginal, p), await extraerPaginas(pdf, p.desde, p.hasta), 'application/pdf', p.tipo, { origenId: doc.id, desde: p.desde, hasta: p.hasta });
+          creadas.push(d.id);
+        }
+        await db.$transaction([
+          db.documento.update({ where: { id: doc.id }, data: { estadoAnalisis: 'DIVIDIDO', hechos: Prisma.DbNull } }),
+          db.analisisIA.update({ where: { id: analisis.id }, data: { estado: 'COMPLETADO', modelo: sep.modelo, ...consumo, resultado: { partes: partes.map((p, i) => ({ ...p, documentoId: creadas[i] })) } as unknown as Prisma.InputJsonValue } }),
+          db.datoExtraido.deleteMany({ where: { documentoId: doc.id, estado: 'PENDIENTE' } }),
+        ]);
+        await auditar({ ...datosAuditoria(s), accion: 'DOCUMENTO_DIVIDIDO', entidad: 'documento', entidadId: doc.id, detalle: { paginas, partes: partes.map((p, i) => ({ tipo: p.tipo, desde: p.desde, hasta: p.hasta, documentoId: creadas[i] })), modelo: sep.modelo } });
+        return { sugerencias: 0, partes: creadas };
+      }
+      // Un solo documento: se lee de una vez con el esquema de su tipo
+      if (partes[0] && partes[0].tipo !== 'OTRO') tipo = partes[0].tipo;
+    }
+
     const extraer = (t: TipoDocumental) => llamarEstructurado<ResultadoExtraccion>({
       proposito: 'EXTRACCION',
       sistema: SISTEMA_EXTRACCION + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
@@ -121,13 +178,13 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string) {
       esquema: esquemaExtraccion(t),
     }).then((x) => ({ ...x, datos: normalizarExtraccion(t, x.datos) }));
     let r = await extraer(tipo);
-    const consumo = { tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs };
+    sumar(r);
     // Si la IA reconoce otro tipo de documento, se extrae de nuevo con el esquema que le corresponde
     const detectado = r.datos.tipo_detectado;
     if (detectado && detectado !== tipo && detectado !== 'OTRO' && detectado in TIPOS_DOCUMENTALES) {
       tipo = detectado;
       r = await extraer(tipo);
-      consumo.tokensEntrada += r.tokensEntrada; consumo.tokensSalida += r.tokensSalida; consumo.tokensCacheLectura += r.tokensCacheLectura; consumo.duracionMs += r.duracionMs;
+      sumar(r);
     }
     const sugerencias = sugerenciasDesdeHechos(tipo, r.datos);
     await db.$transaction([
@@ -143,7 +200,7 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string) {
       }),
     ]);
     await auditar({ ...datosAuditoria(s), accion: 'DOCUMENTO_ANALIZADO', entidad: 'documento', entidadId: doc.id, detalle: { sugerencias: sugerencias.length, revisionManual: sugerencias.filter((x) => x.revisionManual).length, modelo: r.modelo } });
-    return { sugerencias: sugerencias.length };
+    return { sugerencias: sugerencias.length, partes: [] };
   } catch (err) {
     const mensaje = err instanceof ErrorIA ? err.message : 'Error inesperado al analizar el documento.';
     await db.documento.update({ where: { id: doc.id }, data: { estadoAnalisis: 'ERROR' } });

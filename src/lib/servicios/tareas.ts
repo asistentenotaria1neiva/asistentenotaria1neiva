@@ -183,7 +183,14 @@ async function analizarLote(id: string, expedienteId: string, p: ProgresoTarea, 
       const d = cola.shift()!;
       p.analizando.push({ id: d.id, nombre: d.nombreOriginal });
       if (!(await guardar(id, p))) return; // otra invocación tomó la tarea
-      try { await analizarDocumento(s, d.id); } catch (err) { p.errores.push(`${d.nombreOriginal}: ${mensajeDe(err)}`); }
+      try {
+        // Un PDF con varios documentos se separa en partes: se analizan en esta misma tarea
+        const { partes } = await analizarDocumento(s, d.id);
+        if (partes.length) {
+          cola.push(...await db.documento.findMany({ where: { id: { in: partes } }, orderBy: { creadoEn: 'asc' }, select: { id: true, nombreOriginal: true } }));
+          p.total += partes.length;
+        }
+      } catch (err) { p.errores.push(`${d.nombreOriginal}: ${mensajeDe(err)}`); }
       p.analizando = p.analizando.filter((x) => x.id !== d.id);
       p.intentados.push(d.id);
       p.hechos++;

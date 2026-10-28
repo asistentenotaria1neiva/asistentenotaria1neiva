@@ -41,7 +41,8 @@ export async function evaluarExpediente(expedienteId: string, s: SesionActiva) {
   const e = await obtenerExpediente(s, expedienteId);
   const datos = datosDe(e);
   const actos = actosDe(e);
-  const documentos = await db.documento.findMany({ where: { expedienteId } });
+  // Un PDF separado en partes no cuenta: sus documentos son las partes
+  const documentos = await db.documento.findMany({ where: { expedienteId, estadoAnalisis: { not: 'DIVIDIDO' } } });
   const pendientes = await db.datoExtraido.count({ where: { expedienteId, estado: 'PENDIENTE', revisionManual: true } });
   const hallazgos: Hallazgo[] = [];
   let borradorTexto: string | undefined;

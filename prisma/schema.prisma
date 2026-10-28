@@ -266,8 +266,14 @@ model Documento {
   tamano        Int
   hashSha256    String // del archivo original (integridad)
   rutaCifrada   String // ruta relativa en el almacenamiento cifrado
-  estadoAnalisis String   @default("PENDIENTE") // PENDIENTE | EN_CURSO | COMPLETADO | ERROR
+  estadoAnalisis String   @default("PENDIENTE") // PENDIENTE | EN_CURSO | COMPLETADO | ERROR | DIVIDIDO
   hechos        Json? // datos extraídos por la IA: { campo: { valor, pagina, fragmento, confianza } }
+  // Un PDF con varios documentos se separa en partes (DIVIDIDO): cada parte guarda de dónde salió
+  origen        Documento?  @relation("PartesDocumento", fields: [origenId], references: [id], onDelete: SetNull)
+  origenId      String?
+  paginaDesde   Int?
+  paginaHasta   Int?
+  partes        Documento[] @relation("PartesDocumento")
   subidoPor     Usuario    @relation(fields: [subidoPorId], references: [id])
   subidoPorId   String
   creadoEn      DateTime   @default(now())

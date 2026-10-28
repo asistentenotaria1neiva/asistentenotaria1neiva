@@ -275,6 +275,37 @@ export function esquemaExtraccion(tipo: TipoDocumental): Esquema {
   } as Record<string, Esquema>);
 }
 
+/** Un documento dentro de un PDF que trae varios: su tipo y sus páginas (1 = primera, ambas incluidas) */
+export interface ParteDocumento { tipo: TipoDocumental; desde: number; hasta: number; descripcion: string }
+
+/** Respuesta de la IA al separar un PDF en los documentos que trae */
+export const ESQUEMA_SEPARACION: Esquema = objeto({
+  documentos: lista(objeto({
+    tipo: { type: 'string', enum: Object.keys(TIPOS_DOCUMENTALES), description: 'Tipo del documento' },
+    pagina_inicio: { type: 'integer', description: 'Primera página del documento (1 = primera del archivo)' },
+    pagina_fin: { type: 'integer', description: 'Última página del documento, incluida' },
+    descripcion: { type: 'string', description: 'Qué documento es, en pocas palabras (p. ej. «Cédula de Juan Pérez», «Certificado de tradición 200-12345»)' },
+  }), 'Los documentos del archivo en el orden en que aparecen, sin superponerse'),
+});
+
+/**
+ * Partes válidas de la respuesta de separación: dentro del archivo, en orden y sin superponerse
+ * (si dos se cruzan, la segunda empieza donde termina la primera). Las páginas que la IA no asignó
+ * a ningún documento (separadores en blanco, p. ej.) quedan fuera.
+ */
+export function normalizarSeparacion(r: { documentos?: unknown }, paginas: number): ParteDocumento[] {
+  const crudas = (Array.isArray(r.documentos) ? r.documentos : []) as { tipo?: string; pagina_inicio?: number; pagina_fin?: number; descripcion?: string }[];
+  const partes: ParteDocumento[] = [];
+  for (const x of [...crudas].sort((a, b) => Number(a.pagina_inicio) - Number(b.pagina_inicio))) {
+    const desde = Math.max(Math.trunc(Number(x.pagina_inicio)) || 1, 1, (partes.at(-1)?.hasta ?? 0) + 1);
+    const hasta = Math.min(Math.trunc(Number(x.pagina_fin)) || desde, paginas);
+    if (hasta < desde) continue;
+    const tipo = (x.tipo && x.tipo in TIPOS_DOCUMENTALES ? x.tipo : 'OTRO') as TipoDocumental;
+    partes.push({ tipo, desde, hasta, descripcion: String(x.descripcion ?? '').trim().slice(0, 200) });
+  }
+  return partes;
+}
+
 /** Convierte la lista plana de la IA a la forma de siempre: cada dato con su tipo real y null si no aparece */
 export function normalizarExtraccion(tipo: TipoDocumental, r: ResultadoExtraccion): ResultadoExtraccion {
   const entradas = Array.isArray(r.datos) ? (r.datos as Entrada[]) : [];

@@ -62,7 +62,11 @@ export async function accionAnalizarDocumento(expedienteId: string, documentoId:
   const s = await requerirSesion();
   return ejecutar(async () => {
     const r = await analizarDocumento(s, documentoId);
-    return `Análisis completado: ${r.sugerencias} dato(s) sugerido(s).`;
+    if (!r.partes.length) return `Análisis completado: ${r.sugerencias} dato(s) sugerido(s).`;
+    // El PDF traía varios documentos: sus partes se analizan en segundo plano
+    const t = await iniciarTarea(s, expedienteId, 'DOCUMENTOS', await urlAplicacion());
+    after(t.etapa);
+    return `El archivo traía ${r.partes.length} documentos y se separó en partes. Se están analizando en segundo plano; le avisaremos al terminar.`;
   }, `/expedientes/${expedienteId}/documentos`);
 }
 
