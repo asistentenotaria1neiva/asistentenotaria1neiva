@@ -11,7 +11,7 @@ import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { TIPOS_DOCUMENTALES, esquemaExtraccion, normalizarExtraccion, type TipoDocumental, type ResultadoExtraccion } from '../ia/documentos';
 import { SISTEMA_EXTRACCION, VERSION_INSTRUCCIONES_BASE } from '../ia/instrucciones';
-import { llamarEstructurado, prepararDocumento, ErrorIA } from '../ia/cliente';
+import { llamarEstructurado, configuracionModelo, prepararDocumento, ErrorIA } from '../ia/cliente';
 import { sugerenciasDesdeHechos } from '../ia/sugerencias';
 import { obtenerExpediente, puedeEditar, ErrorNegocio } from './expedientes';
 
@@ -102,7 +102,7 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string) {
   let tipo = doc.tipoDocumental as TipoDocumental;
   const instr = await instruccionesAprobadas('EXTRACCION', Array.isArray(e.actos) ? (e.actos as string[]) : []);
   await db.documento.update({ where: { id: doc.id }, data: { estadoAnalisis: 'EN_CURSO' } });
-  const analisis = await db.analisisIA.create({ data: { expedienteId: e.id, proposito: 'EXTRACCION', modelo: process.env.CLAUDE_MODELO_EXTRACCION || 'claude-opus-5-5', estado: 'EN_CURSO', documentoId: doc.id, versionInstruccion: instr.version } });
+  const analisis = await db.analisisIA.create({ data: { expedienteId: e.id, proposito: 'EXTRACCION', modelo: configuracionModelo('EXTRACCION').modelo, estado: 'EN_CURSO', documentoId: doc.id, versionInstruccion: instr.version } });
   // Un PDF grande se sube a Anthropic (Files API) una sola vez y se borra al terminar, también si falla
   let liberar = async () => {};
   try {

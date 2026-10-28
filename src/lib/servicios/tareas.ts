@@ -18,7 +18,7 @@ import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { huellaToken } from '../seguridad/cifrado';
 import type { SesionActiva } from '../sesion-tipos';
-import { ErrorIA } from '../ia/cliente';
+import { ErrorIA, configuracionModelo } from '../ia/cliente';
 import { obtenerExpediente, puedeEditar, ErrorNegocio } from './expedientes';
 import { analizarDocumento } from './documentos';
 import { prepararPreguntas } from './asistente';
@@ -98,7 +98,7 @@ export async function iniciarTarea(s: SesionActiva, expedienteId: string, clase:
   if (clase === 'DOCUMENTOS' && !pendientes) throw new ErrorNegocio('No hay documentos pendientes de análisis.');
   const progreso: ProgresoTarea = { fase: 'DOCUMENTOS', total: pendientes, hechos: 0, analizando: [], intentados: [], errores: [], turno: 0, reanudaciones: 0, sesion: s, base };
   const a = await db.analisisIA.create({
-    data: { expedienteId, proposito: clase, modelo: process.env[clase === 'ASISTENTE' ? 'CLAUDE_MODELO_REVISION' : 'CLAUDE_MODELO_EXTRACCION'] || 'claude-opus-5-5', estado: 'EN_CURSO', progreso: progreso as unknown as Prisma.InputJsonValue },
+    data: { expedienteId, proposito: clase, modelo: configuracionModelo(clase === 'ASISTENTE' ? 'REVISION' : 'EXTRACCION').modelo, estado: 'EN_CURSO', progreso: progreso as unknown as Prisma.InputJsonValue },
   });
   return { documentos: pendientes, etapa: () => ejecutarEtapa(a.id, 0) };
 }

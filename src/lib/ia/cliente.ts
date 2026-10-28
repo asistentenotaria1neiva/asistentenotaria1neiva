@@ -1,22 +1,34 @@
 /**
  * Cliente de la API de Claude (solo servidor). La clave vive en ANTHROPIC_API_KEY.
- * El modelo y el esfuerzo de razonamiento se configuran por variables de entorno
- * para cada tarea (extracción y revisión), sin cambiar código.
+ * Cada tarea usa el modelo más económico que la resuelve bien; el modelo y el esfuerzo de
+ * razonamiento se pueden cambiar por variables de entorno, sin cambiar código:
+ *   - EXTRACCION (leer documentos): Haiku, CLAUDE_MODELO_DOCUMENTOS / CLAUDE_ESFUERZO_DOCUMENTOS;
+ *   - REVISION (asistente, revisión y corrección del expediente): Sonnet, CLAUDE_MODELO_EXPEDIENTE / CLAUDE_ESFUERZO_EXPEDIENTE;
+ *   - PLANTILLA (convertir, revisar y corregir plantillas): Sonnet, CLAUDE_MODELO_PLANTILLAS / CLAUDE_ESFUERZO_PLANTILLAS.
+ * Si Haiku declina el contenido, se repite una vez con CLAUDE_MODELO_RESPALDO.
  */
 import 'server-only';
 import Anthropic, { toFile } from '@anthropic-ai/sdk';
 
 type Esfuerzo = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-export type Proposito = 'EXTRACCION' | 'REVISION';
+export type Proposito = 'EXTRACCION' | 'REVISION' | 'PLANTILLA';
+
+const PREDETERMINADOS: Record<Proposito, { variable: string; modelo: string; esfuerzo: Esfuerzo }> = {
+  EXTRACCION: { variable: 'DOCUMENTOS', modelo: 'claude-haiku-5-5', esfuerzo: 'medium' },
+  REVISION: { variable: 'EXPEDIENTE', modelo: 'claude-sonnet-5-5', esfuerzo: 'high' },
+  PLANTILLA: { variable: 'PLANTILLAS', modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' },
+};
+const RESPALDO = 'claude-sonnet-5-5';
 
 export function configuracionModelo(proposito: Proposito): { modelo: string; esfuerzo: Esfuerzo } {
-  const sufijo = proposito === 'EXTRACCION' ? 'EXTRACCION' : 'REVISION';
-  const modelo = process.env[`CLAUDE_MODELO_${sufijo}`] || 'claude-opus-5-5';
-  // Leer documentos (extracción) no necesita tanto razonamiento como revisar el expediente, y con menos tarda menos
-  const predeterminado: Esfuerzo = proposito === 'EXTRACCION' ? 'medium' : 'high';
-  const e = (process.env[`CLAUDE_ESFUERZO_${sufijo}`] || predeterminado) as Esfuerzo;
-  return { modelo, esfuerzo: ['low', 'medium', 'high', 'xhigh', 'max'].includes(e) ? e : predeterminado };
+  const d = PREDETERMINADOS[proposito];
+  const modelo = process.env[`CLAUDE_MODELO_${d.variable}`]?.trim() || d.modelo;
+  const e = (process.env[`CLAUDE_ESFUERZO_${d.variable}`]?.trim() || d.esfuerzo) as Esfuerzo;
+  return { modelo, esfuerzo: ['low', 'medium', 'high', 'xhigh', 'max'].includes(e) ? e : d.esfuerzo };
 }
+
+/** Haiku no tiene respaldo del servidor ante rechazos: la llamada se repite con otro modelo */
+const tieneRespaldoServidor = (modelo: string) => !modelo.startsWith('claude-haiku');
 
 let cliente: Anthropic | undefined;
 function obtenerCliente(): Anthropic {
@@ -59,17 +71,30 @@ export interface ResultadoLlamada<T> {
  * Llamada con salida estructurada (JSON validado contra el esquema por la API).
  * - Prompt de sistema con caché (estable entre llamadas del mismo propósito).
  * - Streaming para documentos grandes, sin riesgo de tiempo de espera HTTP.
- * - Respaldo del servidor ante rechazos por política, si CLAUDE_FALLBACKS=default.
+ * - Respaldo ante rechazos por política: el del servidor (CLAUDE_FALLBACKS=default) o, con Haiku,
+ *   una segunda llamada con CLAUDE_MODELO_RESPALDO.
  */
-export async function llamarEstructurado<T>(opciones: {
+export async function llamarEstructurado<T>(opciones: OpcionesLlamada): Promise<ResultadoLlamada<T>> {
+  const { modelo, esfuerzo } = configuracionModelo(opciones.proposito);
+  try {
+    return await llamar<T>(opciones, modelo, esfuerzo);
+  } catch (e) {
+    const respaldo = process.env.CLAUDE_MODELO_RESPALDO?.trim() || RESPALDO;
+    if (!(e instanceof ErrorIA && e.codigo === 'RECHAZO') || tieneRespaldoServidor(modelo) || respaldo === modelo) throw e;
+    return llamar<T>(opciones, respaldo, esfuerzo);
+  }
+}
+
+interface OpcionesLlamada {
   proposito: Proposito;
   sistema: string;
   contenido: Anthropic.Beta.BetaContentBlockParam[];
   esquema: Record<string, unknown>;
   maxTokens?: number;
-}): Promise<ResultadoLlamada<T>> {
-  const { modelo, esfuerzo } = configuracionModelo(opciones.proposito);
-  const usarRespaldo = (process.env.CLAUDE_FALLBACKS ?? 'default') === 'default';
+}
+
+async function llamar<T>(opciones: OpcionesLlamada, modelo: string, esfuerzo: Esfuerzo): Promise<ResultadoLlamada<T>> {
+  const usarRespaldo = tieneRespaldoServidor(modelo) && (process.env.CLAUDE_FALLBACKS ?? 'default') === 'default';
   const inicio = Date.now();
   let mensaje: Anthropic.Beta.BetaMessage;
   try {

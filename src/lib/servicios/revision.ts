@@ -16,7 +16,7 @@ import { prepararContexto } from '../escritura/contexto';
 import { ErrorDatos } from '../escritura/personas';
 import { generarBorrador } from '../escritura/generar';
 import { obtenerConfig } from '../configuracion';
-import { llamarEstructurado, ErrorIA } from '../ia/cliente';
+import { llamarEstructurado, configuracionModelo, ErrorIA } from '../ia/cliente';
 import { SISTEMA_REVISION, ESQUEMA_REVISION } from '../ia/instrucciones';
 import type { ResultadoExtraccion, TipoDocumental } from '../ia/documentos';
 import { obtenerExpediente, datosDe, actosDe, ErrorNegocio } from './expedientes';
@@ -118,7 +118,7 @@ export async function ejecutarRevision(s: SesionActiva, expedienteId: string, co
     return { hallazgos: hallazgos.length, nuevasReglas };
   }
   const instr = await instruccionesAprobadas('REVISION', actos);
-  const analisis = await db.analisisIA.create({ data: { expedienteId, proposito: 'REVISION', modelo: process.env.CLAUDE_MODELO_REVISION || 'claude-opus-5-5', estado: 'EN_CURSO', versionInstruccion: instr.version } });
+  const analisis = await db.analisisIA.create({ data: { expedienteId, proposito: 'REVISION', modelo: configuracionModelo('REVISION').modelo, estado: 'EN_CURSO', versionInstruccion: instr.version } });
   const tareaIA = async () => {
     let nuevasIA = 0;
     let errorIA: string | undefined;

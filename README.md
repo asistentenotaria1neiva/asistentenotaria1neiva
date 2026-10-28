@@ -68,8 +68,9 @@ La primera vez, la aplicación abre **/instalacion** para crear el administrador
 | `ANTHROPIC_API_KEY` | Clave de la API de Claude. **Solo en el servidor** |
 | `ANTHROPIC_WORKSPACE_ID` | Opcional. ID del workspace (`wrkspc_...`) cuando la clave no está asignada a uno |
 | `ANTHROPIC_ADMIN_KEY` | Opcional. Clave de administrador (`sk-ant-admin...`) para mostrar el costo real y los créditos restantes en Estadísticas |
-| `CLAUDE_MODELO_EXTRACCION`, `CLAUDE_MODELO_REVISION` | Modelo por tarea (predeterminado `claude-opus-5-5`) |
-| `CLAUDE_ESFUERZO_EXTRACCION`, `CLAUDE_ESFUERZO_REVISION` | `low` · `medium` · `high` · `xhigh` · `max` (predeterminado: `medium` para leer documentos, más rápido; `high` para revisar el expediente) |
+| `CLAUDE_MODELO_DOCUMENTOS`, `CLAUDE_MODELO_EXPEDIENTE`, `CLAUDE_MODELO_PLANTILLAS` | Modelo por tarea (predeterminados: `claude-haiku-5-5` para leer documentos; `claude-sonnet-5-5` para el expediente y las plantillas) |
+| `CLAUDE_MODELO_RESPALDO` | Modelo que repite la lectura si Haiku declina el documento (predeterminado `claude-sonnet-5-5`) |
+| `CLAUDE_ESFUERZO_DOCUMENTOS`, `CLAUDE_ESFUERZO_EXPEDIENTE`, `CLAUDE_ESFUERZO_PLANTILLAS` | `low` · `medium` · `high` · `xhigh` · `max` (predeterminados: `medium`, `high`, `medium`) |
 | `CLAUDE_FALLBACKS` | `default` activa el respaldo del servidor de Anthropic ante rechazos por política; vacío lo desactiva |
 | `IPS_OFICINA` | IP públicas de la oficina (valor inicial; luego se administra en el panel) |
 | `CONFIAR_EN_PROXY` | `true` en Vercel (toma la IP real de `X-Real-IP`) |

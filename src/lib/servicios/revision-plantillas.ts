@@ -266,7 +266,8 @@ function solicitud(p: Pick<Plantilla, 'version' | 'nombreArchivo' | 'notas' | 'v
     '',
     `<plantilla_en_revision>\n${v.texto.slice(0, LIMITE_TEXTO)}\n</plantilla_en_revision>`,
     v.textoAprobada && `<plantilla_aprobada_vigente version="${a.comparadaCon}">\n${v.textoAprobada.slice(0, LIMITE_TEXTO)}\n</plantilla_aprobada_vigente>`,
-    v.textoEjemplo && `<borrador_de_ejemplo datos="ficticios">\n${v.textoEjemplo.slice(0, LIMITE_TEXTO)}\n</borrador_de_ejemplo>`,
+    // Con formulario automático el borrador es la misma plantilla con cada variable reemplazada: no aporta y duplica el costo
+    v.textoEjemplo && (p.tipo.esBloque || TIPOS_CON_FORMULARIO_PROPIO.has(p.tipo.id)) && `<borrador_de_ejemplo datos="ficticios">\n${v.textoEjemplo.slice(0, LIMITE_TEXTO)}\n</borrador_de_ejemplo>`,
   ].filter((x): x is string => typeof x === 'string').join('\n');
 }
 
@@ -312,7 +313,7 @@ export async function revisarPlantilla(id: string, s: SesionActiva, conIA = true
   if (conIA) {
     try {
       const r = await llamarEstructurado<Omit<NonNullable<RevisionPlantilla['ia']>, 'modelo' | 'duracionMs'>>({
-        proposito: 'REVISION',
+        proposito: 'PLANTILLA',
         sistema: SISTEMA_REVISION_PLANTILLA,
         contenido: [{ type: 'text', text: solicitud(p, v) }],
         esquema: ESQUEMA_REVISION_PLANTILLA as unknown as Record<string, unknown>,

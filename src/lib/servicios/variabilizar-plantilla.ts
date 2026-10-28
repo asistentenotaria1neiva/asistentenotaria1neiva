@@ -118,7 +118,7 @@ export async function variabilizarPlantilla(tipo: { id: string; nombre: string }
   const otros = (opciones.otros ?? []).map((o) => textoDeParrafos(vistaPreviaDocx(o)));
   const limiteOtro = Math.floor(LIMITE_OTROS / Math.max(otros.length, 1));
   const r = await llamarEstructurado<RespuestaIA>({
-    proposito: 'REVISION',
+    proposito: 'PLANTILLA',
     sistema: SISTEMA_VARIABILIZAR_PLANTILLA,
     contenido: [{ type: 'text', text: [
       `TIPO: ${tipo.nombre} (${tipo.id})`,

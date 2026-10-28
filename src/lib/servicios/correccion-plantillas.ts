@@ -107,7 +107,7 @@ export async function proponerCorreccionesPlantilla(s: SesionActiva, id: string,
       const texto = textoDeParrafos(vistaPreviaDocx(archivo));
       const lista = elegidos.map((i) => ({ hallazgo: i, ...revision.ia!.hallazgos[i] }));
       const r = await llamarEstructurado<{ correcciones: { hallazgo: number; original: string; corregido: string; explicacion: string }[]; sin_correccion: { hallazgo: number; motivo: string }[] }>({
-        proposito: 'REVISION',
+        proposito: 'PLANTILLA',
         sistema: SISTEMA_CORRECCION_PLANTILLA,
         contenido: [{ type: 'text', text: [
           `TIPO: ${p.tipo.nombre} (${p.tipoId}) · versión ${p.version}`,

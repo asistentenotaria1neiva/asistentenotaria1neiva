@@ -15,7 +15,7 @@ import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { resolverRuta, validarValor, catalogo } from '../escritura/rutas';
 import { leerRuta, escribirRuta } from '../escritura/validar-formulario';
-import { llamarEstructurado, ErrorIA } from '../ia/cliente';
+import { llamarEstructurado, configuracionModelo, ErrorIA } from '../ia/cliente';
 import { SISTEMA_CORRECCION, ESQUEMA_CORRECCION } from '../ia/instrucciones';
 import { obtenerExpediente, puedeEditar, guardarPaso, datosDe, actosDe, ErrorNegocio, type ActualizacionPaso } from './expedientes';
 import { evaluarExpediente, ejecutarRevision, resolverObservacion } from './revision';
@@ -71,7 +71,7 @@ export async function proponerCorrecciones(s: SesionActiva, expedienteId: string
   if (!observaciones.length) throw new ErrorNegocio('Seleccione al menos una observación abierta.');
   const { datos, actos, documentos, borradorTexto } = await evaluarExpediente(expedienteId, s);
   const instr = await instruccionesAprobadas('REVISION', actos);
-  const analisis = await db.analisisIA.create({ data: { expedienteId, proposito: 'CORRECCION', modelo: process.env.CLAUDE_MODELO_REVISION || 'claude-opus-5-5', estado: 'EN_CURSO', versionInstruccion: instr.version } });
+  const analisis = await db.analisisIA.create({ data: { expedienteId, proposito: 'CORRECCION', modelo: configuracionModelo('REVISION').modelo, estado: 'EN_CURSO', versionInstruccion: instr.version } });
   const tarea = async () => {
     try {
       const entrada = {

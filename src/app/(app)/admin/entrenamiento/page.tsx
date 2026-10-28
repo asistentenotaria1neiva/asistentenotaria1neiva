@@ -18,10 +18,11 @@ export default async function Entrenamiento() {
   const nombre = (id: string | null) => (id ? tipos.find((t) => t.id === id)?.nombre ?? id : 'Todas las escrituras');
   const ext = configuracionModelo('EXTRACCION');
   const rev = configuracionModelo('REVISION');
+  const pla = configuracionModelo('PLANTILLA');
   return (
     <>
       <h1>Entrenamiento de la IA</h1>
-      <div className="aviso info">El modelo de Anthropic <strong>no se reentrena</strong>. El ajuste se hace aquí: instrucciones adicionales por tipo de escritura (versionadas y aprobadas), reglas, formularios y plantillas. Modelos en uso: extracción <code>{ext.modelo}</code> (esfuerzo {ext.esfuerzo}), revisión <code>{rev.modelo}</code> (esfuerzo {rev.esfuerzo}) — configurables por variables de entorno.</div>
+      <div className="aviso info">El modelo de Anthropic <strong>no se reentrena</strong>. El ajuste se hace aquí: instrucciones adicionales por tipo de escritura (versionadas y aprobadas), reglas, formularios y plantillas. Modelos en uso: documentos <code>{ext.modelo}</code> (esfuerzo {ext.esfuerzo}), expediente <code>{rev.modelo}</code> (esfuerzo {rev.esfuerzo}), plantillas <code>{pla.modelo}</code> (esfuerzo {pla.esfuerzo}) — configurables por variables de entorno.</div>
 
       <section className="tarjeta">
         <h2>Patrones de error (últimos 90 días)</h2>

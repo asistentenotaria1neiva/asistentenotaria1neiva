@@ -40,14 +40,16 @@ describe('documento para la IA', () => {
     expect(borrados).toEqual(['file_prueba']);
   });
 
-  it('lee documentos con esfuerzo medium y revisa con high, salvo que la configuración diga otra cosa', async () => {
+  it('usa el modelo económico de cada tarea, salvo que la configuración diga otra cosa', async () => {
     const { configuracionModelo } = await import('@/lib/ia/cliente');
-    delete process.env.CLAUDE_ESFUERZO_EXTRACCION;
-    delete process.env.CLAUDE_ESFUERZO_REVISION;
-    expect(configuracionModelo('EXTRACCION').esfuerzo).toBe('medium');
-    expect(configuracionModelo('REVISION').esfuerzo).toBe('high');
-    process.env.CLAUDE_ESFUERZO_EXTRACCION = 'high';
-    expect(configuracionModelo('EXTRACCION').esfuerzo).toBe('high');
-    delete process.env.CLAUDE_ESFUERZO_EXTRACCION;
+    for (const v of ['DOCUMENTOS', 'EXPEDIENTE', 'PLANTILLAS']) { delete process.env[`CLAUDE_MODELO_${v}`]; delete process.env[`CLAUDE_ESFUERZO_${v}`]; }
+    expect(configuracionModelo('EXTRACCION')).toEqual({ modelo: 'claude-haiku-5-5', esfuerzo: 'medium' });
+    expect(configuracionModelo('REVISION')).toEqual({ modelo: 'claude-sonnet-5-5', esfuerzo: 'high' });
+    expect(configuracionModelo('PLANTILLA')).toEqual({ modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' });
+    process.env.CLAUDE_ESFUERZO_DOCUMENTOS = 'high';
+    process.env.CLAUDE_MODELO_DOCUMENTOS = 'claude-sonnet-5-5';
+    expect(configuracionModelo('EXTRACCION')).toEqual({ modelo: 'claude-sonnet-5-5', esfuerzo: 'high' });
+    delete process.env.CLAUDE_ESFUERZO_DOCUMENTOS;
+    delete process.env.CLAUDE_MODELO_DOCUMENTOS;
   });
 });
