@@ -11,6 +11,7 @@ import Docxtemplater from 'docxtemplater';
 import expressionParser from 'docxtemplater/expressions.js';
 import { filtrosConcordancia } from '../texto/concordancia';
 import type { ContextoEscritura } from './contexto';
+import { aplicarFormatoNotarial, aplicarMargenes, anchoTextoDe } from './formato-notarial';
 
 const ORDINALES = ['PRIMERO', 'SEGUNDO', 'TERCERO', 'CUARTO', 'QUINTO', 'SEXTO', 'SEPTIMO', 'OCTAVO', 'NOVENO', 'DECIMO',
   'DECIMO PRIMERO', 'DECIMO SEGUNDO', 'DECIMO TERCERO', 'DECIMO CUARTO', 'DECIMO QUINTO', 'DECIMO SEXTO', 'DECIMO SEPTIMO',
@@ -54,10 +55,23 @@ function renderizarBloque(plantilla: Buffer, contexto: Record<string, unknown>, 
   return { cuerpo: xml.slice(inicio, finSeccion), zip: doc.getZip() };
 }
 
+/**
+ * Formato de impresión de la notaría sobre el documento completo (márgenes, guiones escritos,
+ * negrillas, carátula): src/lib/escritura/formato-notarial.ts. El texto para las reglas y la IA
+ * se toma antes, sin los guiones.
+ */
+function formatoImpresion(xml: string): string {
+  const conMargenes = aplicarMargenes(xml);
+  const inicio = conMargenes.indexOf('<w:body>') + '<w:body>'.length;
+  const finSeccion = conMargenes.lastIndexOf('<w:sectPr');
+  return conMargenes.slice(0, inicio) + aplicarFormatoNotarial(conMargenes.slice(inicio, finSeccion), anchoTextoDe(conMargenes)) + conMargenes.slice(finSeccion);
+}
+
 /** Renderiza una sola plantilla con un contexto (prueba con datos de ejemplo en el panel de plantillas) */
 export function renderizarPlantilla(plantilla: Buffer, contexto: Record<string, unknown>): { docx: Buffer; faltantes: string[] } {
   const faltantes: string[] = [];
   const { zip } = renderizarBloque(plantilla, contexto, faltantes);
+  zip.file('word/document.xml', formatoImpresion(zip.file('word/document.xml')!.asText()));
   return { docx: zip.generate({ type: 'nodebuffer' }) as Buffer, faltantes };
 }
 
@@ -88,7 +102,7 @@ export async function generarBorrador(ctx: ContextoEscritura, cargar: CargadorPl
   const xml = zip.file('word/document.xml')!.asText();
   const inicio = xml.indexOf('<w:body>') + '<w:body>'.length;
   const finSeccion = xml.lastIndexOf('<w:sectPr');
-  const unido = xml.slice(0, inicio) + cuerpos.join('') + xml.slice(finSeccion);
+  const unido = formatoImpresion(xml.slice(0, inicio) + cuerpos.join('') + xml.slice(finSeccion));
   zip.file('word/document.xml', unido);
   const docx = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
   return { docx, texto: textoPlano(cuerpos.join('')), faltantes };
