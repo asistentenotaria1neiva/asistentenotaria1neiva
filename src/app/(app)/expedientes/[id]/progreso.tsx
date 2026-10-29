@@ -6,7 +6,9 @@ import { fecha } from '../../componentes';
 export function ProgresoAnalisis({ tarea }: { tarea: NonNullable<Awaited<ReturnType<typeof tareaEnCurso>>> }) {
   const detalle = tarea.fase === 'EXPEDIENTE'
     ? 'Documentos listos. La IA está revisando el expediente y preparando las preguntas…'
-    : tarea.analizando.length
+    : tarea.fase === 'BUSQUEDA'
+      ? 'Documentos leídos. La IA está buscando en ellos los datos que aún faltan…'
+      : tarea.analizando.length
       ? <>Analizando: <strong>{tarea.analizando.join(', ')}</strong></>
       : tarea.total ? 'Preparando el siguiente documento…' : 'Revisando los documentos…';
   return (

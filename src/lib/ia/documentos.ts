@@ -117,6 +117,9 @@ const TIPO_ANOTACION = {
     'ADJUDICACION', 'DEMANDA', 'LIMITACION_OTRA', 'OTRA'],
 };
 
+/** Al quitar los guiones la IA cuenta mal los ceros: se copia tal cual y el sistema deja los dígitos */
+const CATASTRAL = 'Cédula catastral o número predial, copiado tal como aparece, con sus guiones o puntos (p. ej. «41-020-00-00-00-00-0000-4428-0-00-00-0000»)';
+
 const ESQUEMAS: Record<TipoDocumental, Esquema> = {
   // Un PDF puede traer varias cédulas escaneadas: una entrada por persona
   CEDULA: objeto({
@@ -166,12 +169,12 @@ const ESQUEMAS: Record<TipoDocumental, Esquema> = {
     matricula: dato('string', 'Número de matrícula inmobiliaria, formato 200-12345'),
     fecha_impresion: dato('string', 'Fecha y hora de expedición/impresión del certificado, AAAA-MM-DD'),
     circulo_registral: dato('string', 'Oficina de registro'),
-    cedula_catastral: dato('string', 'Cédula catastral o número predial, solo dígitos'),
+    cedula_catastral: dato('string', CATASTRAL),
     direccion: dato('string', 'Dirección del inmueble'),
     municipio: dato('string', ''),
     tipo_predio: dato('string', 'URBANO o RURAL'),
     area: dato('string', 'Área registrada si aparece, tal como está escrita'),
-    area_terreno: dato('number', 'Área del terreno en metros cuadrados, si aparece'),
+    area_terreno: dato('number', 'Área del terreno en metros cuadrados, si aparece. Si viene por partes (hectáreas, metros cuadrados y centímetros cuadrados), conviértela a metros cuadrados: «0 HA, 115 M2, 2800 CM2» = 115.28'),
     area_construida: dato('number', 'Área construida en metros cuadrados, si aparece'),
     linderos: dato('string', 'Cabida y linderos del inmueble, literal y completos (sección «DESCRIPCIÓN: CABIDA Y LINDEROS» o la complementación); vacío si el certificado remite a una escritura sin transcribirlos'),
     propietarios: lista(objeto({
@@ -199,9 +202,9 @@ const ESQUEMAS: Record<TipoDocumental, Esquema> = {
   }),
   PAZ_Y_SALVO: objeto({
     tipo: dato('string', 'PREDIAL, VALORIZACION o AMBOS'),
-    entidad: dato('string', 'Entidad que lo expide'),
+    entidad: dato('string', 'Dependencia que lo expide, como se cita en una escritura: «la Secretaría de Hacienda de Algeciras (H)»'),
     numero: dato('string', 'Número del paz y salvo si aparece'),
-    cedula_catastral: dato('string', 'Número predial, solo dígitos'),
+    cedula_catastral: dato('string', CATASTRAL),
     propietario: dato('string', ''),
     direccion: dato('string', ''),
     avaluo: dato('integer', 'Avalúo catastral en pesos, sin puntos'),
@@ -218,13 +221,13 @@ const ESQUEMAS: Record<TipoDocumental, Esquema> = {
     // Una escritura puede describir varios inmuebles (p. ej. un loteo o casa y parqueadero): cada uno con sus datos
     inmuebles: lista(objeto({
       matricula: dato('string', 'Matrícula inmobiliaria, formato 200-12345'),
-      cedula_catastral: dato('string', 'Cédula catastral o número predial, solo dígitos'),
+      cedula_catastral: dato('string', CATASTRAL),
       nombre: dato('string', 'Cómo lo nombra la escritura: «LOTE 5 MANZANA B», «APARTAMENTO 301», etc.'),
       direccion: dato('string', ''),
       area_terreno: dato('number', 'Metros cuadrados'),
       area_construida: dato('number', 'Metros cuadrados'),
       linderos: dato('string', 'Linderos completos de ESTE inmueble, literal'),
-    }), 'Una entrada por CADA inmueble que la escritura describe con sus linderos, aunque sean varios'),
+    }), 'Una entrada por CADA inmueble que la escritura describe con sus linderos, aunque sean muchos (un loteo de 20 lotes son 20 entradas, cada una con sus linderos completos)'),
     afecta_vivienda_familiar: dato('boolean', '¿El inmueble quedó afectado a vivienda familiar?'),
     patrimonio_familia: dato('string', 'Si se constituyó patrimonio de familia, cita textual de beneficiarios'),
     condicion_resolutoria: dato('string', 'Cláusula de condición resolutoria o prohibición de enajenar, si existe'),

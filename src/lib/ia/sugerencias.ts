@@ -42,6 +42,16 @@ const may = (v: unknown) => String(v).toUpperCase().replace(/\s+/g, ' ').trim();
 const fecha10 = (v: unknown) => String(v).slice(0, 10);
 const genero = (v: unknown) => (/^F/i.test(String(v)) ? 'F' : /^M/i.test(String(v)) ? 'M' : null);
 
+/**
+ * Cédula catastral: si la IA contó mal los dígitos al quitar los guiones (una longitud que no
+ * existe), se toman del fragmento literal, que la trae con sus guiones.
+ */
+export function catastral(d: DatoConFuente | undefined): DatoConFuente | undefined {
+  if (!d?.valor || validarCedulaCatastral(String(d.valor)).ok) return d;
+  const delFragmento = (d.fragmento?.match(/\d[\d .-]{13,}\d/g) ?? []).map(digitos).find((x) => validarCedulaCatastral(x).ok);
+  return delFragmento ? { ...d, valor: delFragmento } : d;
+}
+
 function edad(fechaNac: string, hoy: Date): number {
   const [a, m, d] = fechaNac.split('-').map(Number);
   let e = hoy.getFullYear() - a;
@@ -92,7 +102,7 @@ export function sugerenciasDesdeHechos(tipo: TipoDocumental, r: ResultadoExtracc
       if (!mat) break;
       const i = `inmueble:${mat}`;
       s.push(crear(`${i}.matricula`, D('matricula'), () => mat, (v) => validarMatricula(v)));
-      s.push(crear(`${i}.cedula_catastral`, D('cedula_catastral'), digitos, validarCedulaCatastral));
+      s.push(crear(`${i}.cedula_catastral`, catastral(D('cedula_catastral')), digitos, validarCedulaCatastral));
       s.push(crear(`${i}.direccion`, D('direccion'), may));
       s.push(crear(`${i}.municipio`, D('municipio'), (v) => String(v).trim()));
       s.push(crear(`${i}.fecha_certificado_tradicion`, D('fecha_impresion'), fecha10, (v) => validarFecha(v)));
@@ -116,10 +126,13 @@ export function sugerenciasDesdeHechos(tipo: TipoDocumental, r: ResultadoExtracc
       break;
     }
     case 'PAZ_Y_SALVO': {
-      const cat = digitos(D('cedula_catastral')?.valor);
+      const dc = catastral(D('cedula_catastral'));
+      const cat = digitos(dc?.valor);
       if (!cat) break;
       const c = `catastral:${cat}`;
-      s.push(crear(`${c}.cedula_catastral_paz_salvo`, D('cedula_catastral'), digitos, validarCedulaCatastral));
+      s.push(crear(`${c}.cedula_catastral_paz_salvo`, dc, digitos, validarCedulaCatastral));
+      // Vale también como cédula del inmueble si el certificado no la trae (el certificado manda)
+      s.push(crear(`${c}.cedula_catastral`, dc, digitos, validarCedulaCatastral));
       s.push(crear(`${c}.paz_salvo.vigencia_hasta`, D('vigencia_hasta'), fecha10, (v) => validarFecha(v)));
       s.push(crear(`${c}.paz_salvo.avaluo`, D('avaluo'), (v) => Number(digitos(v))));
       s.push(crear(`${c}.paz_salvo.entidad`, D('entidad'), (v) => String(v).trim()));
@@ -131,7 +144,7 @@ export function sugerenciasDesdeHechos(tipo: TipoDocumental, r: ResultadoExtracc
       const lista = Array.isArray(r.datos.inmuebles) ? (r.datos.inmuebles as Record<string, DatoConFuente>[]) : [r.datos as Record<string, DatoConFuente>];
       for (const x of lista) {
         const mat = x.matricula?.valor ? String(x.matricula.valor).toUpperCase().replace(/\s/g, '') : '';
-        const cat = digitos(x.cedula_catastral?.valor);
+        const cat = digitos(catastral(x.cedula_catastral)?.valor);
         const i = mat ? `inmueble:${mat}` : cat ? `catastral:${cat}` : '';
         if (!i) continue;
         s.push(crear(`${i}.linderos`, x.linderos, (v) => String(v).trim()));

@@ -19,15 +19,16 @@ import { db } from '../db';
 import { huellaToken } from '../seguridad/cifrado';
 import type { SesionActiva } from '../sesion-tipos';
 import { ErrorIA, configuracionModelo } from '../ia/cliente';
-import { obtenerExpediente, puedeEditar, ErrorNegocio } from './expedientes';
+import { obtenerExpediente, puedeEditar, aplicarSugerenciasConfiables, retirarInmueblesSobrantes, ErrorNegocio } from './expedientes';
 import { analizarDocumento } from './documentos';
+import { buscarFaltantesEnDocumentos } from './busqueda';
 import { prepararPreguntas } from './asistente';
 import { notificar } from './notificaciones';
 
 export type ClaseTarea = 'ASISTENTE' | 'DOCUMENTOS';
 
 export interface ProgresoTarea {
-  fase: 'DOCUMENTOS' | 'EXPEDIENTE';
+  fase: 'DOCUMENTOS' | 'BUSQUEDA' | 'EXPEDIENTE';
   /** Documentos por analizar en esta tarea (crece si se cargan más mientras tanto) */
   total: number;
   hechos: number;
@@ -117,8 +118,8 @@ export async function tareaEnCurso(expedienteId: string) {
   const docs = p.total ? p.hechos / p.total : 1;
   return {
     id: a.id, clase: a.proposito as ClaseTarea, iniciada: a.creadoEn, fase: p.fase, analizando: p.analizando.map((x) => x.nombre), hechos: p.hechos, total: p.total,
-    // En el asistente los documentos son el 85 % y la preparación de las preguntas el resto
-    porcentaje: Math.round(a.proposito === 'ASISTENTE' ? (p.fase === 'EXPEDIENTE' ? 90 : docs * 85) : docs * 100),
+    // En el asistente los documentos son el 80 %, la búsqueda de lo que falta y las preguntas el resto
+    porcentaje: Math.round(a.proposito === 'ASISTENTE' ? (p.fase === 'EXPEDIENTE' ? 92 : p.fase === 'BUSQUEDA' ? 85 : docs * 80) : docs * 100),
   };
 }
 
@@ -216,9 +217,9 @@ export async function ejecutarEtapa(id: string, turno: number): Promise<void> {
     if (p.fase === 'DOCUMENTOS') {
       if (await analizarLote(id, a.expedienteId, p, p.sesion)) return encadenar(id, p);
       if (clase === 'ASISTENTE') {
-        p.fase = 'EXPEDIENTE';
+        p.fase = 'BUSQUEDA';
         await guardar(id, p);
-        return encadenar(id, p); // la IA del expediente también puede tardar: etapa propia
+        return encadenar(id, p); // cada llamada a la IA puede tardar: etapa propia
       }
       const r = await db.analisisIA.updateMany({ where: { id, estado: 'EN_CURSO' }, data: { estado: 'COMPLETADO', progreso: p as unknown as Prisma.InputJsonValue } });
       if (!r.count) return;
@@ -229,6 +230,21 @@ export async function ejecutarEtapa(id: string, turno: number): Promise<void> {
         enlace: `/expedientes/${a.expedienteId}/documentos`,
       });
       return;
+    }
+
+    if (p.fase === 'BUSQUEDA') {
+      // Antes de preguntar, lo que quedó vacío se busca en los documentos; si falla, se pregunta como antes
+      try {
+        await aplicarSugerenciasConfiables(p.sesion, a.expedienteId);
+        await retirarInmueblesSobrantes(p.sesion, a.expedienteId);
+        await buscarFaltantesEnDocumentos(p.sesion, a.expedienteId);
+      } catch (err) {
+        if (!(err instanceof ErrorIA) && !(err instanceof ErrorNegocio)) console.error('[tareas] búsqueda en los documentos', err);
+        p.errores.push(`Búsqueda de los datos que faltan: ${mensajeDe(err)}`);
+      }
+      p.fase = 'EXPEDIENTE';
+      await guardar(id, p);
+      return encadenar(id, p);
     }
 
     const r = await prepararPreguntas(p.sesion, a.expedienteId, id, p.errores);

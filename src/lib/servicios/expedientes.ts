@@ -190,7 +190,9 @@ export function resolverDestino(datos: DatosExpediente, campo: string): { ruta: 
     return { ruta: `inmuebles.${i}.${subcampo}`, base: 'inmueble', indice: i, subcampo };
   }
   if (tipo === 'catastral') {
-    const i = datos.inmuebles.findIndex((x) => [x.cedula_catastral, x.cedula_catastral_paz_salvo].some((c) => mismaCatastral(c, clave)));
+    let i = datos.inmuebles.findIndex((x) => [x.cedula_catastral, x.cedula_catastral_paz_salvo].some((c) => mismaCatastral(c, clave)));
+    // Un solo inmueble y sin cédula catastral (el certificado dice «sin información»): el paz y salvo es el suyo
+    if (i < 0 && datos.inmuebles.length === 1 && !datos.inmuebles[0].cedula_catastral && !datos.inmuebles[0].cedula_catastral_paz_salvo) i = 0;
     return { ruta: `inmuebles.${i}.${subcampo}`, base: 'inmueble', indice: i, subcampo };
   }
   return { ruta: `actos.${clave}.${subcampo}`, base: 'acto', indice: 0, subcampo };
@@ -222,7 +224,8 @@ function aplicarEnDatos(datos: DatosExpediente, campo: string, valor: unknown, c
     if (!crear || (campo.startsWith('catastral:') && datos.inmuebles.length)) return false;
     const clave = campo.split(':')[1].split('.')[0];
     if (destino.base === 'persona') datos.personas.push({ id: crypto.randomUUID(), tipo_persona: 'NATURAL', nombre: '', tipo_documento: 'CC', numero_documento: clave, domicilio: 'la ciudad de Neiva (H)' } as Persona);
-    else if (destino.base === 'inmueble') datos.inmuebles.push({ id: crypto.randomUUID(), tipo_inmueble: 'LOTE', direccion: '', municipio: 'Neiva', departamento: 'Huila', linderos: '', matricula: campo.startsWith('inmueble:') ? clave : '', orip: 'NEIVA - HUILA', cedula_catastral: campo.startsWith('catastral:') ? clave : '', tradicion: { modo: 'COMPRA', tradente: '', escritura_numero: '', escritura_fecha: '', notaria: '' }, fecha_certificado_tradicion: '' } as Inmueble);
+    // Sin municipio predeterminado: lo trae el certificado (uno de Algeciras chocaría con «Neiva» y se preguntaría)
+    else if (destino.base === 'inmueble') datos.inmuebles.push({ id: crypto.randomUUID(), tipo_inmueble: 'LOTE', direccion: '', municipio: '', departamento: 'Huila', linderos: '', matricula: campo.startsWith('inmueble:') ? clave : '', orip: 'NEIVA - HUILA', cedula_catastral: campo.startsWith('catastral:') ? clave : '', tradicion: { modo: 'COMPRA', tradente: '', escritura_numero: '', escritura_fecha: '', notaria: '' }, fecha_certificado_tradicion: '' } as Inmueble);
     destino = resolverDestino(datos, campo)!;
   }
   escribirRuta(datos as unknown as Record<string, unknown>, destino.ruta, valor);
@@ -249,35 +252,86 @@ export async function aplicarSugerenciasConfiables(s: SesionActiva, expedienteId
   for (const d of pendientes) porCampo.set(d.campo, [...(porCampo.get(d.campo) ?? []), d]);
   const aceptados: { d: (typeof pendientes)[number]; valor: unknown }[] = [];
   const aceptar = (grupo: typeof pendientes, valor: unknown) => aceptados.push(...grupo.map((d) => ({ d, valor })));
+  const descartados: typeof pendientes = [];
   const dudosos: { campo: string; valores: { valor: unknown; documento: string; confianza: string }[]; motivo: string }[] = [];
-  for (const [campo, todos] of [...porCampo].sort(([a], [b]) => compararSugerencias(a, b))) {
+  // Vigencia de cada paz y salvo: de varios del mismo predio vale el más reciente
+  const vigencia = new Map(pendientes.filter((d) => d.documentoId && d.campo.endsWith('.paz_salvo.vigencia_hasta')).map((d) => [d.documentoId!, String(d.valor)]));
+  const procesar = (campo: string, recibidos: typeof pendientes) => {
     const subcampo = campo.split('.').slice(1).join('.');
     const destino = resolverDestino(datos, campo);
+    let todos = recibidos;
+    if (/^(paz_salvo\.|cedula_catastral)/.test(subcampo) && campo.startsWith('catastral:')) {
+      const ultima = todos.map((d) => vigencia.get(d.documentoId ?? '') ?? '').sort().at(-1);
+      if (ultima) {
+        descartados.push(...todos.filter((d) => (vigencia.get(d.documentoId ?? '') ?? '') !== ultima));
+        todos = todos.filter((d) => (vigencia.get(d.documentoId ?? '') ?? '') === ultima);
+      }
+    }
     // Lo de una escritura anterior solo va a un inmueble que ya tiene el expediente (no se crean inmuebles por ella)
     const crear = todos.some((d) => d.documento?.tipoDocumental !== 'ESCRITURA_ANTERIOR');
-    if (destino && destino.indice < 0 && destino.base === 'inmueble' && !crear) continue;
+    if (destino && destino.indice < 0 && destino.base === 'inmueble' && !crear) return;
     // Si el documento que manda para este dato lo trae con buena confianza, vale ese
     const manda = documentoQueManda(campo);
     const delQueManda = todos.filter((d) => d.documento?.tipoDocumental === manda && !d.revisionManual);
     const grupo = delQueManda.length && todos.some((d) => d.documento?.tipoDocumental !== manda) ? delQueManda : todos;
     const valores = grupo.map((d) => ({ valor: d.valor, documento: d.documento?.nombreOriginal ?? 'documento', confianza: d.confianza }));
-    if (grupo.some((d) => d.revisionManual)) { dudosos.push({ campo, valores, motivo: 'confianza baja o formato dudoso' }); continue; }
-    if (grupo.some((d) => !mismoValor(subcampo, d.valor, grupo[0].valor))) { dudosos.push({ campo, valores, motivo: 'los documentos no coinciden' }); continue; }
+    if (grupo.some((d) => d.revisionManual)) { dudosos.push({ campo, valores, motivo: 'lectura dudosa o dato por confirmar' }); return; }
+    if (grupo.some((d) => !mismoValor(subcampo, d.valor, grupo[0].valor))) { dudosos.push({ campo, valores, motivo: 'los documentos no coinciden' }); return; }
     const actual = destino && destino.indice >= 0 ? leerRuta(datos, destino.ruta) : undefined;
+    // La cédula del paz y salvo solo completa la del inmueble si falta: la del certificado manda y suelen escribirse distinto
+    if (subcampo === 'cedula_catastral' && campo.startsWith('catastral:') && actual !== undefined && actual !== null && actual !== '') { descartados.push(...todos); return; }
     // Lo digitado que dice lo mismo (con o sin puntos, en otro orden…) se deja como está
-    if (actual !== undefined && actual !== null && actual !== '' && mismoValor(subcampo, actual, grupo[0].valor)) { aceptar(todos, actual); continue; }
-    if (actual !== undefined && actual !== null && actual !== '') { dudosos.push({ campo, valores: [...valores, { valor: actual, documento: 'dato ya digitado', confianza: 'ALTA' }], motivo: 'el documento no coincide con lo digitado' }); continue; }
+    if (actual !== undefined && actual !== null && actual !== '' && mismoValor(subcampo, actual, grupo[0].valor)) { aceptar(todos, actual); return; }
+    if (actual !== undefined && actual !== null && actual !== '') { dudosos.push({ campo, valores: [...valores, { valor: actual, documento: 'dato ya digitado', confianza: 'ALTA' }], motivo: 'el documento no coincide con lo digitado' }); return; }
     if (aplicarEnDatos(datos, campo, grupo[0].valor, crear)) aceptar(todos, grupo[0].valor);
+  };
+  const grupos = [...porCampo].sort(([a], [b]) => compararSugerencias(a, b));
+  for (const [campo, todos] of grupos.filter(([c]) => !c.startsWith('catastral:'))) procesar(campo, todos);
+  // Lo de los paz y salvos se agrupa por el inmueble al que va, ya creados los del certificado: dos
+  // paz y salvos del mismo predio (el vigente y uno vencido) pueden escribir distinto la cédula catastral
+  const porDestino = new Map<string, typeof pendientes>();
+  for (const [campo, todos] of grupos.filter(([c]) => c.startsWith('catastral:'))) {
+    const d = resolverDestino(datos, campo);
+    const clave = d && d.indice >= 0 ? d.ruta : campo;
+    porDestino.set(clave, [...(porDestino.get(clave) ?? []), ...todos]);
   }
-  if (aceptados.length) {
+  for (const todos of porDestino.values()) procesar(todos[0].campo, todos);
+  if (aceptados.length || descartados.length) {
     await db.$transaction([
       db.expediente.update({ where: { id: e.id }, data: { datos: datos as unknown as Prisma.InputJsonValue } }),
       ...aceptados.map(({ d, valor }) => db.datoExtraido.update({ where: { id: d.id }, data: { estado: 'ACEPTADO', valorFinal: valor as Prisma.InputJsonValue } })),
+      ...descartados.map((d) => db.datoExtraido.update({ where: { id: d.id }, data: { estado: 'DESCARTADO' } })),
     ]);
     await sincronizarEntidades(e.id, datos);
     await auditar({ ...datosAuditoria(s), accion: 'SUGERENCIAS_APLICADAS_ASISTENTE', entidad: 'expediente', entidadId: e.id, detalle: { aplicadas: aceptados.length, dudosas: dudosos.length } });
   }
   return { aplicadas: aceptados.length, dudosos, datos };
+}
+
+/** Ids de personas e inmuebles que algún acto referencia */
+export function referenciadosEnActos(datos: DatosExpediente): Set<string> {
+  return new Set(Object.values(datos.actos).flatMap((a) => Object.values(a ?? {})).flatMap((v) => (Array.isArray(v) ? v : [v])).filter((x): x is string => typeof x === 'string'));
+}
+
+/**
+ * Los inmuebles de la escritura son los de los certificados de tradición. Uno que no está en ningún
+ * acto ni en ningún certificado (lo creó un paz y salvo o un título que describe otros lotes) se
+ * retira para que no se pregunte por él. Solo cuando el expediente ya tiene un inmueble de un certificado.
+ */
+export async function retirarInmueblesSobrantes(s: SesionActiva, expedienteId: string): Promise<number> {
+  const e = await obtenerExpediente(s, expedienteId);
+  if (!puedeEditar(s, e)) return 0;
+  const datos = datosDe(e);
+  const certificados = await db.documento.findMany({ where: { expedienteId, tipoDocumental: 'CERTIFICADO_TRADICION', estadoAnalisis: 'COMPLETADO' }, select: { hechos: true } });
+  const matriculas = new Set(certificados.map((c) => claveMatricula((c.hechos as { datos?: { matricula?: { valor?: unknown } } } | null)?.datos?.matricula?.valor)).filter(Boolean));
+  const deCertificado = (i: Inmueble) => matriculas.has(claveMatricula(i.matricula));
+  if (!datos.inmuebles.some(deCertificado)) return 0;
+  const usados = referenciadosEnActos(datos);
+  const sobrantes = datos.inmuebles.filter((i) => !usados.has(i.id) && !deCertificado(i));
+  if (!sobrantes.length) return 0;
+  await guardarPaso(s, expedienteId, { paso: 'inmuebles', valor: datos.inmuebles.filter((i) => !sobrantes.includes(i)) });
+  await auditar({ ...datosAuditoria(s), accion: 'INMUEBLES_SOBRANTES_RETIRADOS', entidad: 'expediente', entidadId: expedienteId, detalle: { inmuebles: sobrantes.map((i) => i.matricula || i.cedula_catastral || '(sin matrícula)') } });
+  return sobrantes.length;
 }
 
 /**

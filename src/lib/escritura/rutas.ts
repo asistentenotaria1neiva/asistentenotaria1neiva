@@ -18,7 +18,7 @@ export interface Destino { campo: Campo; rutaDatos: string; etiqueta: string; pa
 export const CAMPOS_TERMINACION = ['numero', 'fecha_otorgamiento', 'hojas', 'derechos', 'retefuente', 'libro_varios'];
 
 /** Datos de los comparecientes que la plantilla omite si faltan; el asistente los pregunta aunque no sean obligatorios */
-const RECOMENDADOS_PERSONA = ['estado_civil', 'actividad_economica', 'lugar_expedicion'];
+export const RECOMENDADOS_PERSONA = ['estado_civil', 'actividad_economica', 'lugar_expedicion'];
 
 const camposActo = (acto: string) => ESQUEMAS[acto]?.pasos.flatMap((p) => p.campos) ?? [];
 
@@ -145,8 +145,15 @@ export function datosFaltantes(datos: DatosExpediente, actos: string[]): DatoFal
     for (const p of ESQUEMAS[a]?.pasos ?? []) Object.assign(errores, validarCampos(p.campos, valores, `actos.${a}.`));
   }
   const faltantes: DatoFaltante[] = [];
+  // Comparecientes e inmuebles que tienen un papel en algún acto
+  const conRol = new Set<string>();
+  for (const a of actos) for (const v of Object.values(datos.actos[a] ?? {})) for (const x of Array.isArray(v) ? v : [v]) if (typeof x === 'string') conRol.add(x);
+  // Ya elegidos los inmuebles de la escritura, los demás del expediente no se preguntan (no van en ella)
+  const hayInmueblesElegidos = datos.inmuebles.some((i) => conRol.has(i.id));
   const agregar = (ruta: string | null, motivo: string, obligatorio: boolean) => {
     if (!ruta || faltantes.some((f) => f.ruta === ruta)) return;
+    const inmueble = /^inmueble:([^.]+)\./.exec(ruta)?.[1];
+    if (inmueble && hayInmueblesElegidos && !conRol.has(inmueble)) return;
     const destino = resolverRuta(datos, actos, ruta);
     if (!destino || destino.campo.tipo === 'lista') return;
     if (destino.paso === 'escritura' && CAMPOS_TERMINACION.includes(destino.campo.id)) return;
@@ -155,8 +162,6 @@ export function datosFaltantes(datos: DatosExpediente, actos: string[]): DatoFal
   for (const [rutaError, mensaje] of Object.entries(errores)) agregar(rutaDesdeError(datos, rutaError), mensaje, true);
 
   // Comparecientes: personas naturales que tienen un papel en algún acto
-  const conRol = new Set<string>();
-  for (const a of actos) for (const v of Object.values(datos.actos[a] ?? {})) for (const x of Array.isArray(v) ? v : [v]) if (typeof x === 'string') conRol.add(x);
   for (const p of datos.personas) {
     if (!conRol.has(p.id) || p.tipo_persona !== 'NATURAL' || p.menor_de_edad) continue;
     for (const id of RECOMENDADOS_PERSONA) {

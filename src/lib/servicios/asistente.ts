@@ -20,13 +20,13 @@ import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { ESQUEMAS } from '../escritura/esquemas';
 import { escribirRuta, leerRuta } from '../escritura/validar-formulario';
-import { resolverRuta, validarValor, catalogo, convertirRespuesta, datosFaltantes, CAMPOS_TERMINACION } from '../escritura/rutas';
+import { resolverRuta, validarValor, catalogo, convertirRespuesta, datosFaltantes, CAMPOS_TERMINACION, RECOMENDADOS_PERSONA, type Destino } from '../escritura/rutas';
 import type { DatosExpediente } from '../escritura/tipos';
 import { TIPOS_DOCUMENTALES, type TipoDocumental } from '../ia/documentos';
 import { llamarEstructurado } from '../ia/cliente';
 import { SISTEMA_ASISTENTE, esquemaAsistente } from '../ia/instrucciones';
 import {
-  obtenerExpediente, puedeEditar, datosDe, actosDe, guardarPaso, cambiarActos, aplicarSugerenciasConfiables, cerrarSugerenciasRespondidas, resolverDestino,
+  obtenerExpediente, puedeEditar, datosDe, actosDe, guardarPaso, cambiarActos, aplicarSugerenciasConfiables, retirarInmueblesSobrantes, cerrarSugerenciasRespondidas, resolverDestino,
   ErrorNegocio, type ActualizacionPaso,
 } from './expedientes';
 import { instruccionesAprobadas } from './documentos';
@@ -105,6 +105,24 @@ function preguntasDeReglas(datos: DatosExpediente, actos: string[], existentes: 
     }));
 }
 
+/** Datos opcionales que sí se preguntan cuando el caso los pide (cónyuge que coadyuva, venta de cuota, gravamen que subsiste, persona jurídica…) */
+const OPCIONALES_DEL_CASO = new Set(['coadyuvante_id', 'vinculo', 'es_cuota', 'cuota_texto', 'excepcion_gravamen', 'representante_legal_id', 'representante_id', 'representacion', 'poder_entidad_soporte', 'descripcion_entidad', 'constitucion_texto']);
+/** Datos del poder: solo si entre los documentos hay un poder */
+const DEL_PODER = new Set(['apoderado_id', 'poder_tipo', 'poder_incluye_estado_civil', 'tarjeta_profesional']);
+
+/**
+ * ¿Vale la pena preguntar este campo? Lo obligatorio, lo que la escritura menciona de los
+ * comparecientes y lo dudoso, sí; un dato opcional, solo si el caso lo pide. Los campos de un acto
+ * por plantilla son las variables de la escritura: todos.
+ */
+function sePregunta(destino: Destino, dudoso: boolean, hayPoder: boolean): boolean {
+  const id = destino.campo.id;
+  if (dudoso || destino.campo.obligatorio || OPCIONALES_DEL_CASO.has(id)) return true;
+  if (typeof destino.paso === 'object' && ESQUEMAS[destino.paso.acto]?.porPlantilla) return true;
+  if (destino.paso === 'personas') return RECOMENDADOS_PERSONA.includes(id) || (DEL_PODER.has(id) && hayPoder);
+  return false;
+}
+
 /** Para la IA, los datos dudosos se identifican por el id de la persona o el inmueble del expediente */
 function rutaParaIA(datos: DatosExpediente, campo: string): string {
   const d = resolverDestino(datos, campo);
@@ -156,6 +174,7 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
   const instr = await instruccionesAprobadas('REVISION', actosDe(e));
   // 2. Datos confiables al expediente
   const { aplicadas, dudosos } = await aplicarSugerenciasConfiables(s, expedienteId);
+  await retirarInmueblesSobrantes(s, expedienteId);
   const actual = await obtenerExpediente(s, expedienteId);
   const datos = datosDe(actual);
   const actosActuales = actosDe(actual);
@@ -191,6 +210,13 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
   const vacio = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length);
   // Los campos de un acto que el usuario aún no confirmó no se llenan: se preguntan al confirmarlo
   const completados = await completarDesdeDocumentos(s, expedienteId, datos, actos.filter((a) => actosActuales.includes(a)), r.datos.datos_desde_documentos ?? [], rutasDudosas);
+  const hayPoder = docs.some((d) => d.tipoDocumental === 'PODER');
+  // Lo que leyó la IA de un dato dudoso: va como respuesta sugerida, para confirmarla o corregirla
+  const lecturaDudosa = (ruta: string, destino: Destino) => {
+    const x = dudosos.find((d) => rutaParaIA(datos, d.campo) === ruta);
+    const v = x?.valores.map((y) => validarValor(destino.campo, y.valor, datos)).find((y) => !('error' in y));
+    return v && 'valor' in v ? { valor: v.valor, fuente: x!.valores[0]?.documento ?? null } : null;
+  };
   const preguntas: PreguntaAsistente[] = [];
   for (const p of r.datos.preguntas) {
     const destino = resolverRuta(datos, actos, p.ruta);
@@ -198,16 +224,22 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
     if (destino.paso === 'escritura' && CAMPOS_TERMINACION.includes(destino.campo.id)) continue;
     // Lo que ya tiene valor (digitado, de los documentos o recién llenado) no se pregunta, salvo que sea dudoso
     if (!rutasDudosas.has(p.ruta) && !vacio(leerRuta(datos, destino.rutaDatos))) continue;
+    if (!sePregunta(destino, rutasDudosas.has(p.ruta), hayPoder)) continue;
     let sugerido: unknown = null;
+    let fuente = p.fuente?.slice(0, 500) ?? null;
     if (p.valor_sugerido_json) {
       let v: unknown;
       try { v = JSON.parse(p.valor_sugerido_json); } catch { v = p.valor_sugerido_json; }
       const ok = validarValor(destino.campo, v, datos);
       if (!('error' in ok)) sugerido = ok.valor;
     }
+    if (sugerido === null) {
+      const l = lecturaDudosa(p.ruta, destino);
+      if (l) { sugerido = l.valor; fuente = l.fuente; }
+    }
     preguntas.push({
       id: `p${preguntas.length + 1}`, ruta: p.ruta, etiqueta: destino.etiqueta, pregunta: p.pregunta.slice(0, 500), motivo: p.motivo.slice(0, 500), origen: 'IA',
-      obligatoria: !!destino.campo.obligatorio, valorSugerido: sugerido, fuente: sugerido === null ? null : p.fuente?.slice(0, 500) ?? null, estado: 'PENDIENTE',
+      obligatoria: !!destino.campo.obligatorio, valorSugerido: sugerido, fuente: sugerido === null ? null : fuente, estado: 'PENDIENTE',
     });
   }
   // Todo dato dudoso se pregunta, aunque la IA no lo haya hecho: así se decide cada sugerencia pendiente
