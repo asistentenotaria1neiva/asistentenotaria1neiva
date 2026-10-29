@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { TablaExpedientes } from './componentes';
+import { TablaExpedientes, INCLUIR_OTORGANTES } from './componentes';
 
-const incluir = { tipo: { select: { nombre: true } }, responsable: { select: { nombreCompleto: true } }, _count: { select: { observaciones: { where: { estado: 'ABIERTA' as const } } } } };
+const incluir = { ...INCLUIR_OTORGANTES, tipo: { select: { nombre: true } }, responsable: { select: { nombreCompleto: true } }, _count: { select: { observaciones: { where: { estado: 'ABIERTA' as const } } } } };
 
 export default async function Inicio({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await requerirSesion();
