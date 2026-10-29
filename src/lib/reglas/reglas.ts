@@ -227,6 +227,10 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
     if (cv.afectacion === 'NO_APLICA' && conVinculo) {
       h.push({ codigo: 'R05-AFECTACION', nivel: 'CRITICA', mensaje: 'Un comprador es casado o tiene unión marital: debe indicarse si el inmueble se afecta o no a vivienda familiar (con indagación y constancia).', campo: 'actos.compraventa.afectacion' });
     }
+    if (cv.afectacion === 'NO_PROCEDE_LOTE') {
+      const construidos = ((cv.inmuebles as string[]) ?? []).map((id) => inmuebles.get(id)).filter((i) => i && (Number(i.area_construida) > 0 || !['LOTE', 'PREDIO RURAL'].includes(i.tipo_inmueble)));
+      if (construidos.length) h.push({ codigo: 'R05-AFECTACION', nivel: 'ADVERTENCIA', mensaje: `Se indicó que no procede la afectación por ser lote sin construcción, pero ${construidos.map((i) => i!.matricula).join(', ')} figura con construcción o no es un lote. Corrija el inmueble o justifique.`, campo: 'actos.compraventa.afectacion' });
+    }
     if ((cv.afectacion === 'SI' || cv.afectacion === 'NO') && !conVinculo && !cv.coadyuvante_id) {
       h.push({ codigo: 'R05-AFECTACION', nivel: 'CRITICA', mensaje: 'Se indicó decisión sobre afectación, pero ningún comprador es casado ni tiene unión marital según su estado civil.', campo: 'actos.compraventa.afectacion' });
     }

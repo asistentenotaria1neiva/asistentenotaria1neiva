@@ -126,8 +126,11 @@ const compraventa: DefinicionActo = {
     const precio = numeroRequerido(d, 'precio', 'precio de la venta');
     const esCuota = d.es_cuota === true;
     if (esCuota) requerido(d, 'cuota_texto', 'fracción o porcentaje del derecho de cuota');
-    const afectacion = requerido(d, 'afectacion', 'decisión sobre afectación a vivienda familiar') as 'NO_APLICA' | 'SI' | 'NO';
-    const coadyuvante = d.coadyuvante_id ? h.persona(d.coadyuvante_id, 'cónyuge o compañero(a) que coadyuva') : undefined;
+    const elegida = requerido(d, 'afectacion', 'decisión sobre afectación a vivienda familiar') as 'NO_APLICA' | 'NO_PROCEDE_LOTE' | 'SI' | 'NO';
+    // Un lote sin construcción no se afecta, sea cual sea el estado civil: va por el párrafo de «no procede»
+    const sinConstruccion = elegida === 'NO_PROCEDE_LOTE';
+    const afectacion = sinConstruccion ? 'NO_APLICA' : elegida;
+    const coadyuvante = !sinConstruccion && d.coadyuvante_id ? h.persona(d.coadyuvante_id, 'cónyuge o compañero(a) que coadyuva') : undefined;
     const vinculo = d.vinculo === 'COMPANEROS' ? 'COMPANEROS' : 'CASADOS';
     if (afectacion !== 'NO_APLICA' && !coadyuvante && compradores.length < 2) {
       throw new ErrorDatos(['para decidir sobre la afectación se requieren ambos cónyuges/compañeros (como compradores o uno como coadyuvante)']);
@@ -163,7 +166,8 @@ const compraventa: DefinicionActo = {
         afecta_conyuges_compran: afectacion !== 'NO_APLICA' && !coadyuvante,
         afecta_con_coadyuvante: afectacion !== 'NO_APLICA' && !!coadyuvante,
         afecta_si: afectacion === 'SI',
-        estado_civil_compradores: estadoCivilGrupo(compradores),
+        // «…manifestó ser de estado civil X, y que el inmueble es un lote de terreno sin construcción, razón por la cual no procede la AFECTACIÓN…»
+        estado_civil_compradores: estadoCivilGrupo(compradores) + (sinConstruccion ? `, y que ${inmuebles.length > 1 ? 'los inmuebles son lotes' : 'el inmueble es un lote'} de terreno sin construcción` : ''),
         vinculo_compradores: vinculo === 'CASADOS' ? 'CASADOS ENTRE SI, CON SOCIEDAD CONYUGAL VIGENTE' : 'SOLTEROS, CON UNION MARITAL DE HECHO ENTRE SI',
         vinculo_plural: vinculo === 'CASADOS' ? 'cónyuges' : 'compañeros permanentes',
         coadyuvante,

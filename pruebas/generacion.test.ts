@@ -48,6 +48,15 @@ describe('generación de borradores sobre las plantillas', () => {
     expect(texto).not.toContain('En la ciudad de Neiva');
   });
 
+  it('lote sin construcción: no procede la afectación aunque el comprador sea casado y compre solo', async () => {
+    const caso = structuredClone(casos.find((c) => c.clave === 'compraventa_simple')!);
+    const comprador = caso.datos.personas.find((p) => (caso.datos.actos.compraventa.compradores as string[]).includes(p.id))!;
+    comprador.estado_civil = 'CASADO(A), CON SOCIEDAD CONYUGAL VIGENTE';
+    caso.datos.actos.compraventa.afectacion = 'NO_PROCEDE_LOTE';
+    const { texto } = await generarBorrador(prepararContexto(caso.datos, caso.actos), cargar);
+    expect(texto).toContain('manifestó ser de estado civil CASADA, CON SOCIEDAD CONYUGAL VIGENTE, y que el inmueble es un lote de terreno sin construcción, razón por la cual no procede la AFECTACIÓN A VIVIENDA FAMILIAR');
+  });
+
   it('compraventa con fecha, notaria encargada y coadyuvante', async () => {
     const { texto } = await generar('compraventa_encargada');
     expect(texto).toContain('ESCRITURA PÚBLICA NÚMERO: DOS MIL NOVECIENTOS CUARENTA (2.940)');
