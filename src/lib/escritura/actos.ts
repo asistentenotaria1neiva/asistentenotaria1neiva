@@ -73,12 +73,12 @@ export interface DefinicionActo {
 const texto = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 const requerido = (d: DatosActo, campo: string, etiqueta: string): string => {
   const v = d[campo];
-  if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) throw new ErrorDatos([etiqueta]);
+  if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) throw new ErrorDatos([etiqueta], [campo]);
   return String(v).trim();
 };
 const numeroRequerido = (d: DatosActo, campo: string, etiqueta: string): number => {
   const n = Number(d[campo]);
-  if (!Number.isFinite(n) || n <= 0) throw new ErrorDatos([etiqueta]);
+  if (!Number.isFinite(n) || n <= 0) throw new ErrorDatos([etiqueta], [campo]);
   return n;
 };
 
@@ -133,7 +133,7 @@ const compraventa: DefinicionActo = {
     const coadyuvante = !sinConstruccion && d.coadyuvante_id ? h.persona(d.coadyuvante_id, 'cónyuge o compañero(a) que coadyuva') : undefined;
     const vinculo = d.vinculo === 'COMPANEROS' ? 'COMPANEROS' : 'CASADOS';
     if (afectacion !== 'NO_APLICA' && !coadyuvante && compradores.length < 2) {
-      throw new ErrorDatos(['para decidir sobre la afectación se requieren ambos cónyuges/compañeros (como compradores o uno como coadyuvante)']);
+      throw new ErrorDatos(['para decidir sobre la afectación se requieren ambos cónyuges/compañeros (como compradores o uno como coadyuvante). Si es un lote sin construcción, elija «No procede: lote de terreno sin construcción»; si no, registre al cónyuge o compañero(a) como coadyuvante'], ['afectacion']);
     }
     const cv = comparecencia(vendedores);
     const gVend = generoGrupo(vendedores);

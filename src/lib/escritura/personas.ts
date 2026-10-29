@@ -26,7 +26,8 @@ export interface PersonaPreparada extends Persona {
 }
 
 export class ErrorDatos extends Error {
-  constructor(public faltantes: string[]) {
+  /** campos[i]: dato del formulario que corrige faltantes[i] (dentro del acto o ya como ruta completa), si se sabe */
+  constructor(public faltantes: string[], public campos: (string | undefined)[] = []) {
     super(`Faltan datos para generar la escritura: ${faltantes.join('; ')}`);
   }
 }

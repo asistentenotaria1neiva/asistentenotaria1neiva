@@ -69,18 +69,21 @@ export function prepararContexto(datos: DatosExpediente, ordenActos: string[], n
 
   // Preparar cada acto acumulando todos los datos faltantes (no solo el primero)
   const faltantes: string[] = [];
+  const campos: (string | undefined)[] = [];
   const preparados: { id: string; p: ActoPreparado }[] = [];
   for (const id of ordenActos) {
     const def = ACTOS[id];
-    if (!def) { faltantes.push(`el acto "${id}" aún no tiene plantilla convertida`); continue; }
+    if (!def) { faltantes.push(`el acto "${id}" aún no tiene plantilla convertida`); campos.push(undefined); continue; }
     try {
       preparados.push({ id, p: def.preparar(datos.actos[id] ?? {}, h) });
     } catch (e) {
-      if (e instanceof ErrorDatos) faltantes.push(...e.faltantes.map((f) => `${def.nombre}: ${f}`));
-      else throw e;
+      if (!(e instanceof ErrorDatos)) throw e;
+      faltantes.push(...e.faltantes.map((f) => `${def.nombre}: ${f}`));
+      // El campo del acto se vuelve ruta completa, para corregirlo desde la observación
+      campos.push(...e.faltantes.map((_, i) => (e.campos[i] ? `actos.${id}.${e.campos[i]}` : undefined)));
     }
   }
-  if (faltantes.length) throw new ErrorDatos(faltantes);
+  if (faltantes.length) throw new ErrorDatos(faltantes, campos);
 
   const defs = preparados.map(({ id }) => ACTOS[id]);
   const e = datos.escritura;

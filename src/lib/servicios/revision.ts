@@ -49,7 +49,7 @@ export async function evaluarExpediente(expedienteId: string, s: SesionActiva) {
   try {
     borradorTexto = await textoVistaPrevia(datos, actos);
   } catch (err) {
-    if (err instanceof ErrorDatos) for (const f of err.faltantes) hallazgos.push({ codigo: 'R00-DATO-FALTANTE', nivel: 'CRITICA', mensaje: `Falta: ${f}.` });
+    if (err instanceof ErrorDatos) err.faltantes.forEach((f, i) => hallazgos.push({ codigo: 'R00-DATO-FALTANTE', nivel: 'CRITICA', mensaje: `Falta: ${f}.`, ...(err.campos[i] ? { campo: err.campos[i] } : {}) }));
     else if (err instanceof ErrorNegocio) hallazgos.push({ codigo: 'R00-PLANTILLA', nivel: 'CRITICA', mensaje: err.message });
     else throw err;
   }
