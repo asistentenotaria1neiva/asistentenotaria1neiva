@@ -54,7 +54,18 @@ describe('generación de borradores sobre las plantillas', () => {
     comprador.estado_civil = 'CASADO(A), CON SOCIEDAD CONYUGAL VIGENTE';
     caso.datos.actos.compraventa.afectacion = 'NO_PROCEDE_LOTE';
     const { texto } = await generarBorrador(prepararContexto(caso.datos, caso.actos), cargar);
-    expect(texto).toContain('manifestó ser de estado civil CASADA, CON SOCIEDAD CONYUGAL VIGENTE, y que el inmueble es un lote de terreno sin construcción, razón por la cual no procede la AFECTACIÓN A VIVIENDA FAMILIAR');
+    expect(texto).toContain('b. No procede la AFECTACIÓN A VIVIENDA FAMILIAR de que trata la Ley 258 de 1996, reformada por la Ley 854 de 2003, por tratarse de un lote de terreno sin construcción.');
+    expect(texto).not.toContain('razón por la cual no procede');
+  });
+
+  it('gravamen que subsiste: va en un PARAGRAFO aparte, no dentro de la cláusula de libertad', async () => {
+    const caso = structuredClone(casos.find((c) => c.clave === 'compraventa_simple')!);
+    caso.datos.actos.compraventa.excepcion_gravamen = 'No obstante, el(la)(los) otorgante(s) dejan constancia que tienen conocimiento que en la anotación número 001 del citado folio de matrícula inmobiliaria, se encuentra inscrita Servidumbre de acueducto pasiva en mayor extensión e insisten al Notario autorizar el presente instrumento público.';
+    const { texto } = await generarBorrador(prepararContexto(caso.datos, caso.actos), cargar);
+    expect(texto).toContain('libre de todo gravamen, pero que en todo caso se obliga a salir al saneamiento de lo vendido conforme a la Ley.');
+    expect(texto).toContain('PARAGRAFO: No obstante, el(la)(los) otorgante(s) dejan constancia que tienen conocimiento que en la anotación número 001 del citado folio de matrícula inmobiliaria, se encuentra inscrita Servidumbre de acueducto pasiva en mayor extensión e insisten al Notario autorizar el presente instrumento público.');
+    expect(texto).not.toContain('público.,');
+    expect(texto).not.toContain('con excepción de');
   });
 
   it('compraventa con fecha, notaria encargada y coadyuvante', async () => {

@@ -101,6 +101,17 @@ function certificadosTexto(inmuebles: InmueblePreparado[]): string {
   return `los Certificados de Tradición y Libertad de los folios de matrícula inmobiliaria números ${unirNombres(inmuebles.map((i) => `${i.matricula} de fecha ${i.fecha_certificado}`))}`;
 }
 
+/**
+ * Gravamen que subsiste: va en un PARAGRAFO aparte, después de la cláusula de libertad de gravámenes.
+ * Si ya viene redactado («No obstante, …») se respeta; si solo nombra el gravamen, se redacta la constancia.
+ */
+function paragrafoGravamen(excepcion: string): string {
+  if (!excepcion) return '';
+  const t = excepcion.replace(/[\s.,;]+$/, '');
+  if (/^no obstante\b/i.test(t)) return t.charAt(0).toUpperCase() + t.slice(1) + '.';
+  return `No obstante, el(la)(los) otorgante(s) dejan constancia que tienen conocimiento que sobre el inmueble subsiste ${t}, e insisten al Notario autorizar el presente instrumento público.`;
+}
+
 /** Estado civil de un grupo: "SOLTERA, SIN UNION…" o "SOLTEROS, SIN UNION…" cuando todos comparten el mismo */
 function estadoCivilGrupo(grupo: PersonaPreparada[]): string {
   const bases = [...new Set(grupo.map((p) => p.estado_civil?.replace(/^([A-Z]+?)(O|A)\b/, '$1(A)')))];
@@ -159,15 +170,17 @@ const compraventa: DefinicionActo = {
         objeto_inmuebles: inmuebles.length > 1 ? 'los siguientes inmuebles' : 'el siguiente inmueble',
         precio_letras: pesosEnLetras(precio),
         forma_pago_texto: formaPago.endsWith('.') ? formaPago : formaPago + '.',
-        excepcion_gravamen: texto(d.excepcion_gravamen),
+        paragrafo_gravamen: paragrafoGravamen(texto(d.excepcion_gravamen)),
         certificados_texto: certificadosTexto(inmuebles),
         aceptacion_compradores: aceptacion(compradores),
-        afecta_no_aplica: afectacion === 'NO_APLICA',
+        afecta_no_aplica: afectacion === 'NO_APLICA' && !sinConstruccion,
+        // «b. No procede la AFECTACIÓN … por tratarse de un lote de terreno sin construcción.»
+        afecta_lote: sinConstruccion,
+        lote_sin_construccion: inmuebles.length > 1 ? 'lotes de terreno sin construcción' : 'un lote de terreno sin construcción',
         afecta_conyuges_compran: afectacion !== 'NO_APLICA' && !coadyuvante,
         afecta_con_coadyuvante: afectacion !== 'NO_APLICA' && !!coadyuvante,
         afecta_si: afectacion === 'SI',
-        // «…manifestó ser de estado civil X, y que el inmueble es un lote de terreno sin construcción, razón por la cual no procede la AFECTACIÓN…»
-        estado_civil_compradores: estadoCivilGrupo(compradores) + (sinConstruccion ? `, y que ${inmuebles.length > 1 ? 'los inmuebles son lotes' : 'el inmueble es un lote'} de terreno sin construcción` : ''),
+        estado_civil_compradores: estadoCivilGrupo(compradores),
         vinculo_compradores: vinculo === 'CASADOS' ? 'CASADOS ENTRE SI, CON SOCIEDAD CONYUGAL VIGENTE' : 'SOLTEROS, CON UNION MARITAL DE HECHO ENTRE SI',
         vinculo_plural: vinculo === 'CASADOS' ? 'cónyuges' : 'compañeros permanentes',
         coadyuvante,
