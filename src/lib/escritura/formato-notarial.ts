@@ -207,9 +207,12 @@ function rellenarSaltos(partes: Run[], renglon: number, renglonPrimero: number):
   });
 }
 
-/** Párrafo de pura línea de guiones, a todo el ancho */
+/**
+ * Párrafo de pura línea de guiones, a todo el ancho. Aquí el ancho es exacto (no hay texto que
+ * estimar): sin holgura, los que caben enteros, para que el renglón quede lleno.
+ */
 const lineaGuiones = (anchoTwips: number) => {
-  const n = Math.floor((anchoTwips / 20) * 1000 / 12 / GUION) - HOLGURA;
+  const n = Math.floor((anchoTwips / 20) * 1000 / 12 / GUION);
   return `<w:p><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/><w:jc w:val="both"/></w:pPr><w:r><w:t>${'-'.repeat(n)}</w:t></w:r></w:p>`;
 };
 
