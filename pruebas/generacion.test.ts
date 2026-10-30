@@ -68,6 +68,16 @@ describe('generación de borradores sobre las plantillas', () => {
     expect(texto).not.toContain('con excepción de');
   });
 
+  it('gravamen que subsiste escrito con la etiqueta PARAGRAFO y el «pero que…»: no se duplica', async () => {
+    const caso = structuredClone(casos.find((c) => c.clave === 'compraventa_simple')!);
+    caso.datos.actos.compraventa.excepcion_gravamen = 'PARAGRAFO: No obstante, el(la)(los) otorgante(s) dejan constancia que tienen conocimiento que en la anotación número 001 del citado folio de matrícula inmobiliaria, se encuentra inscrita Servidumbre de acueducto pasiva en mayor extensión e insisten al Notario autorizar el presente instrumento público., pero que en todo caso se obliga a salir al saneamiento de lo vendido conforme a la Ley.';
+    const { texto } = await generarBorrador(prepararContexto(caso.datos, caso.actos), cargar);
+    expect(texto).toContain('PARAGRAFO: No obstante, el(la)(los) otorgante(s) dejan constancia que tienen conocimiento que en la anotación número 001 del citado folio de matrícula inmobiliaria, se encuentra inscrita Servidumbre de acueducto pasiva en mayor extensión e insisten al Notario autorizar el presente instrumento público.');
+    expect(texto).not.toContain('público.,');
+    expect(texto).not.toContain('PARAGRAFO: No obstante, el(la)(los) otorgante(s) dejan constancia que tienen conocimiento que sobre el inmueble subsiste');
+    expect(texto.match(/pero que en todo caso se obliga/g)).toHaveLength(1);
+  });
+
   it('compraventa con fecha, notaria encargada y coadyuvante', async () => {
     const { texto } = await generar('compraventa_encargada');
     expect(texto).toContain('ESCRITURA PÚBLICA NÚMERO: DOS MIL NOVECIENTOS CUARENTA (2.940)');

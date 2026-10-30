@@ -107,8 +107,12 @@ function certificadosTexto(inmuebles: InmueblePreparado[]): string {
  */
 function paragrafoGravamen(excepcion: string): string {
   if (!excepcion) return '';
-  const t = excepcion.replace(/[\s.,;]+$/, '');
-  if (/^no obstante\b/i.test(t)) return t.charAt(0).toUpperCase() + t.slice(1) + '.';
+  // Sin la etiqueta «PARAGRAFO:» (la pone la plantilla) ni el «pero que en todo caso se obliga…» (va en la cláusula)
+  const t = excepcion
+    .replace(/^\s*PAR[AÁ]GRAFO\s*[:.\-–]?\s*/i, '')
+    .replace(/[\s,;]*pero que en todo caso se obliga a salir al saneamiento[\s\S]*$/i, '')
+    .replace(/[\s.,;]+$/, '');
+  if (/^no obstante\b/i.test(t) || /\binsiste[n]?\b/i.test(t)) return t.charAt(0).toUpperCase() + t.slice(1) + '.';
   return `No obstante, el(la)(los) otorgante(s) dejan constancia que tienen conocimiento que sobre el inmueble subsiste ${t}, e insisten al Notario autorizar el presente instrumento público.`;
 }
 
