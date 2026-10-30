@@ -1,18 +1,10 @@
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { obtenerExpediente, puedeEditar, bloqueos } from '@/lib/servicios/expedientes';
-import { leerCifrado } from '@/lib/almacenamiento';
 import { accionGenerarBorrador } from '../../acciones';
 import { BotonAccion } from '../../formularios';
 import { Tabla, fecha } from '../../../componentes';
-import PizZip from 'pizzip';
-
-/** Texto plano del .docx para la vista previa en pantalla */
-function textoDocx(bytes: Buffer): string {
-  const xml = new PizZip(bytes).file('word/document.xml')?.asText() ?? '';
-  return xml.replace(/<w:tab\/>/g, ' ').replace(/<\/w:p>/g, '\n').replace(/<w:br[^>]*\/>/g, '\n').replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/\n{3,}/g, '\n\n');
-}
+import { VisorDocx } from '../../../plantillas/VisorDocx';
 
 export default async function Borrador({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,7 +15,6 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
     bloqueos(id),
   ]);
   const ultimo = versiones[0];
-  const previa = ultimo ? textoDocx(await leerCifrado(ultimo.rutaDocxCifrada)) : null;
   const desactualizado = ultimo && ultimo.creadoEn < e.actualizadoEn;
   return (
     <>
@@ -56,10 +47,12 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
           <p className="suave">Cada descarga queda registrada en la auditoría.</p>
         </section>
       )}
-      {previa && (
+      {ultimo && (
         <section className="tarjeta">
-          <h3 style={{ marginTop: 0 }}>Vista previa (versión {ultimo!.version})</h3>
-          <div className="vista-previa">{previa}</div>
+          <h3 style={{ marginTop: 0 }}>Vista previa (versión {ultimo.version})</h3>
+          <p className="suave">Así se ve en Word: páginas, márgenes, encabezados y guiones de relleno.</p>
+          {/* key: al generar una versión nueva, el visor se rehace con ella */}
+          <VisorDocx key={ultimo.id} url={`/api/borradores/${ultimo.id}?vista=1`} />
         </section>
       )}
     </>

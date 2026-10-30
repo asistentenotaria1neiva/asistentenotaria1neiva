@@ -58,14 +58,15 @@ export async function generarBorradorExpediente(s: SesionActiva, expedienteId: s
 }
 
 /** Descarga individual auditada de un borrador */
-export async function descargarBorrador(s: SesionActiva, borradorId: string, formato: 'docx' | 'pdf') {
+/** `vista`: para el visor de la página del borrador (se audita como visualización, no como descarga) */
+export async function descargarBorrador(s: SesionActiva, borradorId: string, formato: 'docx' | 'pdf', vista = false) {
   const b = await db.borrador.findUniqueOrThrow({ where: { id: borradorId } });
   const e = await obtenerExpediente(s, b.expedienteId);
   const ruta = formato === 'pdf' ? b.rutaPdfCifrada : b.rutaDocxCifrada;
   if (!ruta) throw new ErrorNegocio('Este borrador no tiene versión PDF.');
   const bytes = await leerCifrado(ruta);
   if (formato === 'docx' && sha256(bytes) !== b.hashSha256) throw new ErrorNegocio('El borrador no pasó la verificación de integridad.');
-  await auditar({ ...datosAuditoria(s), accion: 'BORRADOR_DESCARGADO', entidad: 'borrador', entidadId: b.id, detalle: { expedienteId: e.id, formato } });
+  await auditar({ ...datosAuditoria(s), accion: vista ? 'BORRADOR_VISUALIZADO' : 'BORRADOR_DESCARGADO', entidad: 'borrador', entidadId: b.id, detalle: { expedienteId: e.id, formato } });
   return {
     bytes,
     nombre: `${e.numeroInterno}-borrador-v${b.version}.${formato}`,
