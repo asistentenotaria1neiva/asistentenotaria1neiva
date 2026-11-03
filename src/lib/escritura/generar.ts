@@ -11,7 +11,7 @@ import Docxtemplater from 'docxtemplater';
 import expressionParser from 'docxtemplater/expressions.js';
 import { filtrosConcordancia } from '../texto/concordancia';
 import type { ContextoEscritura } from './contexto';
-import { aplicarFormatoNotarial, aplicarMargenes, anchoTextoDe } from './formato-notarial';
+import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, aplicarMargenes, anchoTextoDe } from './formato-notarial';
 
 const ORDINALES = ['PRIMERO', 'SEGUNDO', 'TERCERO', 'CUARTO', 'QUINTO', 'SEXTO', 'SEPTIMO', 'OCTAVO', 'NOVENO', 'DECIMO',
   'DECIMO PRIMERO', 'DECIMO SEGUNDO', 'DECIMO TERCERO', 'DECIMO CUARTO', 'DECIMO QUINTO', 'DECIMO SEXTO', 'DECIMO SEPTIMO',
@@ -67,11 +67,23 @@ function formatoImpresion(xml: string): string {
   return conMargenes.slice(0, inicio) + aplicarFormatoNotarial(conMargenes.slice(inicio, finSeccion), anchoTextoDe(conMargenes)) + conMargenes.slice(finSeccion);
 }
 
+/**
+ * Resolución 9146 de 2012 en el paquete: estilos en Arial 12 y márgenes simétricos (cara frontal
+ * y posterior del papel notarial)
+ */
+function formatoPaquete(zip: PizZip): void {
+  const estilos = zip.file('word/styles.xml');
+  if (estilos) zip.file('word/styles.xml', aplicarEstilosNotariales(estilos.asText()));
+  const ajustes = zip.file('word/settings.xml');
+  if (ajustes) zip.file('word/settings.xml', aplicarAjustesNotariales(ajustes.asText()));
+}
+
 /** Renderiza una sola plantilla con un contexto (prueba con datos de ejemplo en el panel de plantillas) */
 export function renderizarPlantilla(plantilla: Buffer, contexto: Record<string, unknown>): { docx: Buffer; faltantes: string[] } {
   const faltantes: string[] = [];
   const { zip } = renderizarBloque(plantilla, contexto, faltantes);
   zip.file('word/document.xml', formatoImpresion(zip.file('word/document.xml')!.asText()));
+  formatoPaquete(zip);
   return { docx: zip.generate({ type: 'nodebuffer' }) as Buffer, faltantes };
 }
 
@@ -104,6 +116,7 @@ export async function generarBorrador(ctx: ContextoEscritura, cargar: CargadorPl
   const finSeccion = xml.lastIndexOf('<w:sectPr');
   const unido = formatoImpresion(xml.slice(0, inicio) + cuerpos.join('') + xml.slice(finSeccion));
   zip.file('word/document.xml', unido);
+  formatoPaquete(zip);
   const docx = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
   return { docx, texto: textoPlano(cuerpos.join('')), faltantes };
 }

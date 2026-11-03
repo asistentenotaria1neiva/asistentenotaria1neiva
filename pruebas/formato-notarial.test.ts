@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aplicarFormatoNotarial, aplicarMargenes, guionesDeRelleno, tramosNegrilla, MARGENES_NOTARIA } from '@/lib/escritura/formato-notarial';
+import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, aplicarMargenes, guionesDeRelleno, tramosNegrilla, MARGENES_NOTARIA } from '@/lib/escritura/formato-notarial';
 
 const ANCHO = 12240 - MARGENES_NOTARIA.izq - MARGENES_NOTARIA.der;
 /** Ancho del renglón en milésimas de em de Arial 12 */
@@ -7,7 +7,7 @@ const RENGLON = ANCHO / 20 * 1000 / 12;
 const conGuia = (texto: string) => `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="hyphen" w:pos="8894"/></w:tabs><w:jc w:val="both"/></w:pPr><w:r><w:t xml:space="preserve">${texto}</w:t></w:r><w:r><w:tab/></w:r></w:p>`;
 const sinGuia = (texto: string) => `<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:t xml:space="preserve">${texto}</w:t></w:r></w:p>`;
 const textos = (xml: string) => (xml.match(/<w:p[ >].*?<\/w:p>/gs) ?? []).map((p) => p.replace(/<w:tab\/>/g, '\t').replace(/<w:br\/>/g, '\n').replace(/<[^>]+>/g, ''));
-const negrillas = (xml: string) => (xml.match(/<w:r><w:rPr><w:b\/>.*?<\/w:r>/gs) ?? []).map((r) => r.replace(/<[^>]+>/g, ''));
+const negrillas = (xml: string) => (xml.match(/<w:r><w:rPr>(?:(?!<\/w:rPr>).)*<w:b\/>.*?<\/w:r>/gs) ?? []).map((r) => r.replace(/<[^>]+>/g, ''));
 
 describe('formato de impresión de la notaría', () => {
   it('completa el último renglón con guiones escritos, sin pasarse al siguiente', () => {
@@ -45,14 +45,16 @@ describe('formato de impresión de la notaría', () => {
     expect(negrillas(aplicarFormatoNotarial(conGuia('SEGUNDO. TRADICIÓN: Que lo adquirió.'), ANCHO))).toEqual(['SEGUNDO. TRADICIÓN:']);
   });
 
-  it('carátula: documento y valor alineados a la derecha; número y fecha sin relleno', () => {
+  it('carátula: documento y valor alineados a la derecha; número y fecha completados con guiones', () => {
     const xml = aplicarFormatoNotarial([
       conGuia('ESCRITURA PÚBLICA NÚMERO:'), conGuia('FECHA DE OTORGAMIENTO:'), conGuia('PERSONAS QUE INTERVIENEN EN EL ACTO'),
       sinGuia('ALVARO PRUEBA LUNA 1.075.000.111'), conGuia('CODIGO DE LA NOTARIA 410010001.'), conGuia('ESPECIFICACION VALOR DEL ACTO'),
       sinGuia('COMPRAVENTA $3.000.000'), conGuia('MATRICULA INMOBILIARIA: 200-1.'),
     ].join(''), ANCHO);
     const t = textos(xml);
-    expect(t.slice(0, 4)).toEqual(['ESCRITURA PÚBLICA NÚMERO:', '', 'FECHA DE OTORGAMIENTO:', '']);
+    expect(t[0]).toMatch(/^ESCRITURA PÚBLICA NÚMERO: -{40,}$/);
+    expect(t[1]).toMatch(/^FECHA DE OTORGAMIENTO: -{40,}$/);
+    expect(t[3]).toMatch(/^-{20,} PERSONAS QUE INTERVIENEN EN EL ACTO -{20,}$/);
     expect(t).toContain('ALVARO PRUEBA LUNA\t1.075.000.111');
     expect(t).toContain('ESPECIFICACION\tVALOR DEL ACTO');
     expect(t).toContain('COMPRAVENTA\t$3.000.000');
@@ -60,8 +62,57 @@ describe('formato de impresión de la notaría', () => {
     expect(xml).toContain(`<w:tab w:val="right" w:pos="${ANCHO}"/>`);
   });
 
-  it('márgenes de la minuta de la notaría', () => {
-    expect(aplicarMargenes('<w:pgMar w:top="1871" w:right="1361" w:bottom="737" w:left="1985" w:header="709"/>'))
-      .toBe('<w:pgMar w:top="1701" w:right="1247" w:bottom="510" w:left="1758" w:header="709"/>');
+  it('Resolución 9146: carta y márgenes de la cara frontal (sup. 3 / izq. 3 / der. 2 / inf. 0,9 cm)', () => {
+    expect(aplicarMargenes('<w:pgSz w:w="12240" w:h="20160"/><w:pgMar w:top="1871" w:right="1361" w:bottom="737" w:left="1985" w:header="709"/>'))
+      .toBe('<w:pgSz w:w="12240" w:h="15840" w:code="1"/><w:pgMar w:top="1701" w:right="1134" w:bottom="510" w:left="1701" w:header="709" w:gutter="0"/>');
+    // 1 cm = 567 twips
+    expect(MARGENES_NOTARIA).toEqual({ sup: 3 * 567, izq: 3 * 567, der: 2 * 567, inf: 510 });
+  });
+
+  it('Resolución 9146: márgenes simétricos para la cara posterior (izq. 2 / der. 3 cm)', () => {
+    const ajustes = '<?xml version="1.0"?><w:settings xmlns:w="w"><w:zoom w:percent="100"/><w:defaultTabStop w:val="709"/><w:compat><w:compatSetting w:name="x"/></w:compat></w:settings>';
+    expect(aplicarAjustesNotariales(ajustes)).toBe('<?xml version="1.0"?><w:settings xmlns:w="w"><w:zoom w:percent="100"/><w:mirrorMargins/><w:defaultTabStop w:val="709"/><w:compat><w:compatSetting w:name="x"/></w:compat></w:settings>');
+    expect(aplicarAjustesNotariales(aplicarAjustesNotariales(ajustes)).match(/mirrorMargins/g)).toHaveLength(1);
+  });
+
+  it('Resolución 9146: Arial 12, interlineado 1,5 y justificado completo en todo párrafo', () => {
+    const xml = aplicarFormatoNotarial('<w:p><w:pPr><w:spacing w:after="200"/><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman"/><w:b/><w:sz w:val="28"/><w:u w:val="single"/></w:rPr><w:t>LOS OTORGANTES,</w:t></w:r><w:r><w:t> y otro texto.</w:t></w:r></w:p>', ANCHO);
+    expect(xml).toContain('<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/><w:jc w:val="both"/>');
+    expect(xml).not.toMatch(/Times New Roman|w:val="28"|w:val="left"/);
+    // Cada run en Arial 12, en el orden del esquema (fuente, negrilla, tamaño, subrayado)
+    expect(xml).toContain('<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/><w:u w:val="single"/></w:rPr>');
+    expect(xml.match(/<w:r>/g)!.length).toBe(xml.match(/<w:sz w:val="24"\/>/g)!.length);
+  });
+
+  it('Resolución 9146: los títulos centrados quedan justificados con guiones a ambos lados', () => {
+    const [p] = textos(aplicarFormatoNotarial('<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>COMPRAVENTA</w:t></w:r></w:p>', ANCHO));
+    const m = /^(-+) COMPRAVENTA (-+)$/.exec(p)!;
+    expect(m).not.toBeNull();
+    expect(Math.abs(m[1].length - m[2].length)).toBeLessThanOrEqual(1);
+  });
+
+  it('Resolución 9146: sin renglones en blanco entre párrafos; sí el espacio para firmar', () => {
+    const vacio = '<w:p><w:pPr><w:jc w:val="left"/></w:pPr></w:p>';
+    const xml = aplicarFormatoNotarial([
+      conGuia('PRIMERO: Que transfiere.'), vacio, vacio, conGuia('De lo cual doy fe.'), sinGuia('LOS OTORGANTES,'), vacio,
+      sinGuia('______________________________________'), sinGuia('NOMBRE'), vacio, sinGuia('EL NOTARIO,'),
+    ].join(''), ANCHO);
+    const t = textos(xml);
+    expect(t.slice(0, 2).map((x) => x.replace(/ -+$/, ''))).toEqual(['PRIMERO: Que transfiere.', 'De lo cual doy fe.']);
+    expect(t.slice(2)).toEqual(['LOS OTORGANTES,', '', '______________________________________', 'NOMBRE', '', 'EL NOTARIO,']);
+    // El salto de página de un anexo no se quita
+    expect(aplicarFormatoNotarial('<w:p><w:r><w:br w:type="page"/></w:r></w:p>', ANCHO)).toContain('w:type="page"');
+  });
+
+  it('Resolución 9146: caben al menos 32 renglones por cara (Arial 12, interlineado 1,5)', () => {
+    const altoUtil = 15840 - MARGENES_NOTARIA.sup - MARGENES_NOTARIA.inf; // twips
+    const renglon = 12 * 1.149 * 1.5 * 20; // alto de un renglón de Arial 12 a 1,5 en twips
+    expect(Math.floor(altoUtil / renglon)).toBeGreaterThanOrEqual(32);
+  });
+
+  it('Resolución 9146: estilos en Arial 12', () => {
+    const e = aplicarEstilosNotariales('<w:styles xmlns:w="w"><w:style w:styleId="T"><w:rPr><w:rFonts w:asciiTheme="majorHAnsi"/><w:sz w:val="32"/></w:rPr></w:style></w:styles>');
+    expect(e).toContain('<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial"');
+    expect(e).not.toMatch(/majorHAnsi|w:val="32"/);
   });
 });

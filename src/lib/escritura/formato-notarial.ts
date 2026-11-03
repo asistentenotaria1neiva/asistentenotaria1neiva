@@ -1,8 +1,17 @@
 /**
  * Formato de impresión de las escrituras de la notaría, aplicado al Word ya generado (sobre
- * cualquier plantilla aprobada, sin cambiarla). Tomado de las minutas de la notaría (p. ej.
- * «448 - CASA HABITACION - SOLTERO»):
- *   - márgenes sup. 3,0 cm / der. 2,2 cm / inf. 0,9 cm / izq. 3,1 cm, Arial 12, interlineado 1,5;
+ * cualquier plantilla aprobada, sin cambiarla).
+ *
+ * Resolución 9146 de 2012 de la Superintendencia de Notariado y Registro (papel de seguridad
+ * notarial para la extensión de escrituras públicas, tamaño carta 21,59 × 27,94 cm):
+ *   - cara frontal: margen superior 3 cm, izquierdo 3 cm, derecho 2 cm, inferior 0,9 cm;
+ *   - cara posterior: superior 3 cm, izquierdo 2 cm, derecho 3 cm, inferior 0,9 cm
+ *     (márgenes simétricos: las páginas impares son la cara frontal y las pares la posterior);
+ *   - fuente Arial 12 en todo el texto, interlineado 1,5 (mínimo 32 renglones por cara);
+ *   - texto con justificado completo (los títulos centrados se completan con guiones a ambos lados);
+ *   - sin renglones en blanco entre los párrafos (solo el espacio para firmar, en la zona de firmas).
+ *
+ * Además, de las minutas de la notaría (p. ej. «448 - CASA HABITACION - SOLTERO»):
  *   - el renglón final de cada párrafo se completa con guiones ESCRITOS («… del Huila. ------»),
  *     no con una tabulación de relleno: Google Docs y otros visores no muestran ese relleno, y en
  *     el protocolo los espacios en blanco deben quedar llenos;
@@ -14,8 +23,22 @@
  * Liberation Sans en LibreOffice) y un margen de seguridad, para que no pasen al renglón siguiente.
  */
 
-/** Márgenes de la minuta 448 (twips) */
-export const MARGENES_NOTARIA = { sup: 1701, der: 1247, inf: 510, izq: 1758 };
+/**
+ * Márgenes de la cara frontal según la Resolución 9146 de 2012 (twips; 1 cm = 567 twips).
+ * Con márgenes simétricos, Word toma `izq` como margen interior y `der` como exterior: en la cara
+ * posterior (páginas pares) quedan izquierdo 2 cm y derecho 3 cm, como exige la resolución.
+ */
+export const MARGENES_NOTARIA = { sup: 1701, der: 1134, inf: 510, izq: 1701 };
+
+/** Tamaño carta reglamentario (twips): 21,59 × 27,94 cm */
+export const PAGINA_CARTA = { ancho: 12240, alto: 15840 };
+
+/** Interlineado 1,5 (en 240avos de renglón) */
+const INTERLINEADO = 360;
+const ESPACIADO = `<w:spacing w:before="0" w:after="0" w:line="${INTERLINEADO}" w:lineRule="auto"/>`;
+const FUENTE = '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/>';
+/** Arial 12 (en medios puntos) */
+const TAMANO = '<w:sz w:val="24"/><w:szCs w:val="24"/>';
 
 // Anchos de Helvetica / Arial en milésimas de em (de la tabla AFM): ' ' a '~'
 const ANCHOS = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584];
@@ -168,6 +191,109 @@ const rPrNeutro = (rPr: string) => {
   return r === '<w:rPr></w:rPr>' ? '' : r;
 };
 
+// ------------------------------------------------------------------ Resolución 9146: fuente, interlineado, justificado
+
+interface Hijo { nombre: string; xml: string }
+
+/** Elementos hijos directos del interior de un elemento XML (con cualquier prefijo: w:, w14:, mc:…) */
+function hijos(interior: string): Hijo[] {
+  const re = /<([a-zA-Z][\w.-]*:[\w.-]+)\b[^>]*?\/>|<([a-zA-Z][\w.-]*:[\w.-]+)\b[^>]*>[\s\S]*?<\/\2>/g;
+  return [...interior.matchAll(re)].map((m) => ({ nombre: m[1] ?? m[2], xml: m[0] }));
+}
+
+/**
+ * Pone `nuevo` en lugar de los hijos `nombres`, antes del primer hijo que el esquema de Word
+ * ubica después (Word rechaza el archivo si los hijos van fuera de orden).
+ */
+function ponerHijo(interior: string, nombres: string[], nuevo: string, siguientes: ReadonlySet<string>): string {
+  const lista = hijos(interior).filter((h) => !nombres.includes(h.nombre));
+  const i = lista.findIndex((h) => siguientes.has(h.nombre));
+  lista.splice(i < 0 ? lista.length : i, 0, { nombre: '', xml: nuevo });
+  return lista.map((h) => h.xml).join('');
+}
+
+// Orden de los hijos de w:rPr y w:pPr (ECMA-376): lo que va después de la fuente, del tamaño, del espaciado y de la alineación
+const TRAS_TAMANO = ['w:highlight', 'w:u', 'w:effect', 'w:bdr', 'w:shd', 'w:fitText', 'w:vertAlign', 'w:rtl', 'w:cs', 'w:em', 'w:lang', 'w:eastAsianLayout', 'w:specVanish', 'w:oMath', 'w:rPrChange'];
+const TRAS_FUENTE = new Set(['w:b', 'w:bCs', 'w:i', 'w:iCs', 'w:caps', 'w:smallCaps', 'w:strike', 'w:dstrike', 'w:outline', 'w:shadow', 'w:emboss', 'w:imprint', 'w:noProof', 'w:snapToGrid', 'w:vanish', 'w:webHidden', 'w:color', 'w:spacing', 'w:w', 'w:kern', 'w:position', 'w:sz', 'w:szCs', ...TRAS_TAMANO]);
+const TRAS_TAMANO_SET = new Set(TRAS_TAMANO);
+const TRAS_ALINEACION = ['w:textDirection', 'w:textAlignment', 'w:textboxTightWrap', 'w:outlineLvl', 'w:divId', 'w:cnfStyle', 'w:rPr', 'w:sectPr', 'w:pPrChange'];
+const TRAS_ALINEACION_SET = new Set(TRAS_ALINEACION);
+const TRAS_ESPACIADO = new Set(['w:ind', 'w:contextualSpacing', 'w:mirrorIndents', 'w:suppressOverlap', 'w:jc', ...TRAS_ALINEACION]);
+
+/** Interior de un w:rPr con Arial 12 (conserva negrilla, subrayado, etc.) */
+function rPrArial(interior: string): string {
+  return ponerHijo(ponerHijo(interior, ['w:rFonts'], FUENTE, TRAS_FUENTE), ['w:sz', 'w:szCs'], TAMANO, TRAS_TAMANO_SET);
+}
+
+const RPR = /<w:rPr>([\s\S]*?)<\/w:rPr>|<w:rPr\/>/g;
+
+/**
+ * Un párrafo con el formato de la resolución: interlineado 1,5 sin espacio antes ni después,
+ * alineación `jc` (justificado completo, salvo lo que se conserva centrado en la zona de firmas)
+ * y todo su texto en Arial 12.
+ */
+export function normalizarParrafo(p: string, jc: 'both' | 'center' = 'both'): string {
+  const m = /^<w:p(\s[^>]*)?>(<w:pPr>[\s\S]*?<\/w:pPr>|<w:pPr\/>)?([\s\S]*)<\/w:p>$/.exec(p);
+  if (!m) return p;
+  let pPr = (m[2] ?? '').replace(/^<w:pPr\/>$/, '').replace(/^<w:pPr>|<\/w:pPr>$/g, '');
+  pPr = ponerHijo(pPr, ['w:spacing'], ESPACIADO, TRAS_ESPACIADO);
+  pPr = ponerHijo(pPr, ['w:jc'], `<w:jc w:val="${jc}"/>`, TRAS_ALINEACION_SET);
+  pPr = pPr.replace(RPR, (_x, i: string | undefined) => `<w:rPr>${rPrArial(i ?? '')}</w:rPr>`);
+  const contenido = m[3].replace(/(<w:r(?:\s[^>]*)?>)(?:<w:rPr>([\s\S]*?)<\/w:rPr>|<w:rPr\/>)?/g, (_x, abre: string, i: string | undefined) => `${abre}<w:rPr>${rPrArial(i ?? '')}</w:rPr>`);
+  return `<w:p${m[1] ?? ''}><w:pPr>${pPr}</w:pPr>${contenido}</w:p>`;
+}
+
+/** Estilos del documento: toda propiedad de texto (y la predeterminada) en Arial 12 */
+export function aplicarEstilosNotariales(estilos: string): string {
+  let x = estilos.replace(RPR, (_m, i: string | undefined) => `<w:rPr>${rPrArial(i ?? '')}</w:rPr>`);
+  const predeterminado = `<w:rPrDefault><w:rPr>${FUENTE}${TAMANO}</w:rPr></w:rPrDefault>`;
+  if (/<w:rPrDefault\/>/.test(x)) x = x.replace(/<w:rPrDefault\/>/, predeterminado);
+  else if (!/<w:rPrDefault>/.test(x)) {
+    if (/<w:docDefaults>/.test(x)) x = x.replace(/<w:docDefaults>/, `<w:docDefaults>${predeterminado}`);
+    else if (/<w:docDefaults\/>/.test(x)) x = x.replace(/<w:docDefaults\/>/, `<w:docDefaults>${predeterminado}</w:docDefaults>`);
+    else x = x.replace(/<w:styles\b[^>]*>/, (a) => `${a}<w:docDefaults>${predeterminado}</w:docDefaults>`);
+  }
+  return x;
+}
+
+// Hijos de w:settings que el esquema pone antes de w:mirrorMargins
+const ANTES_DE_ESPEJO = new Set(['w:writeProtection', 'w:view', 'w:zoom', 'w:removePersonalInformation', 'w:removeDateAndTime', 'w:doNotDisplayPageBoundaries', 'w:displayBackgroundShape', 'w:printPostScriptOverText', 'w:printFractionalCharacterWidth', 'w:printFormsData', 'w:embedTrueTypeFonts', 'w:embedSystemFonts', 'w:saveSubsetFonts', 'w:saveFormsData']);
+
+/**
+ * Márgenes simétricos (cara frontal en las páginas impares, posterior en las pares): la resolución
+ * fija márgenes distintos para cada cara del papel notarial.
+ */
+export function aplicarAjustesNotariales(ajustes: string): string {
+  const m = /^([\s\S]*?<w:settings\b[^>]*>)([\s\S]*)(<\/w:settings>[\s\S]*)$/.exec(ajustes);
+  if (!m) return ajustes;
+  const lista = hijos(m[2]).filter((h) => h.nombre !== 'w:mirrorMargins');
+  let pos = 0;
+  lista.forEach((h, i) => { if (ANTES_DE_ESPEJO.has(h.nombre)) pos = i + 1; });
+  lista.splice(pos, 0, { nombre: 'w:mirrorMargins', xml: '<w:mirrorMargins/>' });
+  return m[1] + lista.map((h) => h.xml).join('') + m[3];
+}
+
+/** Ancho (milésimas de em) de unos segmentos en un solo renglón */
+const anchoSegmentos = (segmentos: Segmento[]) => segmentos.reduce((s, x) => s + ancho(x.texto, x.negrilla), 0);
+
+/**
+ * Guiones a la izquierda y a la derecha de un título que iba centrado, para que el renglón quede
+ * completo y justificado. null si el título no cabe en un solo renglón.
+ */
+export function guionesCentrado(segmentos: Segmento[], renglon: number): [number, number] | null {
+  if (segmentos.some((s) => s.texto.includes('\n'))) return null;
+  const libre = renglon - anchoSegmentos(segmentos) - 2 * ancho(' ', false);
+  const n = Math.floor(libre / GUION) - HOLGURA;
+  const izq = Math.floor(n / 2);
+  return izq >= 1 ? [izq, n - izq] : null;
+}
+
+/** Renglón de firma («______») */
+const esLineaFirma = (t: string) => /^_{8,}/.test(t);
+
+/** Un párrafo vacío que se puede quitar (no lleva salto de página, sección, imagen ni campo) */
+const vacioRemovible = (p: string) => !/<w:br\b[^>]*w:type="page"|<w:sectPr|<w:drawing|<w:pict|<w:object|<w:fldChar|<w:fldSimple|<mc:AlternateContent/.test(p);
+
 const twips = (pPr: string, atributo: string) => Number(new RegExp(`<w:ind\\b[^>]*\\bw:${atributo}="(-?\\d+)"`).exec(pPr)?.[1] ?? 0);
 
 /**
@@ -213,7 +339,7 @@ function rellenarSaltos(partes: Run[], renglon: number, renglonPrimero: number):
  */
 const lineaGuiones = (anchoTwips: number) => {
   const n = Math.floor((anchoTwips / 20) * 1000 / 12 / GUION);
-  return `<w:p><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/><w:jc w:val="both"/></w:pPr><w:r><w:t>${'-'.repeat(n)}</w:t></w:r></w:p>`;
+  return normalizarParrafo(`<w:p><w:pPr></w:pPr><w:r><w:t>${'-'.repeat(n)}</w:t></w:r></w:p>`);
 };
 
 /** Texto plano de un párrafo, para decidir */
@@ -226,9 +352,15 @@ const soloGuiones = (t: string) => /^\s*-{3,}\s*$/.test(t);
 export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): string {
   const enCaratula = { personas: false, especificacion: false };
   const salida: string[] = [];
+  // Todo párrafo sale con Arial 12, interlineado 1,5 y justificado completo (Resolución 9146 de 2012)
+  const parrafo = (xml: string, jc: 'both' | 'center' = 'both') => salida.push(normalizarParrafo(xml, jc));
+  const renglonTexto = anchoTexto / 20 * 1000 / 12;
   let previo = '';
+  // Desde el primer renglón de firma (firmas y anexos) se conserva el espacio para firmar
+  let zonaFirmas = false;
   const parrafos = cuerpo.split(/(?=<w:p[\s>])|(?<=<\/w:p>)/);
-  for (const trozo of parrafos) {
+  const planos = parrafos.map((t) => (/^<w:p[\s>]/.test(t) ? textoDe(t).trim() : null));
+  for (const [indice, trozo] of parrafos.entries()) {
     if (!/^<w:p[\s>]/.test(trozo)) { salida.push(trozo); continue; }
     const m = /^<w:p(\s[^>]*)?>([\s\S]*)<\/w:p>$/.exec(trozo);
     if (!m) { salida.push(trozo); continue; }
@@ -236,23 +368,35 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     const runs = leerRuns(m[2].slice(pPr.length));
     const texto = textoDe(m[2].slice(pPr.length)).replace(/\t$/, '');
     const plano = texto.trim();
+    if (esLineaFirma(plano)) zonaFirmas = true;
+    const centrado = /<w:jc w:val="center"\/>/.test(pPr);
 
     // Las líneas de guiones existentes se rehacen al ancho exacto (en una plantilla de un caso real quedaron al de otros datos)
     if (soloGuiones(plano)) { salida.push(lineaGuiones(anchoTexto)); previo = '-'; continue; }
-    if (!plano) { salida.push(trozo); continue; }
+    if (!plano) {
+      // Sin renglones en blanco entre los párrafos; sí el espacio sobre el renglón de firma
+      const siguiente = planos.slice(indice + 1).find((t) => t);
+      const antesDeFirma = !!siguiente && esLineaFirma(siguiente);
+      if (zonaFirmas || antesDeFirma || !vacioRemovible(trozo)) parrafo(trozo, zonaFirmas && centrado ? 'center' : 'both');
+      continue;
+    }
 
     // Carátula: nombre y documento, acto y valor, con el número a la derecha
-    // Número y fecha en blanco: sin relleno, con un renglón libre para escribirlos en la terminación
+    // Número y fecha en blanco: el renglón se completa con guiones (sin renglón en blanco) para escribirlos en la terminación
     if (/^(ESCRITURA P[UÚ]BLICA N[UÚ]MERO|FECHA DE OTORGAMIENTO):$/.test(plano)) {
       const rPr = conNegrilla(rPrNeutro(runs.find((r) => r.texto)?.rPr ?? ''), true);
-      salida.push(`<w:p${m[1] ?? ''}><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/><w:jc w:val="left"/></w:pPr>${runTexto(rPr, plano)}</w:p><w:p><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:p>`);
+      const n = guionesDeRelleno([{ texto: plano, negrilla: true }], renglonTexto);
+      parrafo(`<w:p${m[1] ?? ''}><w:pPr></w:pPr>${runTexto(rPr, plano)}${n > 0 ? runTexto(rPrNeutro(rPr), ` ${'-'.repeat(n)}`) : ''}</w:p>`);
       previo = plano;
       continue;
     }
     if (/^PERSONAS QUE INTERVIENEN EN EL ACTO$/.test(plano)) {
       enCaratula.personas = true;
       if (previo !== '-') salida.push(lineaGuiones(anchoTexto));
-      salida.push(`<w:p${m[1] ?? ''}><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>${runTexto('<w:rPr><w:b/><w:bCs/><w:u w:val="single"/></w:rPr>', plano)}</w:p>`);
+      // Título centrado con guiones a ambos lados: el renglón queda justificado y completo
+      const g = guionesCentrado([{ texto: plano, negrilla: true }], renglonTexto);
+      const titulo = runTexto('<w:rPr><w:b/><w:bCs/><w:u w:val="single"/></w:rPr>', plano);
+      parrafo(`<w:p${m[1] ?? ''}><w:pPr></w:pPr>${g ? `${runTexto('', `${'-'.repeat(g[0])} `)}${titulo}${runTexto('', ` ${'-'.repeat(g[1])}`)}` : titulo}</w:p>`);
       previo = plano;
       continue;
     }
@@ -261,7 +405,7 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
       enCaratula.especificacion = true;
       const tabs = `<w:pPr><w:tabs><w:tab w:val="right" w:pos="${anchoTexto}"/></w:tabs><w:spacing w:after="0" w:line="360" w:lineRule="auto"/><w:jc w:val="left"/></w:pPr>`;
       const rPr = '<w:rPr><w:b/><w:bCs/><w:u w:val="single"/></w:rPr>';
-      salida.push(`<w:p${m[1] ?? ''}>${tabs}${runTexto(rPr, 'ESPECIFICACION')}<w:r><w:tab/></w:r>${runTexto(rPr, 'VALOR DEL ACTO')}</w:p>`);
+      parrafo(`<w:p${m[1] ?? ''}>${tabs}${runTexto(rPr, 'ESPECIFICACION')}<w:r><w:tab/></w:r>${runTexto(rPr, 'VALOR DEL ACTO')}</w:p>`);
       previo = plano;
       continue;
     }
@@ -269,7 +413,7 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     if (valor && runs.every((r) => r.texto !== null || r.tab)) {
       const tabs = `<w:pPr><w:tabs><w:tab w:val="right" w:pos="${anchoTexto}"/></w:tabs><w:spacing w:after="0" w:line="360" w:lineRule="auto"/><w:jc w:val="left"/></w:pPr>`;
       const rPr = conNegrilla(rPrNeutro(runs.find((r) => r.texto)?.rPr ?? ''), true);
-      salida.push(`<w:p${m[1] ?? ''}>${tabs}${runTexto(rPr, valor[1])}<w:r><w:tab/></w:r>${runTexto(rPr, valor[2])}</w:p>`);
+      parrafo(`<w:p${m[1] ?? ''}>${tabs}${runTexto(rPr, valor[1])}<w:r><w:tab/></w:r>${runTexto(rPr, valor[2])}</w:p>`);
       previo = plano;
       continue;
     }
@@ -325,28 +469,38 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
       return xml;
     });
 
-    if (rellenar) {
+    const rPrGuiones = rPrNeutro(ultimoTexto?.rPr ?? '');
+    // Un título centrado (fuera de la zona de firmas) queda justificado, con guiones a ambos lados
+    const centro = centrado && !zonaFirmas ? guionesCentrado(segmentos, renglonPrimero) : null;
+    if (centro) {
+      const primerTexto = partes.find((r) => r.texto !== null && r.texto.trim());
+      nuevos.unshift(runTexto(rPrNeutro(primerTexto?.rPr ?? ''), `${'-'.repeat(centro[0])} `));
+      nuevos.push(runTexto(rPrGuiones, ` ${'-'.repeat(centro[1])}`));
+    } else if (rellenar) {
       const n = guionesDeRelleno(segmentos, renglon, renglonPrimero);
-      const rPr = rPrNeutro(ultimoTexto?.rPr ?? '');
-      if (n > 0) nuevos.push(runTexto(rPr, ` ${'-'.repeat(n)}`));
+      if (n > 0) nuevos.push(runTexto(rPrGuiones, ` ${'-'.repeat(n)}`));
     }
-    salida.push(`<w:p${m[1] ?? ''}>${pPr}${nuevos.join('')}</w:p>`);
+    parrafo(`<w:p${m[1] ?? ''}>${pPr}${nuevos.join('')}</w:p>`, centrado && zonaFirmas ? 'center' : 'both');
     previo = plano;
   }
   return salida.join('');
 }
 
-/** Pone los márgenes de la notaría en la sección del documento */
+/**
+ * Pone en la sección del documento el tamaño carta y los márgenes de la Resolución 9146 de 2012
+ * (con w:mirrorMargins en los ajustes, ver aplicarAjustesNotariales).
+ */
 export function aplicarMargenes(xml: string): string {
-  return xml.replace(/<w:pgMar\b[^>]*\/>/g, (pg) => pg
-    .replace(/w:top="-?\d+"/, `w:top="${MARGENES_NOTARIA.sup}"`)
-    .replace(/w:right="-?\d+"/, `w:right="${MARGENES_NOTARIA.der}"`)
-    .replace(/w:bottom="-?\d+"/, `w:bottom="${MARGENES_NOTARIA.inf}"`)
-    .replace(/w:left="-?\d+"/, `w:left="${MARGENES_NOTARIA.izq}"`));
+  const atributo = (pg: string, nombre: string, valor: number) =>
+    new RegExp(`w:${nombre}="-?\\d+"`).test(pg) ? pg.replace(new RegExp(`w:${nombre}="-?\\d+"`), `w:${nombre}="${valor}"`) : pg.replace(/\s*\/>$/, ` w:${nombre}="${valor}"/>`);
+  return xml
+    .replace(/<w:pgSz\b[^>]*\/>/g, `<w:pgSz w:w="${PAGINA_CARTA.ancho}" w:h="${PAGINA_CARTA.alto}" w:code="1"/>`)
+    .replace(/<w:pgMar\b[^>]*\/>/g, (pg) => [
+      ['top', MARGENES_NOTARIA.sup], ['right', MARGENES_NOTARIA.der], ['bottom', MARGENES_NOTARIA.inf], ['left', MARGENES_NOTARIA.izq], ['gutter', 0],
+    ].reduce((x, [n, v]) => atributo(x, n as string, v as number), pg));
 }
 
-/** Ancho del renglón (twips) según la página del documento */
-export function anchoTextoDe(xml: string): number {
-  const ancho = Number(/<w:pgSz\b[^>]*w:w="(\d+)"/.exec(xml)?.[1] ?? 12240);
-  return ancho - MARGENES_NOTARIA.izq - MARGENES_NOTARIA.der;
+/** Ancho del renglón (twips): carta menos los márgenes (el mismo en ambas caras) */
+export function anchoTextoDe(_xml?: string): number {
+  return PAGINA_CARTA.ancho - MARGENES_NOTARIA.izq - MARGENES_NOTARIA.der;
 }

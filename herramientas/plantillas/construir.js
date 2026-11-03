@@ -3,8 +3,8 @@
  *
  * Cada archivo plantillas/fuentes/<id>.plantilla se convierte en plantillas/docx/<id>.docx
  * con el formato de las escrituras de la notaría:
- *   carta, márgenes sup. 3,3 cm / der. 2,4 cm / inf. 1,3 cm / izq. 3,5 cm, Arial 12,
- *   interlineado 1,5, justificado, relleno de guiones al final de cada párrafo
+ *   carta, márgenes de la Resolución 9146 de 2012 (cara frontal: sup. 3 cm / izq. 3 cm / der. 2 cm /
+ *   inf. 0,9 cm; cara posterior simétrica: izq. 2 cm / der. 3 cm), Arial 12, interlineado 1,5, justificado, relleno de guiones al final de cada párrafo
  *   (tabulación con guía de guiones) y "Hoja No. N" en el encabezado desde la hoja 2.
  *
  * Marcado de las fuentes (una línea = un párrafo):
@@ -28,8 +28,8 @@ const RAIZ = path.resolve(__dirname, '..', '..');
 const FUENTES = path.join(RAIZ, 'plantillas', 'fuentes');
 const SALIDA = path.join(RAIZ, 'plantillas', 'docx');
 
-// Página (twips) tomada de las escrituras de la notaría
-const PAGINA = { ancho: 12240, alto: 15840, sup: 1871, der: 1361, inf: 737, izq: 1985 };
+// Página (twips): carta y márgenes de la Resolución 9146 de 2012 (márgenes simétricos: w:mirrorMargins en AJUSTES)
+const PAGINA = { ancho: 12240, alto: 15840, sup: 1701, der: 1134, inf: 510, izq: 1701 };
 const ANCHO_TEXTO = PAGINA.ancho - PAGINA.izq - PAGINA.der;
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -107,7 +107,7 @@ const DOC_RELS = `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/
   '<Relationship Id="rIdEncabezado" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' +
   '<Relationship Id="rIdEncabezadoPrimera" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/></Relationships>';
 
-const AJUSTES = `${XML}<w:settings ${NS}><w:defaultTabStop w:val="709"/><w:characterSpacingControl w:val="doNotCompress"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
+const AJUSTES = `${XML}<w:settings ${NS}><w:mirrorMargins/><w:defaultTabStop w:val="709"/><w:characterSpacingControl w:val="doNotCompress"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
 
 function propiedades(titulo) {
   const ahora = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
