@@ -54,7 +54,9 @@ const BUSCAR_INMUEBLE: Record<string, string> = {
 const DECLARACIONES = new Set(['estado_civil', 'actividad_economica']);
 
 const DOCS_INMUEBLE: TipoDocumental[] = ['CERTIFICADO_TRADICION', 'ESCRITURA_ANTERIOR', 'PAZ_Y_SALVO', 'OTRO'];
-const DOCS_PERSONA: TipoDocumental[] = ['CEDULA', 'ESCRITURA_ANTERIOR', 'PODER', 'CERTIFICADO_EXISTENCIA', 'REGISTRO_CIVIL_NACIMIENTO', 'REGISTRO_CIVIL_MATRIMONIO', 'OTRO'];
+// El título de adquisición no: quienes intervinieron en él no son comparecientes y lo que declararon
+// entonces (estado civil, actividad) no vale para esta escritura
+const DOCS_PERSONA: TipoDocumental[] = ['CEDULA', 'PODER', 'CERTIFICADO_EXISTENCIA', 'REGISTRO_CIVIL_NACIMIENTO', 'REGISTRO_CIVIL_MATRIMONIO', 'OTRO'];
 /** Primero los que más datos traen: si no caben todos, se dejan los últimos */
 const PRIORIDAD: TipoDocumental[] = ['CERTIFICADO_TRADICION', 'ESCRITURA_ANTERIOR', 'PAZ_Y_SALVO', 'PODER', 'CERTIFICADO_EXISTENCIA', 'CEDULA', 'REGISTRO_CIVIL_MATRIMONIO', 'REGISTRO_CIVIL_NACIMIENTO', 'OTRO'];
 /** Límites de una solicitud con varios documentos (la API admite 100 páginas y 32 MB) */

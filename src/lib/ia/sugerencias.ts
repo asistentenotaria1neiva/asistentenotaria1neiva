@@ -40,6 +40,10 @@ function crear(campo: string, d: DatoConFuente | undefined, transformar?: (v: un
 
 const may = (v: unknown) => String(v).toUpperCase().replace(/\s+/g, ' ').trim();
 const fecha10 = (v: unknown) => String(v).slice(0, 10);
+/** Nombres de los tradentes sin sus documentos de identificación («PEDRO PÉREZ C.C. 12.345.678» → «PEDRO PÉREZ») */
+const soloNombres = (v: unknown) => may(String(v)
+  .replace(/,?\s*(identificad[oa]s?\s+con\s+)?(la\s+)?(c[ée]dula( de ciudadan[ií]a)?|c\.?\s?c\.?|nit\.?)\s*(n[uú]mero|no\.?|n°|#)?\s*[\d.\-]+(\s*de\s+[A-Za-zÁÉÍÓÚáéíóúÑñ ]+?(?=,|;|\sy\s|$))?/gi, '')
+  .replace(/\s+([,;])/g, '$1').replace(/[\s,;]+$/, ''));
 const genero = (v: unknown) => (/^F/i.test(String(v)) ? 'F' : /^M/i.test(String(v)) ? 'M' : null);
 
 /**
@@ -150,6 +154,13 @@ export function sugerenciasDesdeHechos(tipo: TipoDocumental, r: ResultadoExtracc
         s.push(crear(`${i}.linderos`, x.linderos, (v) => String(v).trim()));
         s.push(crear(`${i}.area_terreno`, x.area_terreno, Number));
         s.push(crear(`${i}.area_construida`, x.area_construida, Number));
+        // El título es la escritura de adquisición: completa la tradición del inmueble (si el
+        // certificado de tradición la trae, manda el certificado). Las personas que intervinieron en
+        // el título no son comparecientes de esta escritura: no se crean ni se preguntan.
+        s.push(crear(`${i}.tradicion.escritura_numero`, D('numero'), (v) => digitos(v)));
+        s.push(crear(`${i}.tradicion.escritura_fecha`, D('fecha'), fecha10, (v) => validarFecha(v)));
+        s.push(crear(`${i}.tradicion.notaria`, D('notaria'), (v) => String(v).trim()));
+        s.push(crear(`${i}.tradicion.tradente`, D('tradentes'), soloNombres));
       }
       break;
     }

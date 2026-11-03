@@ -94,6 +94,20 @@ export async function estadoAsistente(expedienteId: string) {
   };
 }
 
+/**
+ * El título de adquisición (escritura anterior) solo sirve para los datos de la adquisición del
+ * inmueble: número, fecha, notaría, actos, linderos y áreas. Quienes intervinieron en él (tradentes,
+ * adquirentes de entonces) no son comparecientes de esta escritura: no se le pasan a la IA para que
+ * no pregunte por ellos ni los proponga como vendedores o compradores. El tradente ya queda en la
+ * tradición del inmueble (datos_expediente).
+ */
+export function hechosParaAsistente(tipoDocumental: string, hechos: unknown): unknown {
+  const h = hechos as { tipo_detectado?: string; datos?: Record<string, unknown> } | null;
+  if (!h?.datos || (h.tipo_detectado ?? tipoDocumental) !== 'ESCRITURA_ANTERIOR') return hechos;
+  const { adquirentes: _a, tradentes: _t, ...datos } = h.datos;
+  return { ...h, datos };
+}
+
 /** Preguntas deterministas por los datos que aún faltan y que no están ya preguntados ni omitidos */
 function preguntasDeReglas(datos: DatosExpediente, actos: string[], existentes: PreguntaAsistente[]): PreguntaAsistente[] {
   let n = existentes.length;
@@ -191,7 +205,7 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
     // Los campos de los actos elegidos (los de plantilla pueden ser muchos); si la IA propone otro acto, sus campos se preguntan al confirmarlo
     catalogo_campos: catalogo(actosActuales.length ? actosActuales : Object.keys(ESQUEMAS), { sinTerminacion: true }),
     datos_expediente: datos,
-    documentos: docs.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: TIPOS_DOCUMENTALES[d.tipoDocumental as TipoDocumental] ?? d.tipoDocumental, estado_analisis: d.estadoAnalisis, hechos: d.hechos })),
+    documentos: docs.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: TIPOS_DOCUMENTALES[d.tipoDocumental as TipoDocumental] ?? d.tipoDocumental, estado_analisis: d.estadoAnalisis, hechos: hechosParaAsistente(d.tipoDocumental, d.hechos) })),
     datos_dudosos: dudosos.map((x) => ({ ruta: rutaParaIA(datos, x.campo), motivo: x.motivo, valores: x.valores })),
     documentos_con_error: erroresDocumentos,
     respuestas_adicionales_previas: adicionalesPrevias.map((p) => ({ pregunta: p.pregunta, respuesta: p.respuesta })),

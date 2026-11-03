@@ -61,4 +61,21 @@ describe('sugerencias del certificado y de la escritura anterior', () => {
     const s = sugerenciasDesdeHechos('ESCRITURA_ANTERIOR', r);
     expect(s.map((x) => x.campo)).toEqual(['inmueble:200-1.linderos', 'inmueble:200-1.area_terreno', 'inmueble:200-2.linderos', 'catastral:41001010100000001.linderos']);
   });
+
+  it('título de adquisición: completa la tradición y no crea personas', () => {
+    const r: ResultadoExtraccion = { tipo_detectado: 'ESCRITURA_ANTERIOR', legible: true, observaciones: [], datos: {
+      numero: d('1.014'), fecha: d('2016-05-05'), notaria: d('la Notaria Quinta de Neiva'),
+      tradentes: d('Pedro Pablo Ejemplo Salas, identificado con cédula de ciudadanía número 12.345.678 de Neiva'),
+      adquirentes: d('ANA LUCIA PRUEBA ROJAS C.C. 1.075.000.111'),
+      inmuebles: [{ matricula: d('200-1'), linderos: d(null), area_terreno: d(null), cedula_catastral: d(null), area_construida: d(null) }],
+    } };
+    const s = sugerenciasDesdeHechos('ESCRITURA_ANTERIOR', r);
+    expect(s.some((x) => x.campo.startsWith('persona:'))).toBe(false);
+    expect(Object.fromEntries(s.map((x) => [x.campo, x.valor]))).toEqual({
+      'inmueble:200-1.tradicion.escritura_numero': '1014',
+      'inmueble:200-1.tradicion.escritura_fecha': '2016-05-05',
+      'inmueble:200-1.tradicion.notaria': 'la Notaria Quinta de Neiva',
+      'inmueble:200-1.tradicion.tradente': 'PEDRO PABLO EJEMPLO SALAS',
+    });
+  });
 });
