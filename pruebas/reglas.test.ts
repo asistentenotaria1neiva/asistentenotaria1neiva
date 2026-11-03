@@ -110,7 +110,10 @@ describe('reglas contra el error humano', () => {
     const e = entrada('compraventa_simple', [], (dx) => { dx.inmuebles[0].paz_salvo!.vigencia_hasta = '2026-10-01'; });
     expect(codigos(e)).toContain('CRITICA:R04-PAZ-SALVO-VENCIDO');
   });
-  it('comprador casado sin decisión de afectación', () => {
+  it('comprador soltero: la afectación no exige nada', () => {
+    expect(codigos(entrada('compraventa_simple', []))).not.toContain('CRITICA:R05-AFECTACION');
+  });
+  it('comprador casado que compra solo sin cónyuge coadyuvante', () => {
     const e = entrada('compraventa_simple', [], (dx) => { dx.personas[1].estado_civil = 'CASADO(A), CON SOCIEDAD CONYUGAL VIGENTE'; });
     expect(codigos(e)).toContain('CRITICA:R05-AFECTACION');
   });

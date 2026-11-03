@@ -106,7 +106,7 @@ function preguntasDeReglas(datos: DatosExpediente, actos: string[], existentes: 
 }
 
 /** Datos opcionales que sí se preguntan cuando el caso los pide (cónyuge que coadyuva, venta de cuota, gravamen que subsiste, persona jurídica…) */
-const OPCIONALES_DEL_CASO = new Set(['coadyuvante_id', 'vinculo', 'es_cuota', 'cuota_texto', 'excepcion_gravamen', 'representante_legal_id', 'representante_id', 'representacion', 'poder_entidad_soporte', 'descripcion_entidad', 'constitucion_texto']);
+const OPCIONALES_DEL_CASO = new Set(['coadyuvante_id','es_cuota', 'cuota_texto', 'excepcion_gravamen', 'representante_legal_id', 'representante_id', 'representacion', 'poder_entidad_soporte', 'descripcion_entidad', 'constitucion_texto']);
 /** Datos del poder: solo si entre los documentos hay un poder */
 const DEL_PODER = new Set(['apoderado_id', 'poder_tipo', 'poder_incluye_estado_civil', 'tarjeta_profesional']);
 

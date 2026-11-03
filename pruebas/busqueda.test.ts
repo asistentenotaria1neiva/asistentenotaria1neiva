@@ -40,7 +40,7 @@ describe('cédula catastral mal contada', () => {
 describe('preguntas solo de los inmuebles de la escritura', () => {
   it('un inmueble que no está en el acto no genera preguntas', () => {
     const d = caso();
-    d.actos.compraventa = { vendedores: ['v'], compradores: ['c'], inmuebles: ['i9'], precio: 3000000, afectacion: 'NO_APLICA' };
+    d.actos.compraventa = { vendedores: ['v'], compradores: ['c'], inmuebles: ['i9'], precio: 3000000 };
     const rutas = datosFaltantes(d, ['compraventa']).map((x) => x.ruta);
     expect(rutas.some((r) => r.startsWith('inmueble:i3.'))).toBe(false);
     expect(rutas).toContain('inmueble:i9.linderos');

@@ -52,10 +52,44 @@ describe('generación de borradores sobre las plantillas', () => {
     const caso = structuredClone(casos.find((c) => c.clave === 'compraventa_simple')!);
     const comprador = caso.datos.personas.find((p) => (caso.datos.actos.compraventa.compradores as string[]).includes(p.id))!;
     comprador.estado_civil = 'CASADO(A), CON SOCIEDAD CONYUGAL VIGENTE';
-    caso.datos.actos.compraventa.afectacion = 'NO_PROCEDE_LOTE';
+    caso.datos.inmuebles[0].tipo_inmueble = 'LOTE';
+    caso.datos.inmuebles[0].area_construida = 0;
     const { texto } = await generarBorrador(prepararContexto(caso.datos, caso.actos), cargar);
     expect(texto).toContain('b. No procede la AFECTACIÓN A VIVIENDA FAMILIAR de que trata la Ley 258 de 1996, reformada por la Ley 854 de 2003, por tratarse de un lote de terreno sin construcción.');
     expect(texto).not.toContain('razón por la cual no procede');
+  });
+
+  it('local comercial: no procede la afectación aunque el comprador sea casado', async () => {
+    const caso = structuredClone(casos.find((c) => c.clave === 'compraventa_simple')!);
+    const comprador = caso.datos.personas.find((p) => (caso.datos.actos.compraventa.compradores as string[]).includes(p.id))!;
+    comprador.estado_civil = 'CASADO(A), CON SOCIEDAD CONYUGAL VIGENTE';
+    caso.datos.inmuebles[0].tipo_inmueble = 'LOCAL';
+    const { texto } = await generarBorrador(prepararContexto(caso.datos, caso.actos), cargar);
+    expect(texto).toContain('por tratarse de un local, inmueble no destinado a la habitación de la familia.');
+  });
+
+  it('comprador casado con coadyuvante: se afecta a vivienda familiar sin preguntarlo', async () => {
+    const caso = structuredClone(casos.find((c) => c.clave === 'compraventa_encargada')!);
+    for (const p of caso.datos.personas) if (p.id === 'c1' || p.id === 'c2') p.estado_civil = 'CASADO(A), CON SOCIEDAD CONYUGAL VIGENTE';
+    delete caso.datos.actos.compraventa.no_afecta;
+    const contexto = prepararContexto(caso.datos, caso.actos);
+    const { texto } = await generarBorrador(contexto, cargar);
+    expect(texto).toContain('SI LO AFECTA A VIVIENDA FAMILIAR, de acuerdo a la Ley 258 de 1996, reformada por la Ley 854 de 2003');
+    expect(texto).toContain('SI QUEDA AFECTADO A VIVIENDA FAMILIAR, por voluntad expresa y conjunta de los cónyuges');
+    expect(texto).toContain('AFECTACION A VIVIENDA FAMILIAR');
+  });
+
+  it('comprador casado que compra solo sin su cónyuge: pide el coadyuvante', () => {
+    const caso = structuredClone(casos.find((c) => c.clave === 'compraventa_simple')!);
+    const comprador = caso.datos.personas.find((p) => (caso.datos.actos.compraventa.compradores as string[]).includes(p.id))!;
+    comprador.estado_civil = 'CASADO(A), CON SOCIEDAD CONYUGAL VIGENTE';
+    try {
+      prepararContexto(caso.datos, caso.actos);
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(ErrorDatos);
+      expect((e as ErrorDatos).faltantes.join(' ')).toContain('Ley 258 de 1996');
+    }
   });
 
   it('gravamen que subsiste: va en un PARAGRAFO aparte, no dentro de la cláusula de libertad', async () => {
@@ -94,7 +128,6 @@ describe('generación de borradores sobre las plantillas', () => {
     const caso = casos.find((c) => c.clave === 'compraventa_simple')!;
     const datos: DatosExpediente = JSON.parse(JSON.stringify(caso.datos));
     delete datos.actos.compraventa.precio;
-    delete datos.actos.compraventa.afectacion;
     try {
       prepararContexto(datos, ['compraventa']);
       expect.unreachable();

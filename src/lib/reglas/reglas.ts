@@ -13,6 +13,7 @@
 import type { DatosExpediente, Persona, Inmueble } from '../escritura/tipos';
 import { cedulasDe, type ResultadoExtraccion, type TipoDocumental, type DatoConFuente } from '../ia/documentos';
 import { mismaCatastral } from '../escritura/comparar';
+import { deducirAfectacion, faltaCoadyuvante } from '../escritura/afectacion';
 import {
   validarDocumento, validarMatricula, validarCedulaCatastral, validarFecha,
 } from '../validaciones/formatos';
@@ -223,16 +224,17 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
     const avaluo = ((cv.inmuebles as string[]) ?? []).reduce((s, id) => s + Number(inmuebles.get(id)?.paz_salvo?.avaluo ?? 0), 0);
     if (precio && avaluo && precio < avaluo) h.push({ codigo: 'R05-PRECIO-AVALUO', nivel: 'ADVERTENCIA', mensaje: `El precio ($${precio}) es inferior al avalúo catastral ($${avaluo}). Verifique la declaración del art. 61 de la Ley 2010 de 2019 con el notario.`, campo: 'actos.compraventa.precio' });
     const compradores = ((cv.compradores as string[]) ?? []).map((id) => personas.get(id)).filter((p): p is Persona => !!p);
-    const conVinculo = compradores.some((p) => /CASADO\(A\), CON SOCIEDAD CONYUGAL VIGENTE|CON UNION MARITAL/.test(p.estado_civil ?? ''));
-    if (cv.afectacion === 'NO_APLICA' && conVinculo) {
-      h.push({ codigo: 'R05-AFECTACION', nivel: 'CRITICA', mensaje: 'Un comprador es casado o tiene unión marital: debe indicarse si el inmueble se afecta o no a vivienda familiar (con indagación y constancia).', campo: 'actos.compraventa.afectacion' });
+    // La afectación (Ley 258 de 1996, modificada por la Ley 854 de 2003) se deduce: aquí solo se verifica que
+    // comparezcan ambos cónyuges o compañeros cuando procede, y la coherencia de la constancia de no afectar.
+    const coadyuvante = cv.coadyuvante_id ? personas.get(cv.coadyuvante_id as string) : undefined;
+    const inmCv = ((cv.inmuebles as string[]) ?? []).map((id) => inmuebles.get(id)).filter((i): i is Inmueble => !!i);
+    const noAfecta = cv.no_afecta === true || cv.afectacion === 'NO';
+    const decision = deducirAfectacion(compradores, inmCv, { coadyuvante, noAfecta });
+    if ((decision.tipo === 'SI' || decision.tipo === 'NO') && faltaCoadyuvante(compradores, coadyuvante)) {
+      h.push({ codigo: 'R05-AFECTACION', nivel: 'CRITICA', mensaje: `Un comprador es casado(a) o tiene unión marital y el inmueble es vivienda: por la Ley 258 de 1996, modificada por la Ley 854 de 2003, ${decision.tipo === 'SI' ? 'queda afectado a vivienda familiar' : 'la constancia de no afectarlo exige'} y debe comparecer su cónyuge o compañero(a) (como comprador o coadyuvante).`, campo: 'actos.compraventa.coadyuvante_id' });
     }
-    if (cv.afectacion === 'NO_PROCEDE_LOTE') {
-      const construidos = ((cv.inmuebles as string[]) ?? []).map((id) => inmuebles.get(id)).filter((i) => i && (Number(i.area_construida) > 0 || !['LOTE', 'PREDIO RURAL'].includes(i.tipo_inmueble)));
-      if (construidos.length) h.push({ codigo: 'R05-AFECTACION', nivel: 'ADVERTENCIA', mensaje: `Se indicó que no procede la afectación por ser lote sin construcción, pero ${construidos.map((i) => i!.matricula).join(', ')} figura con construcción o no es un lote. Corrija el inmueble o justifique.`, campo: 'actos.compraventa.afectacion' });
-    }
-    if ((cv.afectacion === 'SI' || cv.afectacion === 'NO') && !conVinculo && !cv.coadyuvante_id) {
-      h.push({ codigo: 'R05-AFECTACION', nivel: 'CRITICA', mensaje: 'Se indicó decisión sobre afectación, pero ningún comprador es casado ni tiene unión marital según su estado civil.', campo: 'actos.compraventa.afectacion' });
+    if (noAfecta && (decision.tipo === 'NO_APLICA' || decision.tipo === 'NO_PROCEDE')) {
+      h.push({ codigo: 'R05-AFECTACION', nivel: 'ADVERTENCIA', mensaje: 'Se marcó que los cónyuges o compañeros no afectan el inmueble, pero según el estado civil de los compradores o el tipo de inmueble la afectación no procede: la marca no tiene efecto.', campo: 'actos.compraventa.no_afecta' });
     }
   }
 

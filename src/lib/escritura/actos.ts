@@ -18,6 +18,7 @@ import {
   comparecencia, identificacionGrupo, aceptacion, unidadesComparecencia,
 } from './personas';
 import { type InmueblePreparado } from './inmuebles';
+import { deducirAfectacion, faltaCoadyuvante } from './afectacion';
 import { articuloSustantivo, generoGrupo, unirNombres, estadoCivilConGenero } from '../texto/concordancia';
 import { pesosEnLetras, formatoPesos, formatoMiles } from '../texto/numeros-a-letras';
 
@@ -141,14 +142,18 @@ const compraventa: DefinicionActo = {
     const precio = numeroRequerido(d, 'precio', 'precio de la venta');
     const esCuota = d.es_cuota === true;
     if (esCuota) requerido(d, 'cuota_texto', 'fracción o porcentaje del derecho de cuota');
-    const elegida = requerido(d, 'afectacion', 'decisión sobre afectación a vivienda familiar') as 'NO_APLICA' | 'NO_PROCEDE_LOTE' | 'SI' | 'NO';
-    // Un lote sin construcción no se afecta, sea cual sea el estado civil: va por el párrafo de «no procede»
-    const sinConstruccion = elegida === 'NO_PROCEDE_LOTE';
-    const afectacion = sinConstruccion ? 'NO_APLICA' : elegida;
-    const coadyuvante = !sinConstruccion && d.coadyuvante_id ? h.persona(d.coadyuvante_id, 'cónyuge o compañero(a) que coadyuva') : undefined;
-    const vinculo = d.vinculo === 'COMPANEROS' ? 'COMPANEROS' : 'CASADOS';
-    if (afectacion !== 'NO_APLICA' && !coadyuvante && compradores.length < 2) {
-      throw new ErrorDatos(['para decidir sobre la afectación se requieren ambos cónyuges/compañeros (como compradores o uno como coadyuvante). Si es un lote sin construcción, elija «No procede: lote de terreno sin construcción»; si no, registre al cónyuge o compañero(a) como coadyuvante'], ['afectacion']);
+    // Afectación a vivienda familiar (Ley 258 de 1996, modificada por la Ley 854 de 2003): no se
+    // pregunta, se deduce del estado civil de los compradores y del tipo de inmueble.
+    const coadyuvanteDatos = d.coadyuvante_id ? h.persona(d.coadyuvante_id, 'cónyuge o compañero(a) que coadyuva') : undefined;
+    // Constancia expresa de no afectar (también el valor «NO» de expedientes anteriores)
+    const noAfecta = d.no_afecta === true || d.afectacion === 'NO';
+    const decision = deducirAfectacion(compradores, inmuebles, { coadyuvante: coadyuvanteDatos, noAfecta });
+    const noProcede = decision.tipo === 'NO_PROCEDE';
+    const afectacion = decision.tipo === 'NO_PROCEDE' ? 'NO_APLICA' : decision.tipo;
+    const coadyuvante = afectacion !== 'NO_APLICA' ? coadyuvanteDatos : undefined;
+    const vinculo = 'vinculo' in decision ? decision.vinculo : 'CASADOS';
+    if (afectacion !== 'NO_APLICA' && faltaCoadyuvante(compradores, coadyuvante)) {
+      throw new ErrorDatos([`un comprador es ${vinculo === 'CASADOS' ? 'casado(a) con sociedad conyugal vigente' : 'compañero(a) permanente'} y el inmueble es vivienda: por la Ley 258 de 1996, modificada por la Ley 854 de 2003, debe comparecer su ${vinculo === 'CASADOS' ? 'cónyuge' : 'compañero(a)'} (como comprador o como coadyuvante). Registre al cónyuge o compañero(a) como coadyuvante`], ['coadyuvante_id']);
     }
     const cv = comparecencia(vendedores);
     const gVend = generoGrupo(vendedores);
@@ -177,14 +182,16 @@ const compraventa: DefinicionActo = {
         paragrafo_gravamen: paragrafoGravamen(texto(d.excepcion_gravamen)),
         certificados_texto: certificadosTexto(inmuebles),
         aceptacion_compradores: aceptacion(compradores),
-        afecta_no_aplica: afectacion === 'NO_APLICA' && !sinConstruccion,
-        // «b. No procede la AFECTACIÓN … por tratarse de un lote de terreno sin construcción.»
-        afecta_lote: sinConstruccion,
-        lote_sin_construccion: inmuebles.length > 1 ? 'lotes de terreno sin construcción' : 'un lote de terreno sin construcción',
+        afecta_no_aplica: decision.tipo === 'NO_APLICA',
+        // «b. No procede la AFECTACIÓN … por tratarse de un lote de terreno sin construcción.» (o de un
+        // local, una bodega… o de un adquirente persona jurídica). Se conservan los nombres de las variables
+        // para que las versiones de la plantilla ya cargadas sigan funcionando.
+        afecta_lote: noProcede,
+        lote_sin_construccion: decision.tipo === 'NO_PROCEDE' ? decision.motivo : '',
         afecta_conyuges_compran: afectacion !== 'NO_APLICA' && !coadyuvante,
         afecta_con_coadyuvante: afectacion !== 'NO_APLICA' && !!coadyuvante,
         afecta_si: afectacion === 'SI',
-        estado_civil_compradores: estadoCivilGrupo(compradores),
+        estado_civil_compradores: estadoCivilGrupo(compradores.filter((p) => p.tipo_persona !== 'JURIDICA')),
         vinculo_compradores: vinculo === 'CASADOS' ? 'CASADOS ENTRE SI, CON SOCIEDAD CONYUGAL VIGENTE' : 'SOLTEROS, CON UNION MARITAL DE HECHO ENTRE SI',
         vinculo_plural: vinculo === 'CASADOS' ? 'cónyuges' : 'compañeros permanentes',
         coadyuvante,
