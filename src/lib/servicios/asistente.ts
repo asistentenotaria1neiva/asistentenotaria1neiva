@@ -22,7 +22,7 @@ import { ESQUEMAS } from '../escritura/esquemas';
 import { escribirRuta, leerRuta } from '../escritura/validar-formulario';
 import { resolverRuta, validarValor, catalogo, convertirRespuesta, datosFaltantes, CAMPOS_TERMINACION, RECOMENDADOS_PERSONA, type Destino } from '../escritura/rutas';
 import type { DatosExpediente } from '../escritura/tipos';
-import { TIPOS_DOCUMENTALES, type TipoDocumental } from '../ia/documentos';
+import { TIPOS_DOCUMENTALES, compactarHechos, type TipoDocumental } from '../ia/documentos';
 import { llamarEstructurado } from '../ia/cliente';
 import { SISTEMA_ASISTENTE, esquemaAsistente } from '../ia/instrucciones';
 import {
@@ -103,9 +103,9 @@ export async function estadoAsistente(expedienteId: string) {
  */
 export function hechosParaAsistente(tipoDocumental: string, hechos: unknown): unknown {
   const h = hechos as { tipo_detectado?: string; datos?: Record<string, unknown> } | null;
-  if (!h?.datos || (h.tipo_detectado ?? tipoDocumental) !== 'ESCRITURA_ANTERIOR') return hechos;
+  if (!h?.datos || (h.tipo_detectado ?? tipoDocumental) !== 'ESCRITURA_ANTERIOR') return compactarHechos(hechos);
   const { adquirentes: _a, tradentes: _t, ...datos } = h.datos;
-  return { ...h, datos };
+  return compactarHechos({ ...h, datos });
 }
 
 /** Preguntas deterministas por los datos que aún faltan y que no están ya preguntados ni omitidos */

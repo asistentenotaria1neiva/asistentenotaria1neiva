@@ -87,6 +87,10 @@ a:focus-visible { border-radius: 4px; }
 .lateral .pie button.secundario:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); color: #fff; border-color: rgba(255, 255, 255, 0.24); }
 .lateral .avisos { margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
 .lateral .avisos button { margin: 4px 12px 0; }
+/* Al hacer clic en un enlace del menú: indicador inmediato mientras llega la página (solo si tarda más de 120 ms) */
+.lateral a .pendiente { margin-left: auto; width: 14px; height: 14px; flex: none; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; opacity: 0; visibility: hidden; }
+.lateral a .pendiente.activo { visibility: visible; animation: girar 0.8s linear infinite, aparecer 1ms 120ms forwards; }
+@keyframes aparecer { to { opacity: 0.85; } }
 .conteo-avisos { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 8px; border-radius: var(--radio-chico); background: #d64545; color: #fff; font-family: var(--fuente-mono); font-size: 12px; line-height: 18px; font-weight: 500; text-align: center; font-variant-numeric: tabular-nums; }
 .lista-notificaciones { list-style: none; padding: 0; margin: 0; }
 .lista-notificaciones li.nueva { box-shadow: inset 3px 0 0 var(--info); }
@@ -320,6 +324,9 @@ details.tarjeta { padding: 12px 20px; border-radius: var(--radio-tarjeta); }
 .visor-docx .docx-wrapper > section.docx { box-shadow: var(--sombra-elevada); margin-bottom: 24px; hyphens: manual; }
 /* Dentro del visor el resaltado solo colorea: no cambia la fuente ni el ancho del texto */
 .visor-docx [class^='marca-'] { font: inherit; padding: 0; border-radius: 0; }
+/* Tabulación con relleno de guiones: docx-preview la subraya; se dibuja como guiones de Arial 12 (4 pt de paso) */
+.visor-docx .docx-tab-stop[style*='underline'] { text-decoration: none !important; background-image: repeating-linear-gradient(to right, transparent 0 0.4pt, currentColor 0.4pt 3.6pt, transparent 3.6pt 4pt); background-size: 100% 0.9pt; background-repeat: no-repeat; background-position: 0 58%; }
+.visor-docx .relleno-final[style*='underline'] { vertical-align: baseline; background-position: 0 74%; }
 .carga-nueva { padding: 12px 20px; }
 .carga-nueva > summary { color: var(--primario); }
 .carga-nueva[open] > summary { margin-bottom: 12px; }
@@ -343,7 +350,7 @@ details.tarjeta { padding: 12px 20px; border-radius: var(--radio-tarjeta); }
 
 /* Una sola entrada al cargar: el contenido sube unos píxeles y aparece */
 @keyframes entrar { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.principal > * { animation: entrar 360ms var(--curva) both; }
+.principal > * { animation: entrar 200ms var(--curva) both; }
 .principal > :nth-child(2) { animation-delay: 40ms; }
 .principal > :nth-child(3) { animation-delay: 80ms; }
 .principal > :nth-child(n+4) { animation-delay: 120ms; }

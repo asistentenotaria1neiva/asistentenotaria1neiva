@@ -5,6 +5,7 @@
  *                                    ↘ (devolver) DEVUELTO → (enviar) EN_REVISION …
  */
 import 'server-only';
+import { cache } from 'react';
 import type { Expediente, Prisma } from '@prisma/client';
 import { db } from '../db';
 import { auditar } from '../auditoria';
@@ -39,7 +40,14 @@ export async function obtenerExpediente(s: SesionActiva, id: string) {
   return e;
 }
 
-export const datosDe = (e: { datos: Prisma.JsonValue }): DatosExpediente => ({ ...datosVacios(), ...(e.datos as object) } as DatosExpediente);
+/**
+ * obtenerExpediente para el renderizado de las páginas: el layout del expediente y la página lo piden
+ * en la misma petición y con cache() se consulta una sola vez. Las acciones usan obtenerExpediente
+ * (siempre lee de la base).
+ */
+export const expedienteDePagina = cache(obtenerExpediente);
+
+export const datosDe =(e: { datos: Prisma.JsonValue }): DatosExpediente => ({ ...datosVacios(), ...(e.datos as object) } as DatosExpediente);
 export const actosDe = (e: { actos: Prisma.JsonValue }): string[] => (Array.isArray(e.actos) ? (e.actos as string[]) : []);
 
 // ------------------------------------------------------------------ creación

@@ -75,7 +75,9 @@ export interface ResultadoLlamada<T> {
  *   una segunda llamada con CLAUDE_MODELO_RESPALDO.
  */
 export async function llamarEstructurado<T>(opciones: OpcionesLlamada): Promise<ResultadoLlamada<T>> {
-  const { modelo, esfuerzo } = configuracionModelo(opciones.proposito);
+  const config = configuracionModelo(opciones.proposito);
+  const modelo = config.modelo;
+  const esfuerzo = opciones.esfuerzo ?? config.esfuerzo;
   try {
     return await llamar<T>(opciones, modelo, esfuerzo);
   } catch (e) {
@@ -91,6 +93,8 @@ interface OpcionesLlamada {
   contenido: Anthropic.Beta.BetaContentBlockParam[];
   esquema: Record<string, unknown>;
   maxTokens?: number;
+  /** Esfuerzo de razonamiento para esta llamada (p. ej. 'low' para identificar un documento); si no, el del propósito */
+  esfuerzo?: Esfuerzo;
 }
 
 async function llamar<T>(opciones: OpcionesLlamada, modelo: string, esfuerzo: Esfuerzo): Promise<ResultadoLlamada<T>> {

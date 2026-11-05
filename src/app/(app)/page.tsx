@@ -9,13 +9,13 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<{
   const s = await requerirSesion();
   const { error } = await searchParams;
   const rol = s.usuario.rol;
-  const [mios, enRevision, devueltos] = await Promise.all([
+  const [mios, enRevision, devueltos, alertas, equiposPendientes] = await Promise.all([
     db.expediente.findMany({ where: { responsableId: s.usuario.id, estado: { in: ['BORRADOR', 'DEVUELTO', 'EN_REVISION'] } }, include: incluir, orderBy: { actualizadoEn: 'desc' }, take: 50 }),
     rol !== 'DIGITADOR' ? db.expediente.findMany({ where: { estado: 'EN_REVISION' }, include: incluir, orderBy: { enviadoRevisionEn: 'asc' }, take: 50 }) : Promise.resolve([]),
     db.expediente.count({ where: { responsableId: s.usuario.id, estado: 'DEVUELTO' } }),
+    rol === 'ADMINISTRADOR' ? db.alerta.count({ where: { atendida: false } }) : Promise.resolve(0),
+    rol === 'ADMINISTRADOR' ? db.dispositivo.count({ where: { estado: 'PENDIENTE' } }) : Promise.resolve(0),
   ]);
-  const alertas = rol === 'ADMINISTRADOR' ? await db.alerta.count({ where: { atendida: false } }) : 0;
-  const equiposPendientes = rol === 'ADMINISTRADOR' ? await db.dispositivo.count({ where: { estado: 'PENDIENTE' } }) : 0;
   return (
     <>
       <div className="fila entre encabezado">

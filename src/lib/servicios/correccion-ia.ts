@@ -17,6 +17,7 @@ import { resolverRuta, validarValor, catalogo } from '../escritura/rutas';
 import { leerRuta, escribirRuta } from '../escritura/validar-formulario';
 import { llamarEstructurado, configuracionModelo, ErrorIA } from '../ia/cliente';
 import { SISTEMA_CORRECCION, ESQUEMA_CORRECCION } from '../ia/instrucciones';
+import { compactarHechos } from '../ia/documentos';
 import { obtenerExpediente, puedeEditar, guardarPaso, datosDe, actosDe, ErrorNegocio, type ActualizacionPaso } from './expedientes';
 import { evaluarExpediente, ejecutarRevision, resolverObservacion } from './revision';
 import { instruccionesAprobadas } from './documentos';
@@ -78,7 +79,7 @@ export async function proponerCorrecciones(s: SesionActiva, expedienteId: string
         actos,
         datos_formulario: datos,
         catalogo_campos: catalogo(actos),
-        documentos: documentos.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: d.tipoDocumental, hechos: d.hechos })),
+        documentos: documentos.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: d.tipoDocumental, hechos: compactarHechos(d.hechos) })),
         observaciones: observaciones.map((o) => ({ id: o.id, nivel: o.nivel, origen: o.origen, mensaje: o.mensaje, campo: o.campo, evidencia: o.evidencia })),
         borrador: borradorTexto ?? '(no se pudo generar el borrador: faltan datos)',
       };

@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { obtenerExpediente, puedeEditar, bloqueos } from '@/lib/servicios/expedientes';
+import { expedienteDePagina, puedeEditar, bloqueos } from '@/lib/servicios/expedientes';
 import { accionFlujo } from '../acciones';
 import { FormularioFlujo } from '../formularios';
 import { fecha } from '../../componentes';
@@ -8,7 +8,7 @@ import { fecha } from '../../componentes';
 export default async function ResumenExpediente({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const s = await requerirSesion();
-  const e = await obtenerExpediente(s, id);
+  const e = await expedienteDePagina(s, id);
   const [b, ultimoBorrador, historial, usuarios, nDocs, nAnalizados, nRevisiones] = await Promise.all([
     bloqueos(id),
     db.borrador.findFirst({ where: { expedienteId: id }, orderBy: { version: 'desc' } }),

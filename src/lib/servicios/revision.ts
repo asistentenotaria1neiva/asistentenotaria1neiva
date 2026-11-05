@@ -18,7 +18,7 @@ import { generarBorrador } from '../escritura/generar';
 import { obtenerConfig } from '../configuracion';
 import { llamarEstructurado, configuracionModelo, ErrorIA } from '../ia/cliente';
 import { SISTEMA_REVISION, ESQUEMA_REVISION } from '../ia/instrucciones';
-import type { ResultadoExtraccion, TipoDocumental } from '../ia/documentos';
+import { compactarHechos, type ResultadoExtraccion, type TipoDocumental } from '../ia/documentos';
 import { obtenerExpediente, datosDe, actosDe, ErrorNegocio } from './expedientes';
 import { instruccionesAprobadas } from './documentos';
 import { registrarCorreccion } from './aprendizaje';
@@ -127,7 +127,7 @@ export async function ejecutarRevision(s: SesionActiva, expedienteId: string, co
       const entrada = {
         actos,
         datos_formulario: datos,
-        documentos: documentos.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: d.tipoDocumental, hechos: d.hechos })),
+        documentos: documentos.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: d.tipoDocumental, hechos: compactarHechos(d.hechos) })),
         observaciones_automaticas: hallazgos.map((h) => ({ nivel: h.nivel, mensaje: h.mensaje })),
         borrador: borradorTexto ?? '(no se pudo generar el borrador: faltan datos)',
       };

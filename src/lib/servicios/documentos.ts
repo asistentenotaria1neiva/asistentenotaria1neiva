@@ -164,6 +164,25 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string): P
       }
       // Un solo documento: se lee de una vez con el esquema de su tipo
       if (partes[0] && partes[0].tipo !== 'OTRO') tipo = partes[0].tipo;
+    } else if (tipo === 'OTRO' && !doc.origenId && (doc.mime !== 'application/pdf' || paginas === 1)) {
+      // Una imagen o una sola página sin tipo: primero se identifica (respuesta corta, poco razonamiento)
+      // y se lee una sola vez con el esquema de su tipo, en lugar de leerla completa como «otro» y repetir.
+      try {
+        const cls = await llamarEstructurado<{ documentos: unknown }>({
+          proposito: 'EXTRACCION',
+          sistema: SISTEMA_SEPARACION,
+          contenido: [preparado.bloque, { type: 'text', text: 'El archivo es un solo documento de una página (o una imagen). Indica qué tipo de documento es, en un único elemento que cubra la página 1.' }],
+          esquema: ESQUEMA_SEPARACION,
+          maxTokens: 4000,
+          esfuerzo: 'low',
+        });
+        sumar(cls);
+        const t = normalizarSeparacion(cls.datos, 1)[0]?.tipo;
+        if (t && t !== 'OTRO') tipo = t;
+      } catch (err) {
+        // Sin identificar, se lee como «otro» y la extracción dice qué es (como antes)
+        if (!(err instanceof ErrorIA)) throw err;
+      }
     }
 
     const extraer = (t: TipoDocumental) => llamarEstructurado<ResultadoExtraccion>({

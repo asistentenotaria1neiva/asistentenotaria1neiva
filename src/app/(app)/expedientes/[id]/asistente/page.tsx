@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { obtenerExpediente, puedeEditar, datosDe, actosDe, bloqueos } from '@/lib/servicios/expedientes';
+import { expedienteDePagina, puedeEditar, datosDe, actosDe, bloqueos } from '@/lib/servicios/expedientes';
 import { after } from 'next/server';
 import { estadoAsistente, esAdicional, CODIGO_INCONSISTENCIA } from '@/lib/servicios/asistente';
 import { tareaEnCurso, tareaPorReanudar } from '@/lib/servicios/tareas';
@@ -48,7 +48,7 @@ const TERMINACION = [
 export default async function Asistente({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const s = await requerirSesion();
-  const e = await obtenerExpediente(s, id);
+  const e = await expedienteDePagina(s, id);
   const editable = puedeEditar(s, e);
   const datos = datosDe(e);
   const actos = actosDe(e);

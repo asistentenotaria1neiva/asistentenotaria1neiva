@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { obtenerExpediente, puedeEditar, bloqueos } from '@/lib/servicios/expedientes';
+import { expedienteDePagina, puedeEditar, bloqueos } from '@/lib/servicios/expedientes';
 import { accionGenerarBorrador } from '../../acciones';
 import { BotonAccion } from '../../formularios';
 import { Tabla, fecha } from '../../../componentes';
@@ -9,7 +9,7 @@ import { VisorDocx } from '../../../plantillas/VisorDocx';
 export default async function Borrador({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const s = await requerirSesion();
-  const e = await obtenerExpediente(s, id);
+  const e = await expedienteDePagina(s, id);
   const [versiones, b] = await Promise.all([
     db.borrador.findMany({ where: { expedienteId: id }, orderBy: { version: 'desc' } }),
     bloqueos(id),

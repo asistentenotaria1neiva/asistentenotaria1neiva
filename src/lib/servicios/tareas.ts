@@ -4,7 +4,7 @@
  * En Vercel cada invocación del servidor se corta a los 5 minutos (maxDuration), y analizar varios
  * documentos uno tras otro tarda más: la tarea moría a medias y los documentos quedaban «en curso».
  * Ahora la tarea avanza por etapas, cada una en su propia invocación:
- *   - DOCUMENTOS: hasta 3 documentos a la vez; pasado CORTE_MS no se empieza ninguno nuevo y la
+ *   - DOCUMENTOS: varios documentos a la vez (CONCURRENCIA); pasado CORTE_MS no se empieza ninguno nuevo y la
  *     siguiente etapa se encadena con una petición firmada a /api/tareas.
  *   - EXPEDIENTE (solo el asistente): tipo de escritura, inconsistencias y preguntas.
  * El avance queda en analisis_ia.progreso (la página muestra el porcentaje y qué documento se
@@ -45,7 +45,8 @@ export interface ProgresoTarea {
   base: string;
 }
 
-const CONCURRENCIA = 3;
+/** Documentos que se analizan a la vez (CLAUDE_CONCURRENCIA, de 1 a 8; 5 por defecto) */
+const CONCURRENCIA = Math.min(Math.max(Math.trunc(Number(process.env.CLAUDE_CONCURRENCIA)) || 5, 1), 8);
 /** Después de esto no se empieza otro documento en la etapa (cada análisis puede tardar ~3 minutos) */
 const CORTE_MS = 90_000;
 /** Sin cambios en este tiempo, la etapa se cortó (ninguna invocación dura más de 5 minutos) */

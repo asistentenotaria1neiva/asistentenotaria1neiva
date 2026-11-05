@@ -35,6 +35,33 @@ function resaltarEtiquetas(raiz: HTMLElement) {
   }
 }
 
+/**
+ * La tabulación que cierra un párrafo (relleno de guiones hasta el margen): docx-preview calcula mal
+ * su ancho cuando no hay texto después y la pasa al renglón siguiente. Se le da el ancho exacto
+ * hasta el margen derecho del párrafo. Se llama antes de reducir la página (mide en píxeles reales).
+ */
+function completarTabulacionesFinales(raiz: HTMLElement) {
+  for (const tab of raiz.querySelectorAll<HTMLElement>('.docx-tab-stop')) {
+    const p = tab.closest('p');
+    if (!p) continue;
+    // Solo la tabulación que cierra su renglón: sin texto después hasta el salto de línea o el fin del párrafo
+    const despues = document.createRange();
+    despues.setStartAfter(tab);
+    despues.setEndAfter(p.lastChild ?? p);
+    const salto = [...p.querySelectorAll('br')].find((br) => tab.compareDocumentPosition(br) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (salto) despues.setEndBefore(salto);
+    if (despues.toString().trim()) continue;
+    tab.style.display = 'inline-block';
+    tab.style.wordSpacing = '0';
+    tab.style.width = '0';
+    tab.innerHTML = '';
+    const derecha = p.getBoundingClientRect().right - parseFloat(getComputedStyle(p).paddingRight || '0');
+    tab.style.width = `${Math.max(0, derecha - tab.getBoundingClientRect().left - 0.5)}px`;
+    tab.style.height = '1em';
+    tab.classList.add('relleno-final');
+  }
+}
+
 /** Reduce el documento para que la página quepa a lo ancho del visor */
 function ajustarAncho(contenedor: HTMLElement, envoltura: HTMLElement, anchoPagina: number) {
   envoltura.style.zoom = String(Math.min(1, (contenedor.clientWidth - 2) / anchoPagina));
@@ -60,13 +87,21 @@ export function VisorDocx({ url }: { url: string }) {
         if (controlador.signal.aborted || !cuerpo.current || !estilos.current) return;
         cuerpo.current.innerHTML = '';
         estilos.current.innerHTML = '';
+        // experimental: calcula las tabulaciones (valores de la carátula a la derecha, relleno de guiones hasta el margen)
         await renderAsync(datos, cuerpo.current, estilos.current, {
           inWrapper: true, breakPages: true, renderHeaders: true, renderFooters: true, renderFootnotes: true,
-          useBase64URL: true, className: 'docx',
+          useBase64URL: true, className: 'docx', experimental: true,
         });
         resaltarEtiquetas(cuerpo.current);
         const envoltura = cuerpo.current.querySelector<HTMLElement>('.docx-wrapper');
         const pagina = envoltura?.querySelector<HTMLElement>('section.docx');
+        // docx-preview mide las tabulaciones medio segundo después de dibujar: se miden sin reducir
+        // la página (con la reducción saldrían corridas) y luego se reduce
+        if (envoltura) envoltura.style.visibility = 'hidden';
+        await new Promise((r) => setTimeout(r, 650));
+        if (controlador.signal.aborted) return;
+        completarTabulacionesFinales(cuerpo.current);
+        if (envoltura) envoltura.style.visibility = '';
         if (envoltura && pagina && contenedor.current) {
           const anchoPagina = pagina.offsetWidth + 48; // página + margen gris a los lados
           const c = contenedor.current;

@@ -1,10 +1,16 @@
 'use client';
 /** Navegación de la aplicación (cliente): marca la página activa y, en pantallas pequeñas, abre el menú como panel lateral */
 import { Fragment, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 
 export interface EnlaceMenu { href: string; texto: string; seccion?: string }
+
+/** Indicador del enlace que se está abriendo: respuesta inmediata al clic mientras llega la página */
+function Pendiente() {
+  const { pending } = useLinkStatus();
+  return <span className={`pendiente${pending ? ' activo' : ''}`} aria-hidden="true" />;
+}
 
 /** El enlace activo es el de ruta más larga que contiene la página actual ("/" solo cuando es exacta) */
 function enlaceActivo(ruta: string, hrefs: string[]): string | undefined {
@@ -44,7 +50,7 @@ export function MenuLateral({ enlaces, children }: { enlaces: EnlaceMenu[]; chil
         {enlaces.map((e) => (
           <Fragment key={e.href}>
             {e.seccion && <div className="seccion">{e.seccion}</div>}
-            <Link href={e.href} aria-current={e.href === activo ? 'page' : undefined}>{e.texto}</Link>
+            <Link href={e.href} aria-current={e.href === activo ? 'page' : undefined}>{e.texto}<Pendiente /></Link>
           </Fragment>
         ))}
         {children}

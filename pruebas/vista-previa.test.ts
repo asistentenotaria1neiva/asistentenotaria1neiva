@@ -54,6 +54,6 @@ describe('vista previa de plantillas', () => {
     const conFaltante = renderizarPlantilla(docxCon('<w:p><w:r><w:t>Dato: {{a.no_existe}}</w:t></w:r></w:p>'), {});
     expect(conFaltante.faltantes).toEqual(['a.no_existe']);
     const [p] = vistaPreviaDocx(conFaltante.docx, { marcarFaltantes: true });
-    expect(p.segmentos.at(-1)).toMatchObject({ clase: 'faltante', texto: `${MARCA_FALTANTE} a.no_existe»` });
+    expect(p.segmentos.find((s) => s.clase === 'faltante')).toMatchObject({ clase: 'faltante', texto: `${MARCA_FALTANTE} a.no_existe»` });
   });
 });

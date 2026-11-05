@@ -11,7 +11,7 @@ import { requerirSesion, datosAuditoria } from '@/lib/sesion';
 import { auditar, verificarCadena } from '@/lib/auditoria';
 import { hashContrasena } from '@/lib/seguridad/contrasenas';
 import { ErrorPlantilla } from '@/lib/servicios/plantillas';
-import { POR_DEFECTO, type Configuraciones } from '@/lib/configuracion';
+import { POR_DEFECTO, invalidarConfig, type Configuraciones } from '@/lib/configuracion';
 
 export interface ResultadoAdmin { error?: string; ok?: string; secreto?: string }
 
@@ -201,6 +201,7 @@ export async function accionConfiguracion(_: ResultadoAdmin, f: FormData): Promi
     if (clave === 'red.ips_oficina' && Array.isArray(valor) && !valor.length) throw new ErrorAdmin('Debe haber al menos una IP de la oficina (si no, el personal no podría ingresar).');
     const anterior = await db.configuracion.findUnique({ where: { clave } });
     await db.configuracion.upsert({ where: { clave }, create: { clave, valor: valor as object, actualizadoPor: s.usuario.id }, update: { valor: valor as object, actualizadoPor: s.usuario.id } });
+    invalidarConfig();
     await auditar({ ...datosAuditoria(s), accion: 'CONFIGURACION_CAMBIADA', entidad: 'configuracion', entidadId: clave, detalle: { anterior: (anterior?.valor ?? POR_DEFECTO[clave]) as object, nuevo: valor as object } });
     return `Parámetro "${clave}" actualizado.`;
   });

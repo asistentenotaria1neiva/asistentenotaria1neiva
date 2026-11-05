@@ -48,14 +48,47 @@ export const DESCRIPCIONES: Record<keyof Configuraciones, string> = {
   'ia.creditos': 'Saldo de créditos de la API de Claude (US$) tal como aparece en la consola de Anthropic (Billing) y la fecha en que se tomó (AAAA-MM-DD). Actualícelo cada vez que recargue. El saldo restante se calcula restando el costo real desde esa fecha.',
 };
 
+/**
+ * La configuración se consulta en cada página (sesión: inactividad, IP de la oficina…). Se lee la
+ * tabla completa en una sola consulta y se guarda en memoria unos segundos: así cada petición no
+ * paga varios viajes a la base de datos. Un cambio desde el panel se aplica de inmediato en este
+ * servidor (invalidarConfig) y en los demás a más tardar en TTL_CONFIG_MS.
+ */
+const TTL_CONFIG_MS = 30_000;
+let enMemoria: { filas: Map<string, unknown>; vence: number } | undefined;
+let cargando: Promise<Map<string, unknown>> | undefined;
+
+function filasConfig(): Promise<Map<string, unknown>> {
+  if (enMemoria && enMemoria.vence > Date.now()) return Promise.resolve(enMemoria.filas);
+  if (cargando) return cargando;
+  const gen = generacion;
+  const p = db.configuracion.findMany()
+    .then((filas) => {
+      const m = new Map<string, unknown>(filas.map((f) => [f.clave, f.valor]));
+      // Una lectura que empezó antes de un cambio no queda en memoria
+      if (gen === generacion) enMemoria = { filas: m, vence: Date.now() + TTL_CONFIG_MS };
+      return m;
+    })
+    .finally(() => { if (cargando === p) cargando = undefined; });
+  cargando = p;
+  return p;
+}
+let generacion = 0;
+
+/** Descarta la configuración en memoria (después de guardar un cambio) */
+export function invalidarConfig(): void {
+  generacion++;
+  enMemoria = undefined;
+  cargando = undefined;
+}
+
 export async function obtenerConfig<K extends keyof Configuraciones>(clave: K): Promise<Configuraciones[K]> {
-  const fila = await db.configuracion.findUnique({ where: { clave } });
-  return (fila?.valor as Configuraciones[K] | undefined) ?? POR_DEFECTO[clave];
+  return ((await filasConfig()).get(clave) as Configuraciones[K] | null | undefined) ?? POR_DEFECTO[clave];
 }
 
 export async function todasConfig(): Promise<Configuraciones> {
-  const filas = await db.configuracion.findMany();
+  const filas = await filasConfig();
   const r = { ...POR_DEFECTO } as Record<string, unknown>;
-  for (const f of filas) if (f.clave in r) r[f.clave] = f.valor;
+  for (const [clave, valor] of filas) if (clave in r) r[clave] = valor;
   return r as unknown as Configuraciones;
 }

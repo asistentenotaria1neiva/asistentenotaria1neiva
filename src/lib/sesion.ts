@@ -10,6 +10,7 @@
  *  - Cookies HttpOnly, Secure (producción) y SameSite=Strict; en la base solo se guarda la huella HMAC del token.
  */
 import 'server-only';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Rol } from '@prisma/client';
@@ -143,7 +144,18 @@ export async function iniciarSesion(usuarioTxt: string, contrasena: string, huel
  * Lee y valida la sesión de la petición actual (sin redirigir). `sinActividad`: no cuenta como
  * actividad (p. ej. la consulta periódica de notificaciones), para no impedir el cierre por inactividad.
  */
-export async function leerSesion(opciones: { sinActividad?: boolean } = {}): Promise<SesionActiva | null> {
+export function leerSesion(opciones: { sinActividad?: boolean } = {}): Promise<SesionActiva | null> {
+  return leerSesionPorPeticion(!!opciones.sinActividad);
+}
+
+/**
+ * El layout y la página de una misma petición piden la sesión cada uno: con cache() se valida una
+ * sola vez por petición (una consulta a la base en lugar de dos o más). En las acciones y rutas de
+ * la API, fuera del renderizado, cache() no guarda nada y se valida cada vez, como antes.
+ */
+const leerSesionPorPeticion = cache((sinActividad: boolean) => validarSesion({ sinActividad }));
+
+async function validarSesion(opciones: { sinActividad?: boolean }): Promise<SesionActiva | null> {
   const token = verificarTokenFirmado((await cookies()).get(COOKIE_SESION)?.value);
   if (!token) return null;
   const s = await db.sesion.findUnique({ where: { tokenHash: huellaToken(token) }, include: { usuario: true, dispositivo: true } });

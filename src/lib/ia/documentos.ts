@@ -323,6 +323,32 @@ export function normalizarExtraccion(tipo: TipoDocumental, r: ResultadoExtraccio
 }
 
 /**
+ * Hechos de un documento para enviarlos a la IA (asistente, revisión, corrección): sin los datos
+ * que no aparecieron (valor null) ni sus campos vacíos. El esquema de extracción tiene decenas de
+ * campos y la mayoría no aplica a cada documento: así no se pagan tokens por ellos en cada llamada.
+ * Lo que sí se leyó llega igual, con su página, fragmento y confianza.
+ */
+export function compactarHechos(hechos: unknown): unknown {
+  if (!hechos || typeof hechos !== 'object' || Array.isArray(hechos)) return hechos;
+  const limpiar = (x: unknown): unknown => {
+    if (Array.isArray(x)) {
+      const l = x.map(limpiar).filter((y) => y !== undefined);
+      return l.length ? l : undefined;
+    }
+    if (!x || typeof x !== 'object') return x === '' ? undefined : x;
+    const o = x as Record<string, unknown>;
+    if ('valor' in o && 'confianza' in o) {
+      if (o.valor === null || o.valor === undefined || o.valor === '') return undefined;
+      return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null));
+    }
+    const r = Object.fromEntries(Object.entries(o).map(([k, v]) => [k, limpiar(v)] as const).filter(([, v]) => v !== undefined && v !== null));
+    return Object.keys(r).length ? r : undefined;
+  };
+  const h = hechos as Record<string, unknown>;
+  return { ...h, datos: limpiar(h.datos) ?? {} };
+}
+
+/**
  * Cédulas de un documento: la lista «cedulas» o, en los análisis anteriores (una cédula por
  * documento), los datos sueltos.
  */

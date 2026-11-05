@@ -57,6 +57,14 @@ const DOCS_INMUEBLE: TipoDocumental[] = ['CERTIFICADO_TRADICION', 'ESCRITURA_ANT
 // El título de adquisición no: quienes intervinieron en él no son comparecientes y lo que declararon
 // entonces (estado civil, actividad) no vale para esta escritura
 const DOCS_PERSONA: TipoDocumental[] = ['CEDULA', 'PODER', 'CERTIFICADO_EXISTENCIA', 'REGISTRO_CIVIL_NACIMIENTO', 'REGISTRO_CIVIL_MATRIMONIO', 'OTRO'];
+/** Tipos de documento donde puede estar un dato que falta */
+function documentosDelDato(f: { entidad: 'persona' | 'inmueble'; campo: Campo }): TipoDocumental[] {
+  if (f.entidad === 'persona') return DOCS_PERSONA;
+  const id = f.campo.id;
+  if (id.startsWith('paz_salvo.') || id === 'cedula_catastral_paz_salvo') return ['PAZ_Y_SALVO', 'OTRO'];
+  if (id === 'fecha_certificado_tradicion') return ['CERTIFICADO_TRADICION', 'OTRO'];
+  return DOCS_INMUEBLE;
+}
 /** Primero los que más datos traen: si no caben todos, se dejan los últimos */
 const PRIORIDAD: TipoDocumental[] = ['CERTIFICADO_TRADICION', 'ESCRITURA_ANTERIOR', 'PAZ_Y_SALVO', 'PODER', 'CERTIFICADO_EXISTENCIA', 'CEDULA', 'REGISTRO_CIVIL_MATRIMONIO', 'REGISTRO_CIVIL_NACIMIENTO', 'OTRO'];
 /** Límites de una solicitud con varios documentos (la API admite 100 páginas y 32 MB) */
@@ -134,7 +142,9 @@ export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId:
   if (!puedeEditar(s, e)) return 0;
   const faltantes = faltantesBuscables(datosDe(e));
   if (!faltantes.length) return 0;
-  const tipos = new Set([...(faltantes.some((f) => f.entidad === 'inmueble') ? DOCS_INMUEBLE : []), ...(faltantes.some((f) => f.entidad === 'persona') ? DOCS_PERSONA : [])]);
+  // Solo los documentos donde puede estar algún dato que falta: si solo falta el paz y salvo, no se
+  // reenvía el título de adquisición completo (decenas de páginas)
+  const tipos = new Set(faltantes.flatMap(documentosDelDato));
   const docs = (await db.documento.findMany({ where: { expedienteId, estadoAnalisis: 'COMPLETADO' }, orderBy: { creadoEn: 'asc' } }))
     .filter((d) => tipos.has(d.tipoDocumental as TipoDocumental))
     .sort((a, b) => PRIORIDAD.indexOf(a.tipoDocumental as TipoDocumental) - PRIORIDAD.indexOf(b.tipoDocumental as TipoDocumental));

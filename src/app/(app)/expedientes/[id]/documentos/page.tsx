@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { after } from 'next/server';
-import { obtenerExpediente, puedeEditar, actosDe } from '@/lib/servicios/expedientes';
+import { expedienteDePagina, puedeEditar, actosDe } from '@/lib/servicios/expedientes';
 import { tareaEnCurso, tareaPorReanudar, recuperarDocumentosTrabados } from '@/lib/servicios/tareas';
 import { TIPOS_DOCUMENTALES, type DatoConFuente } from '@/lib/ia/documentos';
 import { ESQUEMAS } from '@/lib/escritura/esquemas';
@@ -48,7 +48,7 @@ function Hechos({ hechos }: { hechos: Record<string, unknown> }) {
 export default async function Documentos({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const s = await requerirSesion();
-  const e = await obtenerExpediente(s, id);
+  const e = await expedienteDePagina(s, id);
   const editable = puedeEditar(s, e);
   // Un análisis que dejó de avanzar se reanuda; los documentos que quedaron «en curso» sin análisis vivo se recuperan
   if (editable) {
@@ -56,8 +56,7 @@ export default async function Documentos({ params }: { params: Promise<{ id: str
     if (reanudar) after(reanudar);
     else await recuperarDocumentosTrabados(id);
   }
-  const tarea = await tareaEnCurso(id);
-  const docs = await db.documento.findMany({ where: { expedienteId: id }, orderBy: { creadoEn: 'asc' } });
+  const [tarea, docs] = await Promise.all([tareaEnCurso(id), db.documento.findMany({ where: { expedienteId: id }, orderBy: { creadoEn: 'asc' } })]);
   const requeridos = [...new Map(actosDe(e).flatMap((a) => ESQUEMAS[a]?.documentosSoporte ?? []).map((d) => [d.etiqueta, d])).values()];
   const pendientes = docs.filter((d) => d.estadoAnalisis === 'PENDIENTE' || d.estadoAnalisis === 'ERROR').length;
   const iaDisponible = !!process.env.ANTHROPIC_API_KEY;

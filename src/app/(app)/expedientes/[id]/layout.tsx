@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requerirSesion } from '@/lib/sesion';
-import { obtenerExpediente, ErrorNegocio } from '@/lib/servicios/expedientes';
+import { expedienteDePagina, ErrorNegocio } from '@/lib/servicios/expedientes';
 import { db } from '@/lib/db';
 import { EtiquetaEstado } from '../../componentes';
 import { PestanasExpediente } from '../../navegacion';
@@ -10,7 +10,7 @@ export default async function ExpedienteLayout({ children, params }: { children:
   const { id } = await params;
   const s = await requerirSesion();
   let e;
-  try { e = await obtenerExpediente(s, id); } catch (err) { if (err instanceof ErrorNegocio) notFound(); throw err; }
+  try { e = await expedienteDePagina(s, id); } catch (err) { if (err instanceof ErrorNegocio) notFound(); throw err; }
   const [docs, abiertas, borradores] = await Promise.all([
     db.documento.count({ where: { expedienteId: id } }),
     db.observacion.count({ where: { expedienteId: id, estado: 'ABIERTA' } }),

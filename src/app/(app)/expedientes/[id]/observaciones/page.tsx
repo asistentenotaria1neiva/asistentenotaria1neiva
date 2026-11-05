@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { obtenerExpediente, puedeEditar, datosDe } from '@/lib/servicios/expedientes';
+import { expedienteDePagina, puedeEditar, datosDe } from '@/lib/servicios/expedientes';
 import { estadoCorreccion } from '@/lib/servicios/correccion-ia';
 import { revisionIAEnCurso } from '@/lib/servicios/revision';
 import type { DatosExpediente } from '@/lib/escritura/tipos';
@@ -31,17 +31,20 @@ function mostrar(v: unknown, datos: DatosExpediente): string {
 export default async function Observaciones({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const s = await requerirSesion();
-  const e = await obtenerExpediente(s, id);
-  const obs = await db.observacion.findMany({ where: { expedienteId: id }, include: { resueltaPor: { select: { nombreCompleto: true } } }, orderBy: { creadaEn: 'desc' } });
+  const e = await expedienteDePagina(s, id);
+  const corregirConIA = puedeEditar(s, e) && !!process.env.ANTHROPIC_API_KEY;
+  // Consultas independientes: en paralelo
+  // (la última revisión se lee después de dar por interrumpida la que se quedó en curso)
+  const [obs, [enCurso, ultima], correccion] = await Promise.all([
+    db.observacion.findMany({ where: { expedienteId: id }, include: { resueltaPor: { select: { nombreCompleto: true } } }, orderBy: { creadaEn: 'desc' } }),
+    revisionIAEnCurso(id).then(async (r) => [r, await db.analisisIA.findFirst({ where: { expedienteId: id, proposito: 'REVISION' }, orderBy: { creadoEn: 'desc' } })] as const),
+    corregirConIA ? estadoCorreccion(id) : Promise.resolve(null),
+  ]);
   const abiertas = obs.filter((o) => o.estado === 'ABIERTA').sort((a, b) => ORDEN[a.nivel] - ORDEN[b.nivel]);
   const resueltas = obs.filter((o) => o.estado !== 'ABIERTA');
-  const enCurso = await revisionIAEnCurso(id);
-  const ultima = await db.analisisIA.findFirst({ where: { expedienteId: id, proposito: 'REVISION' }, orderBy: { creadoEn: 'desc' } });
   const puedeRevisar = puedeEditar(s, e) || (s.usuario.rol !== 'DIGITADOR' && e.estado === 'EN_REVISION');
   const resolver = accionResolverObservacion.bind(null, id);
   const conteo = (n: string) => abiertas.filter((o) => o.nivel === n).length;
-  const corregirConIA = puedeEditar(s, e) && !!process.env.ANTHROPIC_API_KEY;
-  const correccion = corregirConIA ? await estadoCorreccion(id) : null;
   const propuesta = correccion?.propuesta;
   const datos = datosDe(e);
   const mensajeDe = (observacionId: string) => obs.find((o) => o.id === observacionId)?.mensaje ?? 'Observación ya resuelta';
