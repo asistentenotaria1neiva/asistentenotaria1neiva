@@ -44,10 +44,8 @@ export function esVivienda(i: InmuebleAfectacion): boolean {
 function motivoNoVivienda(inmuebles: InmuebleAfectacion[]): string {
   const tipos = [...new Set(inmuebles.map((i) => i.tipo_inmueble ?? ''))];
   const varios = inmuebles.length > 1;
-  if (tipos.every((t) => t === 'LOTE' || t === 'PREDIO RURAL')) {
-    if (tipos.length === 1 && tipos[0] === 'PREDIO RURAL') return varios ? 'predios rurales sin construcción' : 'un predio rural sin construcción';
-    return varios ? 'lotes de terreno sin construcción' : 'un lote de terreno sin construcción';
-  }
+  // También un predio rural sin construcción: «por tratarse de un lote de terreno sin construcción» (COMPRAVENTA LOTE RURAL, 2026)
+  if (tipos.every((t) => t === 'LOTE' || t === 'PREDIO RURAL')) return varios ? 'lotes de terreno sin construcción' : 'un lote de terreno sin construcción';
   if (!varios && NO_VIVIENDA[tipos[0]]) return `${NO_VIVIENDA[tipos[0]]}, inmueble no destinado a la habitación de la familia`;
   return 'inmuebles no destinados a la habitación de la familia';
 }

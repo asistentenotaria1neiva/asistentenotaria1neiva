@@ -64,7 +64,9 @@ export function textoTradicion(t: Inmueble['tradicion']): { completo: string; mo
 
 export function prepararInmueble(i: Inmueble): InmueblePreparado {
   const municipio_texto = municipioTexto(i.municipio, i.departamento);
-  const partes = [`${TIPO_TEXTO[i.tipo_inmueble]} ubicado en la ${i.direccion}, en ${municipio_texto}`];
+  // Un predio rural sin construcción se describe como lote de terreno (COMPRAVENTA LOTE RURAL, 2026)
+  const tipoTexto = i.tipo_inmueble === 'PREDIO RURAL' && !(Number(i.area_construida) > 0) ? TIPO_TEXTO.LOTE : TIPO_TEXTO[i.tipo_inmueble];
+  const partes = [`${tipoTexto} ubicado en la ${i.direccion}, en ${municipio_texto}`];
   if (i.area_terreno) partes.push(`con área de ${medidaEnLetras(i.area_terreno, 'METROS CUADRADOS', 'M2')}`);
   if (i.area_construida) {
     const construccion = i.tipo_inmueble === 'CASA' ? 'la casa de habitación' : 'la construcción';

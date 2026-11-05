@@ -59,6 +59,17 @@ describe('generación de borradores sobre las plantillas', () => {
     expect(texto).not.toContain('razón por la cual no procede');
   });
 
+  it('predio rural sin construcción: se describe y se trata como lote de terreno (COMPRAVENTA LOTE RURAL)', async () => {
+    const caso = structuredClone(casos.find((c) => c.clave === 'compraventa_simple')!);
+    const comprador = caso.datos.personas.find((p) => (caso.datos.actos.compraventa.compradores as string[]).includes(p.id))!;
+    comprador.estado_civil = 'SOLTERO(A), CON UNION MARITAL DE HECHO';
+    caso.datos.inmuebles[0].tipo_inmueble = 'PREDIO RURAL';
+    caso.datos.inmuebles[0].area_construida = 0;
+    const { texto } = await generarBorrador(prepararContexto(caso.datos, caso.actos), cargar);
+    expect(texto).toContain('Lote de terreno ubicado en la');
+    expect(texto).toContain('b. No procede la AFECTACIÓN A VIVIENDA FAMILIAR de que trata la Ley 258 de 1996, reformada por la Ley 854 de 2003, por tratarse de un lote de terreno sin construcción.');
+  });
+
   it('local comercial: no procede la afectación aunque el comprador sea casado', async () => {
     const caso = structuredClone(casos.find((c) => c.clave === 'compraventa_simple')!);
     const comprador = caso.datos.personas.find((p) => (caso.datos.actos.compraventa.compradores as string[]).includes(p.id))!;

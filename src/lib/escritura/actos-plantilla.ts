@@ -67,26 +67,68 @@ function fragmento(texto: string, marca: string): string | undefined {
 
 const LARGOS = /lindero|descripcion|forma_pago|clausula|comparecencia|observacion|alinderacion|historia|tradicion_completa/;
 
-/** Campos del formulario de un acto por plantilla, en el orden en que aparecen en ella */
+/** Condición de un bloque: {{#x}} se imprime si x es verdadero; {{^x}}, si es falso */
+interface Condicion { id: string; si: boolean }
+
+const SI = [true, 'true'];
+const NO = [false, 'false', undefined, null, ''];
+const cumple = (c: Condicion, d: DatosActo) => (d[c.id] === true || d[c.id] === 'true') === c.si;
+
+/** Bloques que encierran cada aparición de las variables: una lista de condiciones por aparición */
+const condicionesPorVariable = new WeakMap<Campo[], Map<string, Condicion[][]>>();
+
+/**
+ * Campos del formulario de un acto por plantilla, en el orden en que aparecen en ella. Una variable
+ * que solo aparece dentro de un bloque condicional ({{#hay_hijos}} … {{/hay_hijos}}) solo se muestra
+ * y se exige cuando ese bloque se imprime.
+ */
 export function camposDePlantilla(parrafos: Parrafo[]): Campo[] {
   const lineas = parrafos.map((p) => p.segmentos.map((s) => s.texto).join(''));
   const texto = lineas.join('\n');
   const campos: Campo[] = [];
-  const vistos = new Set<string>();
+  const apariciones = new Map<string, Condicion[][]>();
+  const pila: Condicion[] = [];
   // Primera aparición de cada etiqueta, en orden
-  for (const m of texto.matchAll(/\{\{\s*([#^]?)\s*([^{}]+?)\s*\}\}/g)) {
+  for (const m of texto.matchAll(/\{\{\s*([#^/]?)\s*([^{}]+?)\s*\}\}/g)) {
     const [marca, signo, cuerpo] = m;
-    if (cuerpo.startsWith('/')) continue;
     const id = base(cuerpo);
-    if (vistos.has(id) || !/^[a-z0-9_]+(\.[a-z0-9_]+)?$/i.test(id)) continue;
-    vistos.add(id);
-    if (AUTOMATICAS.has(id) || RAICES_SISTEMA.has(id.split('.')[0])) continue;
-    const ayuda = fragmento(texto, marca);
-    campos.push(signo
-      ? { id, etiqueta: `¿${etiquetaDe(id)}?`, tipo: 'booleano', ayuda: ayuda && `Si es «Sí», se imprime el texto que empieza en: ${ayuda}` }
-      : { id, etiqueta: etiquetaDe(id), tipo: LARGOS.test(id) ? 'textoLargo' : 'texto', obligatorio: true, ayuda: ayuda && `Va en la escritura así: ${ayuda}` });
+    if (signo === '/') {
+      const i = pila.map((c) => c.id).lastIndexOf(id);
+      if (i >= 0) pila.splice(i);
+      continue;
+    }
+    const valido = /^[a-z0-9_]+(\.[a-z0-9_]+)?$/i.test(id);
+    const delSistema = !valido || AUTOMATICAS.has(id) || RAICES_SISTEMA.has(id.split('.')[0]);
+    if (!delSistema) {
+      const previas = apariciones.get(id);
+      apariciones.set(id, [...(previas ?? []), [...pila]]);
+      if (!previas) {
+        const ayuda = fragmento(texto, marca);
+        campos.push(signo
+          ? { id, etiqueta: `¿${etiquetaDe(id)}?`, tipo: 'booleano', ayuda: ayuda && `Si es «Sí», se imprime el texto que empieza en: ${ayuda}` }
+          : { id, etiqueta: etiquetaDe(id), tipo: LARGOS.test(id) ? 'textoLargo' : 'texto', obligatorio: true, ayuda: ayuda && `Va en la escritura así: ${ayuda}` });
+      }
+    }
+    if (signo) pila.push({ id, si: signo === '#' });
   }
+  // Solo visible (y exigido) si el bloque que la encierra se imprime; si aparece también fuera de bloques, siempre
+  for (const c of campos) {
+    const lista = apariciones.get(c.id)!;
+    if (lista.some((conds) => !conds.length)) continue;
+    // Todas sus apariciones dentro del mismo bloque: se muestra con él; si está en bloques distintos, siempre
+    const interiores = lista.map((conds) => conds[conds.length - 1]);
+    const interior = interiores[0];
+    if (interiores.some((x) => x.id !== interior.id || x.si !== interior.si)) continue;
+    c.visibleSi = { campo: interior.id, valores: interior.si ? SI : NO };
+  }
+  condicionesPorVariable.set(campos, apariciones);
   return campos;
+}
+
+/** ¿El campo se imprime con estos datos? (alguna de sus apariciones queda fuera de bloques que no aplican) */
+function seImprime(campos: Campo[], c: Campo, d: DatosActo): boolean {
+  const lista = condicionesPorVariable.get(campos)?.get(c.id);
+  return !lista || lista.some((conds) => conds.every((x) => cumple(x, d)));
 }
 
 export interface TipoParaActo { id: string; nombre: string; categoria: string }
@@ -113,7 +155,7 @@ export function actoDesdePlantilla(tipo: TipoParaActo, archivo: Buffer, plantill
     enajenacion: false, registro: sobreInmuebles, libroVarios: false,
     preparar(d: DatosActo): ActoPreparado {
       const vacio = (v: unknown) => v === undefined || v === null || (typeof v === 'string' && !v.trim());
-      const faltan = campos.filter((c) => c.obligatorio && vacio(d[c.id])).map((c) => c.etiqueta);
+      const faltan = campos.filter((c) => c.obligatorio && seImprime(campos, c, d) && vacio(d[c.id])).map((c) => c.etiqueta);
       if (faltan.length) throw new ErrorDatos(faltan);
       const plano: Record<string, unknown> = {};
       for (const c of campos) {

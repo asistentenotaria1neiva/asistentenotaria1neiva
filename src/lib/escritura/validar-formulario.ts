@@ -24,17 +24,24 @@ export function escribirRuta(obj: Record<string, unknown>, ruta: string, valor: 
 
 const vacio = (v: unknown) => v === undefined || v === null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
 
-export function campoVisible(c: Campo, valores: Record<string, unknown>): boolean {
+/**
+ * ¿Se muestra el campo? Con `campos` (los del mismo nivel), la visibilidad se encadena: si el campo
+ * del que depende está oculto, este también (bloques anidados de una plantilla).
+ */
+export function campoVisible(c: Campo, valores: Record<string, unknown>, campos?: Campo[], vistos = new Set<string>()): boolean {
   if (!c.visibleSi) return true;
   const actual = leerRuta(valores, c.visibleSi.campo);
-  return c.visibleSi.valores.some((x) => x === actual || String(x) === String(actual));
+  if (!c.visibleSi.valores.some((x) => x === actual || String(x) === String(actual))) return false;
+  const padre = campos?.find((x) => x.id === c.visibleSi!.campo);
+  if (!padre || vistos.has(padre.id)) return true;
+  return campoVisible(padre, valores, campos, vistos.add(c.id));
 }
 
 /** Valida un conjunto de campos sobre un objeto de valores; prefijo para las rutas de error */
 export function validarCampos(campos: Campo[], valores: Record<string, unknown>, prefijo = ''): Errores {
   const errores: Errores = {};
   for (const c of campos) {
-    if (!campoVisible(c, valores)) continue;
+    if (!campoVisible(c, valores, campos)) continue;
     const v = leerRuta(valores, c.id);
     const ruta = prefijo + c.id;
     if (vacio(v)) {
