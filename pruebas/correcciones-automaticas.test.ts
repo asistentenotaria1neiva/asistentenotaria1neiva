@@ -65,7 +65,38 @@ describe('paz y salvo vigente: uno antiguo no cuenta', () => {
   it('si el más reciente sí está vencido, se advierte', () => {
     const d = datosVacios();
     d.inmuebles = [inmueble()];
-    const h = evaluarReglas({ datos: d, actos: [], documentos: [{ ...docs[0], tipo: 'PAZ_Y_SALVO' as const }], hoy: new Date('2026-11-05') });
-    expect(h.some((x) => x.codigo === 'R04-PAZ-SALVO-VENCIDO')).toBe(true);
+    // Vencido hace unos días (no es histórico) y la escritura transfiere el inmueble
+    const reciente = { id: 'reciente', nombre: 'paz y salvo', tipo: 'PAZ_Y_SALVO' as const, hechos: hechos('410010101000000010001000000000', '2026-10-31', 95000000) };
+    const h = evaluarReglas({ datos: d, actos: ['compraventa'], documentos: [{ ...docs[0], tipo: 'PAZ_Y_SALVO' as const }, reciente], hoy: new Date('2026-11-05') });
+    expect(h.find((x) => x.codigo === 'R04-PAZ-SALVO-VENCIDO')).toMatchObject({ nivel: 'CRITICA', mensaje: expect.stringContaining('2026-10-31') });
+  });
+});
+
+describe('paz y salvo histórico (vencido hace más de un año)', () => {
+  const base = (): Inmueble => ({
+    id: 'i1', tipo_inmueble: 'CASA', direccion: 'CL 1', municipio: 'Neiva', departamento: 'Huila', linderos: 'x', matricula: '206-28835', orip: 'NEIVA - HUILA',
+    cedula_catastral: '410010101000000010001000000000', fecha_certificado_tradicion: '2026-10-30',
+    tradicion: { modo: 'COMPRA', tradente: 'X', escritura_numero: '1', escritura_fecha: '2020-01-01', notaria: 'la Notaria Primera de Neiva' },
+    paz_salvo: { entidad: 'la Secretaría de Hacienda de Neiva (H)', vigencia_hasta: '2011-10-31', avaluo: 9000000 },
+  } as Inmueble);
+  const viejo = { id: 'viejo', nombre: 'paz y salvo 2011', tipo: 'PAZ_Y_SALVO' as const, hechos: hechos('410010101000000010001000000000', '2011-10-31', 9000000) };
+
+  it('es el único cargado: no se marca vencido ni se toma', () => {
+    const d = datosVacios();
+    d.inmuebles = [base()];
+    d.actos.cancelacion_hipoteca = {};
+    const h = evaluarReglas({ datos: d, actos: ['cancelacion_hipoteca'], documentos: [viejo], hoy: new Date('2026-11-05') });
+    expect(h.filter((x) => x.codigo.startsWith('R04'))).toEqual([]);
+    const i = base();
+    expect(aplicarPazYSalvoVigente([i], pazYSalvosPorInmueble([i], []), '2026-11-05')).toEqual(['i1']);
+    expect(i.paz_salvo).toBeUndefined();
+  });
+
+  it('en una cancelación de hipoteca, uno recién vencido es informativo; en una compraventa, crítico', () => {
+    const d = datosVacios();
+    d.inmuebles = [{ ...base(), paz_salvo: { entidad: 'x', vigencia_hasta: '2026-10-31', avaluo: 1 } } as Inmueble];
+    const nivel = (actos: string[]) => evaluarReglas({ datos: d, actos, documentos: [], hoy: new Date('2026-11-05') }).find((x) => x.codigo === 'R04-PAZ-SALVO-VENCIDO')?.nivel;
+    expect(nivel(['cancelacion_hipoteca'])).toBe('INFORMATIVA');
+    expect(nivel(['compraventa'])).toBe('CRITICA');
   });
 });

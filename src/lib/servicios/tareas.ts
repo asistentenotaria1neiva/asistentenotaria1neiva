@@ -21,7 +21,7 @@ import type { SesionActiva } from '../sesion-tipos';
 import { ErrorIA, configuracionModelo } from '../ia/cliente';
 import { obtenerExpediente, puedeEditar, aplicarSugerenciasConfiables, retirarInmueblesSobrantes, ErrorNegocio } from './expedientes';
 import { analizarDocumento } from './documentos';
-import { buscarFaltantesEnDocumentos } from './busqueda';
+import { buscarFaltantesEnDocumentos, faltanOtrasPersonas } from './busqueda';
 import { prepararPreguntas } from './asistente';
 import { notificar } from './notificaciones';
 
@@ -39,6 +39,8 @@ export interface ProgresoTarea {
   /** Cada etapa toma un turno; una invocación con un turno viejo no hace nada */
   turno: number;
   reanudaciones: number;
+  /** Búsqueda: falta la segunda pasada, la de los datos de las demás personas de un papel */
+  otrasPersonas?: boolean;
   /** El encadenamiento de la siguiente etapa falló: la página la reanuda sin esperar */
   sinEncadenar?: boolean;
   sesion: SesionActiva;
@@ -236,9 +238,20 @@ export async function ejecutarEtapa(id: string, turno: number): Promise<void> {
     if (p.fase === 'BUSQUEDA') {
       // Antes de preguntar, lo que quedó vacío se busca en los documentos; si falla, se pregunta como antes
       try {
-        await aplicarSugerenciasConfiables(p.sesion, a.expedienteId);
-        await retirarInmueblesSobrantes(p.sesion, a.expedienteId);
-        await buscarFaltantesEnDocumentos(p.sesion, a.expedienteId);
+        if (!p.otrasPersonas) {
+          await aplicarSugerenciasConfiables(p.sesion, a.expedienteId);
+          await retirarInmueblesSobrantes(p.sesion, a.expedienteId);
+          await buscarFaltantesEnDocumentos(p.sesion, a.expedienteId);
+          // Si encontró que un papel tiene varias personas (dos usufructuarios), los datos de las demás se buscan en otra etapa
+          await aplicarSugerenciasConfiables(p.sesion, a.expedienteId);
+          if (await faltanOtrasPersonas(p.sesion, a.expedienteId)) {
+            p.otrasPersonas = true;
+            await guardar(id, p);
+            return encadenar(id, p);
+          }
+        } else {
+          await buscarFaltantesEnDocumentos(p.sesion, a.expedienteId, { soloVariasPersonas: true });
+        }
       } catch (err) {
         if (!(err instanceof ErrorIA) && !(err instanceof ErrorNegocio)) console.error('[tareas] búsqueda en los documentos', err);
         p.errores.push(`Búsqueda de los datos que faltan: ${mensajeDe(err)}`);

@@ -31,7 +31,7 @@ export interface ContextoEscritura {
   /** Lleva la carátula y el cierre comunes: no, si todos los actos son por plantilla (su plantilla es la escritura completa) */
   conCaratula: boolean;
   global: Record<string, unknown>;
-  actos: { id: string; plantilla: string; anexo?: string; contexto: Record<string, unknown> }[];
+  actos: { id: string; plantilla: string; anexo?: string; contexto: Record<string, unknown>; repetir?: { grupo: string; variables: string[] }[] }[];
 }
 
 export function prepararContexto(datos: DatosExpediente, ordenActos: string[], notaria: ConfigNotaria = NOTARIA_POR_DEFECTO): ContextoEscritura {
@@ -190,6 +190,7 @@ export function prepararContexto(datos: DatosExpediente, ordenActos: string[], n
       id,
       plantilla: ACTOS[id].plantilla,
       anexo: ACTOS[id].anexo,
+      ...(p.repetir?.length ? { repetir: p.repetir } : {}),
       contexto: {
         ...global,
         ...(p.plano ? { ...automaticos, ...p.plano } : {}),

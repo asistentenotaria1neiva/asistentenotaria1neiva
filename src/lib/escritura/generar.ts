@@ -18,6 +18,7 @@ const ORDINALES = ['PRIMERO', 'SEGUNDO', 'TERCERO', 'CUARTO', 'QUINTO', 'SEXTO',
   'DECIMO OCTAVO', 'DECIMO NOVENO', 'VIGESIMO'];
 
 import { MARCA_FALTANTE } from './marcas';
+import { repetirEnPlantilla } from './repetir';
 export { MARCA_FALTANTE };
 
 const parser = expressionParser.configure({ filters: filtrosConcordancia });
@@ -99,7 +100,9 @@ export async function generarBorrador(ctx: ContextoEscritura, cargar: CargadorPl
   const cuerpos = caratula ? [caratula.cuerpo] : [];
   let primero: PizZip | null = null;
   for (const acto of ctx.actos) {
-    const r = renderizarBloque(await cargar(acto.plantilla), acto.contexto, faltantes);
+    // Varias personas con el mismo papel en una plantilla hecha para una: su texto se repite
+    const plantilla = await cargar(acto.plantilla);
+    const r = renderizarBloque(acto.repetir?.length ? repetirEnPlantilla(plantilla, acto.repetir) : plantilla, acto.contexto, faltantes);
     primero ??= r.zip;
     cuerpos.push(r.cuerpo);
   }

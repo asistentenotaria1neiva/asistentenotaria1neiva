@@ -16,6 +16,8 @@ import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { CAMPOS_PERSONA, CAMPOS_INMUEBLE, ESQUEMAS, type Campo } from '../escritura/esquemas';
+import { MAX_PERSONAS } from '../escritura/actos-plantilla';
+import { esHistorico, fechaReferencia } from '../escritura/paz-salvo';
 import { RECOMENDADOS_PERSONA } from '../escritura/rutas';
 import { campoVisible, leerRuta } from '../escritura/validar-formulario';
 import { VALIDADORES } from '../validaciones/formatos';
@@ -76,6 +78,14 @@ const MAX_BYTES_EN_LINEA = 22 * 1024 * 1024;
 const MAX_FALTANTES = 100;
 
 type Entidad = 'persona' | 'inmueble' | 'acto';
+/** Datos de la 2.ª, 3.ª… persona con un mismo papel (actos-plantilla.ts): «nombre_usufructuario__2» */
+const DE_OTRA_PERSONA = /__\d+$/;
+interface OpcionesBusqueda {
+  /** Solo las variables de estos actos (un acto recién confirmado) */
+  soloActos?: string[];
+  /** Solo los datos de las demás personas de un papel: la búsqueda anterior dijo cuántas son */
+  soloVariasPersonas?: boolean;
+}
 interface Faltante { clave: string; entidad: Entidad; ref: string; campo: Campo; de: string }
 interface Hallazgo { clave: string; valor: string; documento: string; pagina: number; fragmento: string; confianza: 'ALTA' | 'MEDIA' | 'BAJA' }
 
@@ -115,7 +125,7 @@ export function convertirHallazgo(c: Campo, h: Pick<Hallazgo, 'valor' | 'fragmen
  * y los inmuebles), los de los inmuebles y los de los comparecientes. Las variables van primero: sin
  * ellas no se genera la escritura. `soloActos`: solo las variables de esos actos (un acto recién confirmado).
  */
-export function faltantesBuscables(datos: ReturnType<typeof datosDe>, actos: string[] = [], { soloActos }: { soloActos?: string[] } = {}): Faltante[] {
+export function faltantesBuscables(datos: ReturnType<typeof datosDe>, actos: string[] = [], { soloActos, soloVariasPersonas }: OpcionesBusqueda = {}): Faltante[] {
   const usados = referenciadosEnActos(datos);
   const faltantes: Faltante[] = [];
   const agregar = (f: Omit<Faltante, 'clave'>) => faltantes.push({ ...f, clave: `f${faltantes.length + 1}` });
@@ -126,10 +136,11 @@ export function faltantesBuscables(datos: ReturnType<typeof datosDe>, actos: str
     const campos = esq.pasos.flatMap((p) => p.campos);
     for (const c of campos) {
       if (['lista', 'persona', 'personas', 'inmueble', 'inmuebles'].includes(c.tipo) || !campoVisible(c, valores, campos) || !vacio(leerRuta(valores, c.id))) continue;
+      if (soloVariasPersonas && !DE_OTRA_PERSONA.test(c.id)) continue;
       agregar({ entidad: 'acto', ref: a, campo: c, de: `Escritura de ${esq.titulo}: dato «${c.id}» de la plantilla` });
     }
   }
-  if (soloActos) return faltantes.slice(0, MAX_FALTANTES);
+  if (soloActos || soloVariasPersonas) return faltantes.slice(0, MAX_FALTANTES);
   // Si ya se eligieron los inmuebles (o las personas) de los actos, solo esos
   const inmuebles = datos.inmuebles.some((i) => usados.has(i.id)) ? datos.inmuebles.filter((i) => usados.has(i.id)) : datos.inmuebles;
   for (const i of inmuebles) {
@@ -157,10 +168,20 @@ export function faltantesBuscables(datos: ReturnType<typeof datosDe>, actos: str
  * Busca en los documentos los datos que siguen vacíos y los deja como sugerencias. Devuelve cuántos
  * encontró. Sin datos vacíos o sin documentos, no llama a la IA.
  */
-export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId: string, opciones: { soloActos?: string[] } = {}): Promise<number> {
+/**
+ * ¿La búsqueda dejó dicho que un papel tiene varias personas (cantidad_usufructuario = 2) y faltan
+ * los datos de las demás? Entonces se buscan en una segunda pasada.
+ */
+export async function faltanOtrasPersonas(s: SesionActiva, expedienteId: string): Promise<boolean> {
+  const e = await obtenerExpediente(s, expedienteId);
+  return faltantesBuscables(datosDe(e), actosDe(e), { soloVariasPersonas: true }).length > 0;
+}
+
+export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId: string, opciones: OpcionesBusqueda = {}): Promise<number> {
   const e = await obtenerExpediente(s, expedienteId);
   if (!puedeEditar(s, e)) return 0;
   const faltantes = faltantesBuscables(datosDe(e), actosDe(e), opciones);
+  const fechaRef = fechaReferencia(datosDe(e).escritura.fecha_otorgamiento);
   if (!faltantes.length) return 0;
   // Solo los documentos donde puede estar algún dato que falta: si solo falta el paz y salvo, no se
   // reenvía el título de adquisición completo (decenas de páginas)
@@ -174,7 +195,7 @@ export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId:
   const liberar: (() => Promise<void>)[] = [];
   try {
     const contenido: Anthropic.Beta.BetaContentBlockParam[] = [];
-    const enviados: { codigo: string; id: string }[] = [];
+    const enviados: { codigo: string; id: string; tipo: TipoDocumental }[] = [];
     let paginas = 0, enLinea = 0;
     for (const d of docs) {
       const bytes = await leerCifrado(d.rutaCifrada);
@@ -186,7 +207,7 @@ export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId:
       const preparado = await prepararDocumento(bytes, d.mime, titulo);
       liberar.push(preparado.liberar);
       contenido.push({ type: 'text', text: `Documento ${titulo} (${d.nombreOriginal}):` }, preparado.bloque);
-      enviados.push({ codigo, id: d.id });
+      enviados.push({ codigo, id: d.id, tipo: d.tipoDocumental as TipoDocumental });
       paginas += n;
       enLinea += pesaEnLinea;
     }
@@ -207,10 +228,16 @@ export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId:
     const filas: Prisma.DatoExtraidoCreateManyInput[] = [];
     for (const h of Array.isArray(r.datos.encontrados) ? r.datos.encontrados : []) {
       const f = faltantes.find((x) => x.clave === h.clave);
-      const documentoId = enviados.find((x) => x.codigo === h.documento)?.id ?? null;
+      const enviado = enviados.find((x) => x.codigo === h.documento);
+      const documentoId = enviado?.id ?? null;
       if (!f || filas.some((x) => x.campo === `${f.entidad}:${f.ref}.${f.campo.id}`)) continue;
+      // Cada dato solo de los documentos donde puede estar: el paz y salvo, del paz y salvo (no del
+      // protocolizado dentro de la escritura de la hipoteca o del título)
+      if (enviado && !documentosDelDato(f).includes(enviado.tipo)) continue;
       const valor = convertirHallazgo(f.campo, h);
       if (valor === null) continue;
+      // Un paz y salvo vencido hace más de un año es histórico: no es el de esta escritura
+      if (f.campo.id === 'paz_salvo.vigencia_hasta' && esHistorico(String(valor), fechaRef)) continue;
       const valido = !f.campo.validacion || typeof valor === 'boolean' || (VALIDADORES[f.campo.validacion] as (x: string) => { ok: boolean })(String(valor)).ok;
       const confianza = ['ALTA', 'MEDIA', 'BAJA'].includes(h.confianza) ? h.confianza : 'BAJA';
       filas.push({
@@ -223,7 +250,8 @@ export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId:
       // Lo que encontró una búsqueda anterior y nadie decidió se reemplaza (con `soloActos`, solo lo de esos actos)
       db.datoExtraido.deleteMany({ where: {
         expedienteId, estado: 'PENDIENTE', analisis: { proposito: 'EXTRACCION', documentoId: null },
-        ...(opciones.soloActos ? { OR: opciones.soloActos.map((a) => ({ campo: { startsWith: `acto:${a}.` } })) } : {}),
+        ...(opciones.soloVariasPersonas ? { OR: Array.from({ length: MAX_PERSONAS - 1 }, (_, i) => ({ campo: { endsWith: `__${i + 2}` } })) }
+          : opciones.soloActos ? { OR: opciones.soloActos.map((a) => ({ campo: { startsWith: `acto:${a}.` } })) } : {}),
       } }),
       db.datoExtraido.createMany({ data: filas }),
       db.analisisIA.update({ where: { id: analisis.id }, data: { estado: 'COMPLETADO', modelo: r.modelo, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs, resultado: { busqueda: true, faltantes: faltantes.length, encontrados: filas.length } } }),

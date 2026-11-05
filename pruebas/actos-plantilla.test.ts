@@ -33,7 +33,9 @@ describe('actos por plantilla', () => {
   const campos = esquema.pasos[0].campos;
 
   it('un campo por variable, en orden, sin los datos de la notaría ni de la terminación', () => {
-    expect(campos.map((c) => c.id)).toEqual(['nombre_propietario', 'documento_propietario', 'numero_escritura_afectacion', 'matricula_inmobiliaria', 'hay_apoderado']);
+    // Más los que agrega el sistema para varias personas con el mismo papel (cantidad y datos de la 2.ª, 3.ª… persona)
+    expect(campos.map((c) => c.id).filter((id) => !/__\d+$/.test(id))).toEqual(['cantidad_propietario', 'nombre_propietario', 'documento_propietario', 'numero_escritura_afectacion', 'matricula_inmobiliaria', 'hay_apoderado']);
+    expect(campos.find((c) => c.id === 'nombre_propietario__2')?.visibleSi?.campo).toBe('cantidad_propietario');
     expect(campos.find((c) => c.id === 'hay_apoderado')!.tipo).toBe('booleano');
     expect(campos.find((c) => c.id === 'matricula_inmobiliaria')).toMatchObject({ tipo: 'texto', obligatorio: true });
     // La ayuda muestra el fragmento de la escritura donde va el dato

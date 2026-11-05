@@ -15,7 +15,7 @@ import { PASOS_COMUNES, ESQUEMAS } from '../escritura/esquemas';
 import { cargarActosDePlantillas } from './actos-plantilla';
 import { validarPaso, validarCampos, leerRuta, escribirRuta, type Errores } from '../escritura/validar-formulario';
 import { validarDocumento, validarMatricula, validarCedulaCatastral, corregirNumeroDocumento, pareceEntidad } from '../validaciones/formatos';
-import { pazYSalvosPorInmueble, pazYSalvosAntiguos, aplicarPazYSalvoVigente } from '../escritura/paz-salvo';
+import { pazYSalvosPorInmueble, pazYSalvosAntiguos, pazYSalvosHistoricos, aplicarPazYSalvoVigente, esHistorico, fechaReferencia } from '../escritura/paz-salvo';
 import type { ResultadoExtraccion } from '../ia/documentos';
 import { mismoValor, mismaCatastral, claveMatricula, documentoQueManda } from '../escritura/comparar';
 import { registrarCorreccion } from './aprendizaje';
@@ -265,12 +265,25 @@ export async function aplicarSugerenciasConfiables(s: SesionActiva, expedienteId
   const e = await obtenerExpediente(s, expedienteId);
   if (!puedeEditar(s, e)) throw new ErrorNegocio('El expediente no se puede editar en su estado actual.');
   const datos = datosDe(e);
-  const pendientes = await db.datoExtraido.findMany({ where: { expedienteId, estado: 'PENDIENTE' }, include: { documento: { select: { nombreOriginal: true, tipoDocumental: true } } }, orderBy: { creadoEn: 'asc' } });
+  const recibidas = await db.datoExtraido.findMany({ where: { expedienteId, estado: 'PENDIENTE' }, include: { documento: { select: { nombreOriginal: true, tipoDocumental: true } } }, orderBy: { creadoEn: 'asc' } });
+  // Paz y salvo: solo del propio documento de paz y salvo y de este año. Lo que se leyó de uno
+  // protocolizado en una escritura (la de la hipoteca, el título) o de uno vencido hace más de un año
+  // es histórico: se descarta sin preguntar
+  const fechaRef = fechaReferencia(datos.escritura.fecha_otorgamiento);
+  const pazSalvos = await documentosPazYSalvo(expedienteId);
+  const historicos = new Set([
+    ...pazYSalvosHistoricos(pazSalvos, fechaRef),
+    ...recibidas.filter((d) => d.documentoId && d.campo.endsWith('.paz_salvo.vigencia_hasta') && esHistorico(String(d.valor ?? ''), fechaRef)).map((d) => d.documentoId!),
+  ]);
+  const DE_PAZ_SALVO = /\.(paz_salvo\.[a-z_]+|cedula_catastral_paz_salvo)$/;
+  const noVale = (d: (typeof recibidas)[number]) => DE_PAZ_SALVO.test(d.campo)
+    && ((!!d.documento && !['PAZ_Y_SALVO', 'OTRO'].includes(d.documento.tipoDocumental)) || (!!d.documentoId && historicos.has(d.documentoId)) || (d.campo.endsWith('.vigencia_hasta') && esHistorico(String(d.valor ?? ''), fechaRef)));
+  const descartados: typeof recibidas = recibidas.filter(noVale);
+  const pendientes = recibidas.filter((d) => !noVale(d));
   const porCampo = new Map<string, typeof pendientes>();
   for (const d of pendientes) porCampo.set(d.campo, [...(porCampo.get(d.campo) ?? []), d]);
   const aceptados: { d: (typeof pendientes)[number]; valor: unknown }[] = [];
   const aceptar = (grupo: typeof pendientes, valor: unknown) => aceptados.push(...grupo.map((d) => ({ d, valor })));
-  const descartados: typeof pendientes = [];
   const dudosos: { campo: string; valores: { valor: unknown; documento: string; confianza: string }[]; motivo: string }[] = [];
   // Vigencia de cada paz y salvo: de varios del mismo predio vale el más reciente
   const vigencia = new Map(pendientes.filter((d) => d.documentoId && d.campo.endsWith('.paz_salvo.vigencia_hasta')).map((d) => [d.documentoId!, String(d.valor)]));
@@ -308,11 +321,11 @@ export async function aplicarSugerenciasConfiables(s: SesionActiva, expedienteId
   // Paz y salvos: ya creados los inmuebles del certificado, vale el vigente de cada predio. Lo de uno
   // antiguo (el protocolizado en la escritura de la hipoteca, p. ej.) se descarta sin preguntar, y si
   // el formulario había quedado con él, se corrige con el vigente
-  const porInmueble = pazYSalvosPorInmueble(datos.inmuebles, await documentosPazYSalvo(expedienteId));
-  const antiguos = pazYSalvosAntiguos(porInmueble);
+  const porInmueble = pazYSalvosPorInmueble(datos.inmuebles, pazSalvos.filter((d) => !historicos.has(d.id)));
+  const antiguos = new Set([...pazYSalvosAntiguos(porInmueble, fechaRef), ...historicos]);
   const deAntiguo = (d: (typeof pendientes)[number]) => !!d.documentoId && antiguos.has(d.documentoId);
   descartados.push(...pendientes.filter((d) => d.campo.startsWith('catastral:') && deAntiguo(d)));
-  const pazSalvoCorregido = aplicarPazYSalvoVigente(datos.inmuebles, porInmueble).length > 0;
+  const pazSalvoCorregido = aplicarPazYSalvoVigente(datos.inmuebles, porInmueble, fechaRef).length > 0;
   // Lo de los paz y salvos se agrupa por el inmueble al que va, ya creados los del certificado: dos
   // paz y salvos del mismo predio (el vigente y uno vencido) pueden escribir distinto la cédula catastral
   const porDestino = new Map<string, typeof pendientes>();
@@ -359,7 +372,18 @@ export async function corregirDatosAutomaticos(s: SesionActiva, expedienteId: st
   const datos = datosDe(e);
   const antes = JSON.stringify(datos);
   datos.personas = datos.personas.map(normalizarPersona);
-  const corregidos = aplicarPazYSalvoVigente(datos.inmuebles, pazYSalvosPorInmueble(datos.inmuebles, await documentosPazYSalvo(expedienteId)));
+  const fechaRef = fechaReferencia(datos.escritura.fecha_otorgamiento);
+  const pazSalvos = await documentosPazYSalvo(expedienteId);
+  const historicos = pazYSalvosHistoricos(pazSalvos, fechaRef);
+  // Un paz y salvo que se tomó de una escritura (el protocolizado en la de la hipoteca, el título) no es el de esta escritura
+  const deEscritura = await db.datoExtraido.findMany({ where: { expedienteId, estado: 'ACEPTADO', campo: { contains: '.paz_salvo.' }, documento: { tipoDocumental: { notIn: ['PAZ_Y_SALVO', 'OTRO'] } } } });
+  for (const d of deEscritura) {
+    const destino = resolverDestino(datos, d.campo);
+    const i = destino && destino.base === 'inmueble' && destino.indice >= 0 ? datos.inmuebles[destino.indice] : null;
+    if (i?.paz_salvo && mismoValor(destino!.subcampo, leerRuta(datos, destino!.ruta), d.valorFinal ?? d.valor)) delete i.paz_salvo;
+  }
+  if (deEscritura.length) await db.datoExtraido.updateMany({ where: { id: { in: deEscritura.map((d) => d.id) } }, data: { estado: 'DESCARTADO' } });
+  const corregidos = aplicarPazYSalvoVigente(datos.inmuebles, pazYSalvosPorInmueble(datos.inmuebles, pazSalvos.filter((d) => !historicos.has(d.id))), fechaRef);
   if (JSON.stringify(datos) === antes) return false;
   await db.expediente.update({ where: { id: e.id }, data: { datos: datos as unknown as Prisma.InputJsonValue } });
   await sincronizarEntidades(e.id, datos);

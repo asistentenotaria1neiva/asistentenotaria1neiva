@@ -50,20 +50,54 @@ export function pazYSalvosPorInmueble(inmuebles: Inmueble[], docs: DocPazSalvo[]
   return r;
 }
 
-/** Ids de los paz y salvos que no son el vigente de su inmueble (hay uno más reciente del mismo predio) */
-export function pazYSalvosAntiguos(porInmueble: Map<string, PazSalvoLeido[]>): Set<string> {
-  return new Set([...porInmueble.values()].flatMap((l) => l.slice(1).map((x) => x.documentoId)));
+/**
+ * Un paz y salvo vencido hace más de esto es histórico: el que se protocolizó en una escritura
+ * anterior (la de la hipoteca que se cancela, el título de adquisición), nunca el de esta escritura.
+ * Los paz y salvos se expiden por año: uno vigente o vencido hace unos meses sí es del caso.
+ */
+export const DIAS_HISTORICO = 365;
+const dias = (desde: string, hasta: string) => Math.round((Date.parse(hasta) - Date.parse(desde)) / 86_400_000);
+const hoyIso = () => new Date().toISOString().slice(0, 10);
+/** Fecha de referencia: la del otorgamiento, o hoy */
+export const fechaReferencia = (fechaOtorgamiento?: string) => (fechaOtorgamiento && /^\d{4}-\d{2}-\d{2}/.test(fechaOtorgamiento) ? fechaOtorgamiento.slice(0, 10) : hoyIso());
+/** ¿La vigencia (o, sin ella, la expedición) es de hace más de un año? */
+export function esHistorico(fecha: string | undefined | null, fechaRef: string): boolean {
+  return !!fecha && /^\d{4}-\d{2}-\d{2}/.test(fecha) && dias(fecha.slice(0, 10), fechaRef) > DIAS_HISTORICO;
+}
+
+/**
+ * Ids de los paz y salvos que no cuentan: los históricos y los que no son el vigente de su inmueble
+ * (hay uno más reciente del mismo predio).
+ */
+export function pazYSalvosAntiguos(porInmueble: Map<string, PazSalvoLeido[]>, fechaRef = hoyIso()): Set<string> {
+  return new Set([...porInmueble.values()].flatMap((l) => l.filter((x, i) => i > 0 || esHistorico(x.vigencia || x.expedicion, fechaRef)).map((x) => x.documentoId)));
+}
+
+/** Paz y salvos históricos de una lista de documentos (sin necesidad de saber a qué inmueble van) */
+export function pazYSalvosHistoricos(docs: DocPazSalvo[], fechaRef = hoyIso()): Set<string> {
+  return new Set(docs.map(leerPazSalvo).filter((x) => esHistorico(x.vigencia || x.expedicion, fechaRef)).map((x) => x.documentoId));
+}
+
+/** Si el formulario quedó con un paz y salvo histórico, se retira: no es el de esta escritura. Devuelve los inmuebles corregidos. */
+export function retirarPazYSalvoHistorico(inmuebles: Inmueble[], fechaRef = hoyIso()): string[] {
+  const corregidos: string[] = [];
+  for (const i of inmuebles) {
+    if (!i.paz_salvo || !esHistorico(i.paz_salvo.vigencia_hasta, fechaRef)) continue;
+    delete i.paz_salvo;
+    corregidos.push(i.id);
+  }
+  return corregidos;
 }
 
 /**
  * Si el formulario quedó con un paz y salvo antiguo (o sin él), toma los datos del vigente.
  * Devuelve los inmuebles corregidos (modifica la lista).
  */
-export function aplicarPazYSalvoVigente(inmuebles: Inmueble[], porInmueble: Map<string, PazSalvoLeido[]>): string[] {
-  const corregidos: string[] = [];
+export function aplicarPazYSalvoVigente(inmuebles: Inmueble[], porInmueble: Map<string, PazSalvoLeido[]>, fechaRef = hoyIso()): string[] {
+  const corregidos: string[] = retirarPazYSalvoHistorico(inmuebles, fechaRef);
   for (const i of inmuebles) {
     const vigente = porInmueble.get(i.id)?.[0];
-    if (!vigente?.vigencia) continue;
+    if (!vigente?.vigencia || esHistorico(vigente.vigencia, fechaRef)) continue;
     const actual = i.paz_salvo?.vigencia_hasta ?? '';
     if (actual && actual >= vigente.vigencia) continue;
     i.paz_salvo = {
@@ -75,5 +109,5 @@ export function aplicarPazYSalvoVigente(inmuebles: Inmueble[], porInmueble: Map<
     if (vigente.catastral && validarCedulaCatastral(vigente.catastral).ok) i.cedula_catastral_paz_salvo = vigente.catastral;
     corregidos.push(i.id);
   }
-  return corregidos;
+  return [...new Set(corregidos)];
 }

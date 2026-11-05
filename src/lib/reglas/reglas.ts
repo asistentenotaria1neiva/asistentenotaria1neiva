@@ -13,7 +13,12 @@
 import type { DatosExpediente, Persona, Inmueble } from '../escritura/tipos';
 import { cedulasDe, type ResultadoExtraccion, type TipoDocumental, type DatoConFuente } from '../ia/documentos';
 import { mismaCatastral } from '../escritura/comparar';
-import { pazYSalvosPorInmueble, pazYSalvosAntiguos } from '../escritura/paz-salvo';
+import { pazYSalvosPorInmueble, pazYSalvosAntiguos, pazYSalvosHistoricos, esHistorico } from '../escritura/paz-salvo';
+
+/** Actos que transfieren o gravan el dominio del inmueble y por eso exigen el paz y salvo vigente */
+const TRANSFIEREN = /compraventa|permuta|donaci|dacion|aporte|particion|adjudicaci|herenc|usufructo|nuda|hipoteca|transferencia|fiducia|leasing|remate|sucesion|liquidacion/;
+/** Cancelaciones, liberaciones y aclaraciones: no transfieren aunque nombren la hipoteca o el usufructo */
+const NO_TRANSFIEREN = /^(cancelacion|liberacion|aclaracion|terminacion)/;
 import { deducirAfectacion, faltaCoadyuvante } from '../escritura/afectacion';
 import {
   validarDocumento, validarMatricula, validarCedulaCatastral, validarFecha,
@@ -193,16 +198,21 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
 
   // R04 – Paz y salvo: vigencia, catastral y avalúo. De varios del mismo predio vale el vigente (el
   // más reciente); uno antiguo, p. ej. el protocolizado en la escritura de la hipoteca, no cuenta
+  // Uno vencido hace más de un año es histórico: no se toma ni se observa
   const pazSalvos = docs('PAZ_Y_SALVO');
   const porInmueble = pazYSalvosPorInmueble(e.datos.inmuebles, pazSalvos);
-  const antiguos = pazYSalvosAntiguos(porInmueble);
+  const antiguos = new Set([...pazYSalvosAntiguos(porInmueble, fechaRef), ...pazYSalvosHistoricos(pazSalvos, fechaRef)]);
+  // El paz y salvo vigente se exige para transferir el inmueble; en una cancelación de hipoteca, p. ej., no
+  const transfiere = e.actos.some((a) => !NO_TRANSFIEREN.test(a) && TRANSFIEREN.test(a));
   for (const i of e.datos.inmuebles) {
     if (!i.paz_salvo) continue;
-    const delDocumento = porInmueble.get(i.id)?.[0]?.vigencia ?? '';
-    const vence = [i.paz_salvo.vigencia_hasta ?? '', delDocumento].sort().at(-1)!;
+    const delDocumento = porInmueble.get(i.id)?.find((x) => !antiguos.has(x.documentoId))?.vigencia ?? '';
+    const vence = [i.paz_salvo.vigencia_hasta ?? '', delDocumento].filter((x) => !esHistorico(x, fechaRef)).sort().at(-1) ?? '';
     if (vence && /^\d{4}-\d{2}-\d{2}$/.test(vence)) {
       const dias = diasEntre(fechaRef, vence);
-      if (dias < 0) h.push({ codigo: 'R04-PAZ-SALVO-VENCIDO', nivel: 'CRITICA', mensaje: `El paz y salvo del inmueble ${i.matricula} venció el ${vence}.`, campo: `inmuebles.${i.id}.paz_salvo.vigencia_hasta` });
+      if (dias < 0) h.push(transfiere
+        ? { codigo: 'R04-PAZ-SALVO-VENCIDO', nivel: 'CRITICA', mensaje: `El paz y salvo del inmueble ${i.matricula} venció el ${vence}.`, campo: `inmuebles.${i.id}.paz_salvo.vigencia_hasta` }
+        : { codigo: 'R04-PAZ-SALVO-VENCIDO', nivel: 'INFORMATIVA', mensaje: `El paz y salvo del inmueble ${i.matricula} venció el ${vence}; este acto no transfiere el inmueble, así que no impide otorgar la escritura.`, campo: `inmuebles.${i.id}.paz_salvo.vigencia_hasta` });
       else if (dias <= cfg.diasAvisoPazSalvo) h.push({ codigo: 'R04-PAZ-SALVO-POR-VENCER', nivel: 'INFORMATIVA', mensaje: `El paz y salvo del inmueble ${i.matricula} vence en ${dias} día(s) (${vence}).`, campo: `inmuebles.${i.id}.paz_salvo.vigencia_hasta` });
     }
   }

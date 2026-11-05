@@ -82,7 +82,8 @@ export function catalogo(actos: string[], { sinTerminacion = false } = {}) {
     escritura: PASOS_COMUNES[0].campos.filter((c) => !sinTerminacion || !CAMPOS_TERMINACION.includes(c.id)).map(describir),
     persona: CAMPOS_PERSONA.map(describir),
     inmueble: CAMPOS_INMUEBLE.map(describir),
-    actos: Object.fromEntries(actos.filter((a) => ESQUEMAS[a]).map((a) => [a, camposActo(a).map(describir)])),
+    // De las demás personas de un papel («nombre_usufructuario__2», «__3»…) basta la segunda como muestra: las instrucciones explican el patrón
+    actos: Object.fromEntries(actos.filter((a) => ESQUEMAS[a]).map((a) => [a, camposActo(a).filter((c) => !/__([3-9]|\d{2,})$/.test(c.id)).map((c) => (/__\d+$/.test(c.id) ? { ...describir(c), ayuda: undefined } : describir(c)))])),
   };
 }
 

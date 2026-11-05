@@ -16,7 +16,8 @@ import type { DefinicionActo, ActoPreparado } from './actos';
 import type { DatosActo, DatosEscritura } from './tipos';
 import type { ConfigNotaria } from './contexto';
 import { ErrorDatos } from './personas';
-import { leerRuta } from './validar-formulario';
+import { leerRuta, campoVisible } from './validar-formulario';
+import type { GrupoRepetido } from './repetir';
 import { numeroEscrituraEnLetras, fechaEnLetras, fechaCorta, enteroALetras } from '../texto/numeros-a-letras';
 
 const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
@@ -124,13 +125,95 @@ export function camposDePlantilla(parrafos: Parrafo[]): Campo[] {
     if (interiores.some((x) => x.id !== interior.id || x.si !== interior.si)) continue;
     c.visibleSi = { campo: interior.id, valores: interior.si ? SI : NO };
   }
-  condicionesPorVariable.set(campos, apariciones);
-  return campos;
+  const { campos: todos, grupos } = conVariasPersonas(campos);
+  condicionesPorVariable.set(todos, apariciones);
+  gruposPorCampos.set(todos, grupos);
+  return todos;
 }
+
+// ------------------------------------------------------------------ varias personas con el mismo papel
+
+/** Personas con el mismo papel que admite la escritura (la plantilla se hizo con una) */
+export const MAX_PERSONAS = 8;
+/** Datos de una persona en el nombre de una variable: «nombre_usufructuario», «cedula_nudo_propietario», «usufructuario_estado_civil» */
+const ATRIBUTOS = ['nombre_completo', 'nombres', 'nombre', 'apellidos', 'numero_cedula', 'numero_documento', 'tipo_documento', 'cedula', 'cc', 'documento', 'identificacion', 'nit',
+  'lugar_expedicion', 'ciudad_expedicion', 'expedicion', 'estado_civil', 'domicilio', 'ciudad_domicilio', 'residencia', 'direccion', 'telefono', 'celular', 'correo', 'email',
+  'actividad_economica', 'actividad', 'ocupacion', 'profesion', 'nacionalidad', 'edad', 'genero', 'sexo', 'firma', 'huella'].sort((a, b) => b.length - a.length);
+const NOMBRE = new Set(['nombre_completo', 'nombres', 'nombre']);
+const IDENTIFICACION = new Set(['numero_cedula', 'numero_documento', 'cedula', 'cc', 'documento', 'identificacion', 'nit']);
+
+/** Papel y dato de una variable de persona; null si no lo es */
+export function papelDe(id: string): { papel: string; atributo: string } | null {
+  if (id.includes('.') || id.includes('__')) return null;
+  for (const a of ATRIBUTOS) {
+    if (id.startsWith(`${a}_`) && id.length > a.length + 1) return { papel: id.slice(a.length + 1), atributo: a };
+    if (id.endsWith(`_${a}`) && id.length > a.length + 1) return { papel: id.slice(0, -a.length - 1), atributo: a };
+  }
+  return null;
+}
+
+interface GrupoPersona { papel: string; cantidad: string; grupo: string; variables: string[] }
+const gruposPorCampos = new WeakMap<Campo[], GrupoPersona[]>();
+/** Campo de la k-ésima persona → variable de la plantilla */
+const instancia = (variable: string, k: number) => (k === 1 ? variable : `${variable}__${k}`);
+const ORDINAL = ['', 'primera', 'segunda', 'tercera', 'cuarta', 'quinta', 'sexta', 'séptima', 'octava'];
+
+/**
+ * Cada grupo de variables de una persona con un papel (nombre e identificación de un mismo papel)
+ * admite varias personas: un campo «cantidad_<papel>» y los datos de la 2.ª, 3.ª… persona
+ * («nombre_usufructuario__2»), que se muestran según la cantidad.
+ */
+function conVariasPersonas(campos: Campo[]): { campos: Campo[]; grupos: GrupoPersona[] } {
+  const porPapel = new Map<string, { campo: Campo; atributo: string }[]>();
+  for (const c of campos) {
+    if (c.tipo !== 'texto' && c.tipo !== 'textoLargo') continue;
+    const p = papelDe(c.id);
+    if (p) porPapel.set(p.papel, [...(porPapel.get(p.papel) ?? []), { campo: c, atributo: p.atributo }]);
+  }
+  const grupos: GrupoPersona[] = [];
+  let resultado = [...campos];
+  for (const [papel, vars] of porPapel) {
+    if (!vars.some((v) => NOMBRE.has(v.atributo)) || !vars.some((v) => IDENTIFICACION.has(v.atributo))) continue;
+    const cantidad = `cantidad_${papel}`;
+    if (campos.some((c) => c.id === cantidad)) continue;
+    const nombre = vars.find((v) => NOMBRE.has(v.atributo))!.campo;
+    const etiquetaPapel = papel.replace(/_/g, ' ');
+    const campoCantidad: Campo = {
+      id: cantidad, etiqueta: `Cantidad de personas: ${etiquetaPapel}`, tipo: 'entero',
+      ayuda: `Cuántas personas tienen el papel de ${etiquetaPapel} en esta escritura (p. ej. dos usufructuarios). Si son varias, la escritura repite sus datos para cada una. Vacío = una.`,
+      ...(nombre.visibleSi ? { visibleSi: nombre.visibleSi } : {}),
+    };
+    const extra: Campo[] = [];
+    for (let k = 2; k <= MAX_PERSONAS; k++) {
+      const desde = Array.from({ length: MAX_PERSONAS - k + 1 }, (_, i) => k + i);
+      for (const { campo } of vars) {
+        extra.push({
+          ...campo, id: instancia(campo.id, k), etiqueta: `${campo.etiqueta} (${k}.ª persona)`,
+          ayuda: `Dato de la ${ORDINAL[k]} persona con el papel de ${etiquetaPapel}. ${campo.ayuda ?? ''}`.trim(),
+          visibleSi: { campo: cantidad, valores: [...desde, ...desde.map(String)] },
+        });
+      }
+    }
+    const primero = resultado.indexOf(vars[0].campo);
+    resultado.splice(primero, 0, campoCantidad);
+    const ultimo = Math.max(...vars.map((v) => resultado.indexOf(v.campo)));
+    resultado.splice(ultimo + 1, 0, ...extra);
+    grupos.push({ papel, cantidad, grupo: `__g_${papel}`, variables: vars.map((v) => v.campo.id) });
+  }
+  resultado = resultado.filter(Boolean);
+  return { campos: resultado, grupos };
+}
+
+/** Cuántas personas tiene el papel (1 si no se dijo) */
+const cantidadDe = (d: DatosActo, g: GrupoPersona) => Math.min(Math.max(Math.trunc(Number(valorDe(d, g.cantidad))) || 1, 1), MAX_PERSONAS);
+
+/** Variable de la plantilla de la que sale un campo de la 2.ª, 3.ª… persona */
+const baseDe = (id: string) => id.replace(/__\d+$/, '');
 
 /** ¿El campo se imprime con estos datos? (alguna de sus apariciones queda fuera de bloques que no aplican) */
 function seImprime(campos: Campo[], c: Campo, d: DatosActo): boolean {
-  const lista = condicionesPorVariable.get(campos)?.get(c.id);
+  if (!campoVisible(c, d as Record<string, unknown>, campos)) return false;
+  const lista = condicionesPorVariable.get(campos)?.get(baseDe(c.id));
   return !lista || lista.some((conds) => conds.every((x) => cumple(x, d)));
 }
 
@@ -169,7 +252,18 @@ export function actoDesdePlantilla(tipo: TipoParaActo, archivo: Buffer, plantill
         if (sub) plano[raiz] = { ...((plano[raiz] as object) ?? {}), [sub]: valor };
         else plano[raiz] = valor;
       }
-      return { a: {}, plano, especificacion: [{ acto: tipo.nombre.toUpperCase(), valor: '' }], unidades: [], firmantesAdicionales: [], inmuebles: [], comprobantes: [] };
+      // Varias personas con el mismo papel: una lista con los datos de cada una, y la plantilla repite su texto (repetir.ts)
+      const repetir: GrupoRepetido[] = [];
+      for (const g of gruposPorCampos.get(campos) ?? []) {
+        const n = cantidadDe(d, g);
+        if (n < 2) continue;
+        plano[g.grupo] = Array.from({ length: n }, (_, i) => ({
+          __sep: i === 0 ? '' : i === n - 1 ? ' y ' : ', ',
+          ...Object.fromEntries(g.variables.map((v) => { const x = valorDe(d, instancia(v, i + 1)); return [v, typeof x === 'string' ? x.trim() : x]; })),
+        }));
+        repetir.push({ grupo: g.grupo, variables: g.variables });
+      }
+      return { a: {}, plano, repetir, especificacion: [{ acto: tipo.nombre.toUpperCase(), valor: '' }], unidades: [], firmantesAdicionales: [], inmuebles: [], comprobantes: [] };
     },
   };
   return { esquema, acto };
@@ -177,7 +271,10 @@ export function actoDesdePlantilla(tipo: TipoParaActo, archivo: Buffer, plantill
 
 /** Variables de la plantilla que el formulario pide (para la revisión de la plantilla) */
 export function variablesDelFormulario(archivo: Buffer): string[] {
-  return camposDePlantilla(vistaPreviaDocx(archivo)).map((c) => c.id);
+  // Sin los que agrega el sistema para varias personas con el mismo papel
+  const campos = camposDePlantilla(vistaPreviaDocx(archivo));
+  const agregados = new Set((gruposPorCampos.get(campos) ?? []).map((g) => g.cantidad));
+  return campos.map((c) => c.id).filter((id) => !agregados.has(id) && !/__\d+$/.test(id));
 }
 
 export { etiquetasDe };

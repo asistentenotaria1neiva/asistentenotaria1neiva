@@ -165,6 +165,9 @@ async function completarDesdeDocumentos(s: SesionActiva, expedienteId: string, d
     const destino = resolverRuta(datos, actos, x.ruta);
     if (!destino || destino.campo.tipo === 'lista' || dudosas.has(x.ruta)) continue;
     if (destino.paso === 'escritura' && CAMPOS_TERMINACION.includes(destino.campo.id)) continue;
+    // El paz y salvo sale solo del documento de paz y salvo vigente (expedientes.ts), nunca de uno
+    // protocolizado en una escritura anterior
+    if (destino.paso === 'inmuebles' && /^(paz_salvo\.|cedula_catastral_paz_salvo)/.test(destino.campo.id)) continue;
     const actual = leerRuta(datos, destino.rutaDatos);
     if (actual !== undefined && actual !== null && actual !== '') continue;
     let valor: unknown;
