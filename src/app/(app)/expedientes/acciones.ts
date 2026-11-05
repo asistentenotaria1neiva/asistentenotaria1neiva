@@ -167,7 +167,7 @@ export async function accionResponderAsistente(expedienteId: string, analisisId:
     erroresPreguntas = x.errores;
     const errores = Object.keys(x.errores).length;
     if (errores && !x.respondidas) throw new ErrorNegocio(`Revise ${errores} respuesta(s) marcada(s).`);
-    const base = `${x.respondidas} respuesta(s) guardada(s).`;
+    const base = `${x.respondidas} respuesta(s) guardada(s).${x.desdeDocumentos ? ` ${x.desdeDocumentos} dato(s) del acto se tomaron de los documentos.` : ''}`;
     if (errores) return `${base} Revise ${errores} respuesta(s) marcada(s).`;
     if (x.obligatoriasPendientes) return `${base} Faltan ${x.obligatoriasPendientes} dato(s) obligatorio(s).`;
     if (x.pendientes) return `${base} Quedan ${x.pendientes} pregunta(s) opcional(es); puede responderlas u omitirlas.`;

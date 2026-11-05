@@ -15,7 +15,7 @@ import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
-import { CAMPOS_PERSONA, CAMPOS_INMUEBLE, type Campo } from '../escritura/esquemas';
+import { CAMPOS_PERSONA, CAMPOS_INMUEBLE, ESQUEMAS, type Campo } from '../escritura/esquemas';
 import { RECOMENDADOS_PERSONA } from '../escritura/rutas';
 import { campoVisible, leerRuta } from '../escritura/validar-formulario';
 import { VALIDADORES } from '../validaciones/formatos';
@@ -25,8 +25,7 @@ import { SISTEMA_BUSQUEDA, esquemaBusqueda } from '../ia/instrucciones';
 import { llamarEstructurado, configuracionModelo, prepararDocumento } from '../ia/cliente';
 import { leerCifrado } from '../almacenamiento';
 import { abrirPdf } from '../pdf';
-import { obtenerExpediente, puedeEditar, datosDe, referenciadosEnActos } from './expedientes';
-
+import { obtenerExpediente, puedeEditar, datosDe, actosDe, referenciadosEnActos } from './expedientes';
 /** Datos del inmueble que se buscan si están vacíos, con lo que la IA debe tomar */
 const BUSCAR_INMUEBLE: Record<string, string> = {
   direccion: 'Dirección o nomenclatura del inmueble',
@@ -52,13 +51,17 @@ const BUSCAR_INMUEBLE: Record<string, string> = {
 
 /** Lo que declara el compareciente: aunque un documento lo diga, se confirma */
 const DECLARACIONES = new Set(['estado_civil', 'actividad_economica']);
+/** Variables de una plantilla que son declaraciones del compareciente (estado civil, ocupación…): se confirman */
+const DECLARACION_EN_ACTO = /estado_civil|actividad|ocupacion|profesion|oficio/i;
 
 const DOCS_INMUEBLE: TipoDocumental[] = ['CERTIFICADO_TRADICION', 'ESCRITURA_ANTERIOR', 'PAZ_Y_SALVO', 'OTRO'];
 // El título de adquisición no: quienes intervinieron en él no son comparecientes y lo que declararon
 // entonces (estado civil, actividad) no vale para esta escritura
 const DOCS_PERSONA: TipoDocumental[] = ['CEDULA', 'PODER', 'CERTIFICADO_EXISTENCIA', 'REGISTRO_CIVIL_NACIMIENTO', 'REGISTRO_CIVIL_MATRIMONIO', 'OTRO'];
 /** Tipos de documento donde puede estar un dato que falta */
-function documentosDelDato(f: { entidad: 'persona' | 'inmueble'; campo: Campo }): TipoDocumental[] {
+function documentosDelDato(f: { entidad: Entidad; campo: Campo }): TipoDocumental[] {
+  // Una variable de plantilla puede estar en cualquiera: la escritura de la hipoteca que se cancela, el registro civil del matrimonio que se liquida…
+  if (f.entidad === 'acto') return Object.keys(TIPOS_DOCUMENTALES) as TipoDocumental[];
   if (f.entidad === 'persona') return DOCS_PERSONA;
   const id = f.campo.id;
   if (id.startsWith('paz_salvo.') || id === 'cedula_catastral_paz_salvo') return ['PAZ_Y_SALVO', 'OTRO'];
@@ -66,13 +69,14 @@ function documentosDelDato(f: { entidad: 'persona' | 'inmueble'; campo: Campo })
   return DOCS_INMUEBLE;
 }
 /** Primero los que más datos traen: si no caben todos, se dejan los últimos */
-const PRIORIDAD: TipoDocumental[] = ['CERTIFICADO_TRADICION', 'ESCRITURA_ANTERIOR', 'PAZ_Y_SALVO', 'PODER', 'CERTIFICADO_EXISTENCIA', 'CEDULA', 'REGISTRO_CIVIL_MATRIMONIO', 'REGISTRO_CIVIL_NACIMIENTO', 'OTRO'];
+const PRIORIDAD: TipoDocumental[] = ['CERTIFICADO_TRADICION', 'ESCRITURA_ANTERIOR', 'PAZ_Y_SALVO', 'PODER', 'CERTIFICADO_EXISTENCIA', 'CEDULA', 'REGISTRO_CIVIL_MATRIMONIO', 'REGISTRO_CIVIL_NACIMIENTO', 'REGISTRO_CIVIL_DEFUNCION', 'OTRO'];
 /** Límites de una solicitud con varios documentos (la API admite 100 páginas y 32 MB) */
 const MAX_PAGINAS = 100;
 const MAX_BYTES_EN_LINEA = 22 * 1024 * 1024;
-const MAX_FALTANTES = 60;
+const MAX_FALTANTES = 100;
 
-interface Faltante { clave: string; entidad: 'persona' | 'inmueble'; ref: string; campo: Campo; de: string }
+type Entidad = 'persona' | 'inmueble' | 'acto';
+interface Faltante { clave: string; entidad: Entidad; ref: string; campo: Campo; de: string }
 interface Hallazgo { clave: string; valor: string; documento: string; pagina: number; fragmento: string; confianza: 'ALTA' | 'MEDIA' | 'BAJA' }
 
 const vacio = (v: unknown) => v === undefined || v === null || v === '';
@@ -105,11 +109,27 @@ export function convertirHallazgo(c: Campo, h: Pick<Hallazgo, 'valor' | 'fragmen
   }
 }
 
-/** Los datos vacíos que se pueden buscar en los documentos: de los inmuebles y de los comparecientes */
-export function faltantesBuscables(datos: ReturnType<typeof datosDe>): Faltante[] {
+/**
+ * Los datos vacíos que se pueden buscar en los documentos: las variables de los actos por plantilla
+ * (todas las escrituras menos la compraventa, cuyo formulario propio toma esos datos de las personas
+ * y los inmuebles), los de los inmuebles y los de los comparecientes. Las variables van primero: sin
+ * ellas no se genera la escritura. `soloActos`: solo las variables de esos actos (un acto recién confirmado).
+ */
+export function faltantesBuscables(datos: ReturnType<typeof datosDe>, actos: string[] = [], { soloActos }: { soloActos?: string[] } = {}): Faltante[] {
   const usados = referenciadosEnActos(datos);
   const faltantes: Faltante[] = [];
   const agregar = (f: Omit<Faltante, 'clave'>) => faltantes.push({ ...f, clave: `f${faltantes.length + 1}` });
+  for (const a of soloActos ?? actos) {
+    const esq = ESQUEMAS[a];
+    if (!esq?.porPlantilla) continue;
+    const valores = (datos.actos[a] ?? {}) as Record<string, unknown>;
+    const campos = esq.pasos.flatMap((p) => p.campos);
+    for (const c of campos) {
+      if (['lista', 'persona', 'personas', 'inmueble', 'inmuebles'].includes(c.tipo) || !campoVisible(c, valores, campos) || !vacio(leerRuta(valores, c.id))) continue;
+      agregar({ entidad: 'acto', ref: a, campo: c, de: `Escritura de ${esq.titulo}: dato «${c.id}» de la plantilla` });
+    }
+  }
+  if (soloActos) return faltantes.slice(0, MAX_FALTANTES);
   // Si ya se eligieron los inmuebles (o las personas) de los actos, solo esos
   const inmuebles = datos.inmuebles.some((i) => usados.has(i.id)) ? datos.inmuebles.filter((i) => usados.has(i.id)) : datos.inmuebles;
   for (const i of inmuebles) {
@@ -137,10 +157,10 @@ export function faltantesBuscables(datos: ReturnType<typeof datosDe>): Faltante[
  * Busca en los documentos los datos que siguen vacíos y los deja como sugerencias. Devuelve cuántos
  * encontró. Sin datos vacíos o sin documentos, no llama a la IA.
  */
-export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId: string): Promise<number> {
+export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId: string, opciones: { soloActos?: string[] } = {}): Promise<number> {
   const e = await obtenerExpediente(s, expedienteId);
   if (!puedeEditar(s, e)) return 0;
-  const faltantes = faltantesBuscables(datosDe(e));
+  const faltantes = faltantesBuscables(datosDe(e), actosDe(e), opciones);
   if (!faltantes.length) return 0;
   // Solo los documentos donde puede estar algún dato que falta: si solo falta el paz y salvo, no se
   // reenvía el título de adquisición completo (decenas de páginas)
@@ -196,12 +216,15 @@ export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId:
       filas.push({
         expedienteId, analisisId: analisis.id, documentoId, campo: `${f.entidad}:${f.ref}.${f.campo.id}`, valor: valor as Prisma.InputJsonValue,
         pagina: Number.isInteger(h.pagina) && h.pagina > 0 ? h.pagina : null, fragmento: String(h.fragmento ?? '').slice(0, 1000) || null, confianza,
-        revisionManual: confianza === 'BAJA' || !valido || (f.entidad === 'persona' && DECLARACIONES.has(f.campo.id)),
+        revisionManual: confianza === 'BAJA' || !valido || (f.entidad === 'persona' && DECLARACIONES.has(f.campo.id)) || (f.entidad === 'acto' && DECLARACION_EN_ACTO.test(f.campo.id)),
       });
     }
     await db.$transaction([
-      // Lo que encontró una búsqueda anterior y nadie decidió se reemplaza
-      db.datoExtraido.deleteMany({ where: { expedienteId, estado: 'PENDIENTE', analisis: { proposito: 'EXTRACCION', documentoId: null } } }),
+      // Lo que encontró una búsqueda anterior y nadie decidió se reemplaza (con `soloActos`, solo lo de esos actos)
+      db.datoExtraido.deleteMany({ where: {
+        expedienteId, estado: 'PENDIENTE', analisis: { proposito: 'EXTRACCION', documentoId: null },
+        ...(opciones.soloActos ? { OR: opciones.soloActos.map((a) => ({ campo: { startsWith: `acto:${a}.` } })) } : {}),
+      } }),
       db.datoExtraido.createMany({ data: filas }),
       db.analisisIA.update({ where: { id: analisis.id }, data: { estado: 'COMPLETADO', modelo: r.modelo, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs, resultado: { busqueda: true, faltantes: faltantes.length, encontrados: filas.length } } }),
     ]);

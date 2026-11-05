@@ -30,6 +30,7 @@ import {
   ErrorNegocio, type ActualizacionPaso,
 } from './expedientes';
 import { instruccionesAprobadas } from './documentos';
+import { buscarFaltantesEnDocumentos } from './busqueda';
 import { ejecutarRevision, resolverObservacion } from './revision';
 
 /** Código de las observaciones que crea el asistente */
@@ -109,14 +110,21 @@ export function hechosParaAsistente(tipoDocumental: string, hechos: unknown): un
 }
 
 /** Preguntas deterministas por los datos que aún faltan y que no están ya preguntados ni omitidos */
-function preguntasDeReglas(datos: DatosExpediente, actos: string[], existentes: PreguntaAsistente[]): PreguntaAsistente[] {
+function preguntasDeReglas(datos: DatosExpediente, actos: string[], existentes: PreguntaAsistente[], sugeridos?: Map<string, { valor: unknown; fuente: string | null }>): PreguntaAsistente[] {
   let n = existentes.length;
   return datosFaltantes(datos, actos)
     .filter((f) => !existentes.some((p) => p.ruta === f.ruta && p.estado !== 'RESPONDIDA'))
-    .map((f) => ({
-      id: `p${++n}`, ruta: f.ruta, etiqueta: f.etiqueta, pregunta: f.etiqueta, motivo: f.motivo, origen: 'REGLAS', obligatoria: f.obligatorio,
-      valorSugerido: null, fuente: null, estado: 'PENDIENTE',
-    }));
+    .map((f) => {
+      // Lo que la búsqueda leyó con dudas en los documentos va como respuesta sugerida
+      const sug = sugeridos?.get(f.ruta);
+      const destino = sug ? resolverRuta(datos, actos, f.ruta) : null;
+      const v = destino ? validarValor(destino.campo, sug!.valor, datos) : null;
+      const valorSugerido = v && !('error' in v) ? v.valor : null;
+      return {
+        id: `p${++n}`, ruta: f.ruta, etiqueta: f.etiqueta, pregunta: f.etiqueta, motivo: f.motivo, origen: 'REGLAS', obligatoria: f.obligatorio,
+        valorSugerido, fuente: valorSugerido === null ? null : sug!.fuente, estado: 'PENDIENTE',
+      };
+    });
 }
 
 /** Datos opcionales que sí se preguntan cuando el caso los pide (cónyuge que coadyuva, venta de cuota, gravamen que subsiste, persona jurídica…) */
@@ -326,14 +334,48 @@ export async function responderAsistente(s: SesionActiva, expedienteId: string, 
   const r = a?.resultado as ResultadoAsistente | null | undefined;
   if (!a || !r) throw new ErrorNegocio('El análisis del asistente ya no existe. Ejecútelo de nuevo.');
 
+  const actosAntes = actosDe(e);
   if (entrada.actos) {
     await cambiarActos(s, expedienteId, entrada.actos);
     r.actosConfirmados = true;
   }
   if (!r.actosConfirmados) throw new ErrorNegocio('Confirme primero el tipo de escritura.');
+  // Un acto recién confirmado: sus datos se buscan en los documentos antes de preguntarlos (como en el análisis)
+  const nuevos = actosDe(await obtenerExpediente(s, expedienteId)).filter((x) => !actosAntes.includes(x));
+  const sugeridos = new Map<string, { valor: unknown; fuente: string | null }>();
+  if (nuevos.length) {
+    try {
+      await buscarFaltantesEnDocumentos(s, expedienteId, { soloActos: nuevos });
+      const { dudosos } = await aplicarSugerenciasConfiables(s, expedienteId);
+      for (const x of dudosos) if (x.campo.startsWith('acto:')) sugeridos.set(x.campo, { valor: x.valores[0]?.valor, fuente: x.valores[0]?.documento ?? null });
+    } catch (err) {
+      // Si la búsqueda falla, se pregunta como antes
+      console.error('[asistente] búsqueda de los datos del acto confirmado', err);
+    }
+  }
   const actualizado = await obtenerExpediente(s, expedienteId);
   const actos = actosDe(actualizado);
   const datos = datosDe(actualizado);
+  // Lo que la búsqueda llenó ya no se pregunta; lo dudoso lleva la lectura de la IA como respuesta sugerida
+  let desdeDocumentos = 0;
+  for (const p of r.preguntas) {
+    if (p.estado !== 'PENDIENTE' || esAdicional(p.ruta) || String(entrada.respuestas[p.id] ?? '').trim()) continue;
+    const destino = resolverRuta(datos, actos, p.ruta);
+    if (!destino || typeof destino.paso !== 'object' || !nuevos.includes(destino.paso.acto)) continue;
+    const actual = leerRuta(datos, destino.rutaDatos);
+    if (!sugeridos.has(p.ruta) && actual !== undefined && actual !== null && actual !== '') {
+      p.estado = 'RESPONDIDA';
+      p.respuesta = actual;
+      p.fuente = 'Tomado de los documentos';
+      desdeDocumentos++;
+      continue;
+    }
+    const sug = sugeridos.get(p.ruta);
+    if (sug && p.valorSugerido === null) {
+      const v = validarValor(destino.campo, sug.valor, datos);
+      if (!('error' in v)) { p.valorSugerido = v.valor; p.fuente = sug.fuente; }
+    }
+  }
 
   const errores: Record<string, string> = {};
   const pasos = new Set<string>();
@@ -392,15 +434,15 @@ export async function responderAsistente(s: SesionActiva, expedienteId: string, 
 
   // Lo que siga faltando (p. ej. por un acto agregado al confirmar el tipo) se convierte en preguntas nuevas
   const guardados = datosDe(await obtenerExpediente(s, expedienteId));
-  r.preguntas.push(...preguntasDeReglas(guardados, actos, r.preguntas));
+  r.preguntas.push(...preguntasDeReglas(guardados, actos, r.preguntas, sugeridos));
   await db.analisisIA.update({ where: { id: a.id }, data: { resultado: r as unknown as Prisma.InputJsonValue } });
   await auditar({ ...datosAuditoria(s), accion: 'ASISTENTE_RESPUESTAS', entidad: 'expediente', entidadId: expedienteId, detalle: { respondidas, errores: Object.keys(errores).length, campos: r.preguntas.filter((p) => p.estado === 'RESPONDIDA').map((p) => p.ruta.replace(/:[^.]+\./, ':*.')) } });
-  if (respondidas) {
+  if (respondidas || desdeDocumentos) {
     await cerrarSugerenciasRespondidas(s, expedienteId);
     await ejecutarRevision(s, expedienteId, false);
   }
   const pendientes = r.preguntas.filter((p) => p.estado === 'PENDIENTE');
-  return { respondidas, errores, pendientes: pendientes.length, obligatoriasPendientes: pendientes.filter((p) => p.obligatoria).length, erroresFormulario };
+  return { respondidas, desdeDocumentos, errores, pendientes: pendientes.length, obligatoriasPendientes: pendientes.filter((p) => p.obligatoria).length, erroresFormulario };
 }
 
 /** El usuario decide seguir con los datos que tiene: las inconsistencias quedan justificadas (las ve el revisor) */

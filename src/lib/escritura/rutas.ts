@@ -23,7 +23,7 @@ export const RECOMENDADOS_PERSONA = ['estado_civil', 'actividad_economica', 'lug
 const camposActo = (acto: string) => ESQUEMAS[acto]?.pasos.flatMap((p) => p.campos) ?? [];
 
 export function resolverRuta(datos: DatosExpediente, actos: string[], ruta: string): Destino | null {
-  const m = /^(escritura|persona:([^.]+)|inmueble:([^.]+)|acto:([^.]+))\.([a-z_]+(?:\.[a-z_]+)?)$/.exec(ruta);
+  const m = /^(escritura|persona:([^.]+)|inmueble:([^.]+)|acto:([^.]+))\.([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)?)$/.exec(ruta);
   if (!m) return null;
   const [, , personaId, inmuebleId, acto, id] = m;
   if (m[1] === 'escritura') {

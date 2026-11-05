@@ -71,3 +71,36 @@ describe('búsqueda dirigida en los documentos', () => {
     expect(convertirHallazgo(campo(CAMPOS_INMUEBLE, 'fecha_certificado_tradicion'), h('13/10/2026'))).toBeNull();
   });
 });
+
+describe('búsqueda de los datos de un acto por plantilla', () => {
+  it('busca las variables vacías y visibles de la plantilla, primero que las demás', async () => {
+    const { ESQUEMAS } = await import('@/lib/escritura/esquemas');
+    ESQUEMAS.cancelacion_hipoteca_prueba = {
+      tipo: 'cancelacion_hipoteca_prueba', version: 1, titulo: 'Cancelación de hipoteca', plantillaFuente: 'prueba', porPlantilla: { plantillaId: 'x', version: 1 },
+      pasos: [{ id: 'cancelacion_hipoteca_prueba', titulo: 'Cancelación', campos: [
+        { id: 'numero_escritura_hipoteca', etiqueta: 'Numero escritura hipoteca', tipo: 'texto', obligatorio: true, ayuda: 'Va en la escritura así: …escritura pública número {{numero_escritura_hipoteca}} del…' },
+        { id: 'acreedor', etiqueta: 'Acreedor', tipo: 'texto', obligatorio: true },
+        { id: 'hay_apoderado', etiqueta: '¿Hay apoderado?', tipo: 'booleano' },
+        { id: 'nombre_apoderado', etiqueta: 'Nombre apoderado', tipo: 'texto', obligatorio: true, visibleSi: { campo: 'hay_apoderado', valores: [true, 'true'] } },
+        { id: 'inmueble.matricula_2', etiqueta: 'Inmueble matricula 2', tipo: 'texto', obligatorio: true },
+      ] }],
+      documentosSoporte: [], reglas: [],
+    };
+    try {
+      const d = caso();
+      d.actos.cancelacion_hipoteca_prueba = { acreedor: 'BANCO PRUEBA' };
+      const f = faltantesBuscables(d, ['cancelacion_hipoteca_prueba']);
+      const delActo = f.filter((x) => x.entidad === 'acto').map((x) => x.campo.id);
+      expect(delActo).toEqual(['numero_escritura_hipoteca', 'hay_apoderado', 'inmueble.matricula_2']);
+      expect(f[0].entidad).toBe('acto');
+      expect(f[0].campo.ayuda).toContain('{{numero_escritura_hipoteca}}');
+      // Solo el acto recién confirmado: sin personas ni inmuebles
+      expect(faltantesBuscables(d, ['cancelacion_hipoteca_prueba'], { soloActos: ['cancelacion_hipoteca_prueba'] }).every((x) => x.entidad === 'acto')).toBe(true);
+      // La compraventa (formulario propio) no tiene variables que buscar
+      d.actos.compraventa = { vendedores: ['v'], compradores: ['c'], inmuebles: ['i9'] };
+      expect(faltantesBuscables(d, ['compraventa']).some((x) => x.entidad === 'acto')).toBe(false);
+    } finally {
+      delete ESQUEMAS.cancelacion_hipoteca_prueba;
+    }
+  });
+});

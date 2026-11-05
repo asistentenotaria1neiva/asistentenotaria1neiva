@@ -16,6 +16,7 @@ import type { DefinicionActo, ActoPreparado } from './actos';
 import type { DatosActo, DatosEscritura } from './tipos';
 import type { ConfigNotaria } from './contexto';
 import { ErrorDatos } from './personas';
+import { leerRuta } from './validar-formulario';
 import { numeroEscrituraEnLetras, fechaEnLetras, fechaCorta, enteroALetras } from '../texto/numeros-a-letras';
 
 const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
@@ -72,7 +73,9 @@ interface Condicion { id: string; si: boolean }
 
 const SI = [true, 'true'];
 const NO = [false, 'false', undefined, null, ''];
-const cumple = (c: Condicion, d: DatosActo) => (d[c.id] === true || d[c.id] === 'true') === c.si;
+/** Valor de una variable: las que llevan punto («inmueble.matricula») se guardan anidadas, como las escribe el formulario */
+const valorDe = (d: DatosActo, id: string): unknown => (id in d ? d[id] : leerRuta(d, id));
+const cumple = (c: Condicion, d: DatosActo) => { const v = valorDe(d, c.id); return (v === true || v === 'true') === c.si; };
 
 /** Bloques que encierran cada aparición de las variables: una lista de condiciones por aparición */
 const condicionesPorVariable = new WeakMap<Campo[], Map<string, Condicion[][]>>();
@@ -155,11 +158,11 @@ export function actoDesdePlantilla(tipo: TipoParaActo, archivo: Buffer, plantill
     enajenacion: false, registro: sobreInmuebles, libroVarios: false,
     preparar(d: DatosActo): ActoPreparado {
       const vacio = (v: unknown) => v === undefined || v === null || (typeof v === 'string' && !v.trim());
-      const faltan = campos.filter((c) => c.obligatorio && seImprime(campos, c, d) && vacio(d[c.id])).map((c) => c.etiqueta);
+      const faltan = campos.filter((c) => c.obligatorio && seImprime(campos, c, d) && vacio(valorDe(d, c.id))).map((c) => c.etiqueta);
       if (faltan.length) throw new ErrorDatos(faltan);
       const plano: Record<string, unknown> = {};
       for (const c of campos) {
-        const v = d[c.id];
+        const v = valorDe(d, c.id);
         const valor = c.tipo === 'booleano' ? v === true || v === 'true' : typeof v === 'string' ? v.trim() : v;
         // Las variables con punto («inmueble.matricula») se guardan como objeto para la plantilla
         const [raiz, sub] = c.id.split('.');
