@@ -90,14 +90,14 @@ describe('formato de impresión de la notaría', () => {
     expect(xml).toContain(`<w:tab w:val="right" w:pos="${ANCHO}"/>`);
   });
 
-  it('Resolución 9146: carta y márgenes de la cara frontal (sup. 3 / izq. 3 / der. 2 / inf. 0,9 cm)', () => {
+  it('carta y márgenes de la notaría (sup. 3 / inf. 0,9 / interior 3,1 / exterior 2,2 cm, encuadernación 0)', () => {
     expect(aplicarMargenes('<w:pgSz w:w="12240" w:h="20160"/><w:pgMar w:top="1871" w:right="1361" w:bottom="737" w:left="1985" w:header="709"/>'))
-      .toBe('<w:pgSz w:w="12240" w:h="15840" w:code="1"/><w:pgMar w:top="1701" w:right="1134" w:bottom="510" w:left="1701" w:header="709" w:gutter="0"/>');
+      .toBe('<w:pgSz w:w="12240" w:h="15840" w:code="1"/><w:pgMar w:top="1701" w:right="1247" w:bottom="510" w:left="1758" w:header="709" w:gutter="0"/>');
     // 1 cm = 567 twips
-    expect(MARGENES_NOTARIA).toEqual({ sup: 3 * 567, izq: 3 * 567, der: 2 * 567, inf: 510 });
+    expect(MARGENES_NOTARIA).toEqual({ sup: Math.round(3 * 567), izq: Math.round(3.1 * 567), der: Math.round(2.2 * 567), inf: Math.round(0.9 * 567) });
   });
 
-  it('Resolución 9146: márgenes simétricos para la cara posterior (izq. 2 / der. 3 cm)', () => {
+  it('márgenes simétricos: en las páginas pares se invierten interior y exterior', () => {
     const ajustes = '<?xml version="1.0"?><w:settings xmlns:w="w"><w:zoom w:percent="100"/><w:defaultTabStop w:val="709"/><w:compat><w:compatSetting w:name="x"/></w:compat></w:settings>';
     expect(aplicarAjustesNotariales(ajustes)).toBe('<?xml version="1.0"?><w:settings xmlns:w="w"><w:zoom w:percent="100"/><w:mirrorMargins/><w:defaultTabStop w:val="709"/><w:compat><w:compatSetting w:name="x"/></w:compat></w:settings>');
     expect(aplicarAjustesNotariales(aplicarAjustesNotariales(ajustes)).match(/mirrorMargins/g)).toHaveLength(1);

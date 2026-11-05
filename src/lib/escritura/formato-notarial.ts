@@ -2,11 +2,12 @@
  * Formato de impresión de las escrituras de la notaría, aplicado al Word ya generado (sobre
  * cualquier plantilla aprobada, sin cambiarla).
  *
- * Resolución 9146 de 2012 de la Superintendencia de Notariado y Registro (papel de seguridad
- * notarial para la extensión de escrituras públicas, tamaño carta 21,59 × 27,94 cm):
- *   - cara frontal: margen superior 3 cm, izquierdo 3 cm, derecho 2 cm, inferior 0,9 cm;
- *   - cara posterior: superior 3 cm, izquierdo 2 cm, derecho 3 cm, inferior 0,9 cm
- *     (márgenes simétricos: las páginas impares son la cara frontal y las pares la posterior);
+ * Papel de seguridad notarial, tamaño carta 21,59 × 27,94 cm. Márgenes los que usa la notaría en
+ * Word (definidos por el notario; no los de la Resolución 9146 de 2012):
+ *   - superior 3 cm, inferior 0,9 cm, interior 3,1 cm, exterior 2,2 cm, encuadernación 0 cm;
+ *   - márgenes simétricos (cara frontal en las páginas impares, posterior en las pares), con el
+ *     margen interior a la izquierda en la cara frontal.
+ * Y, de la Resolución 9146 de 2012:
  *   - fuente Arial 12 en todo el texto, interlineado 1,5 (mínimo 32 renglones por cara);
  *   - texto con justificado completo (los títulos centrados se completan con guiones a ambos lados);
  *   - sin renglones en blanco entre los párrafos (solo el espacio para firmar, en la zona de firmas).
@@ -24,11 +25,11 @@
  */
 
 /**
- * Márgenes de la cara frontal según la Resolución 9146 de 2012 (twips; 1 cm = 567 twips).
- * Con márgenes simétricos, Word toma `izq` como margen interior y `der` como exterior: en la cara
- * posterior (páginas pares) quedan izquierdo 2 cm y derecho 3 cm, como exige la resolución.
+ * Márgenes de la notaría (twips; 1 cm = 567 twips): superior 3 cm, inferior 0,9 cm, interior 3,1 cm
+ * y exterior 2,2 cm. Con márgenes simétricos, Word toma `izq` como margen interior y `der` como
+ * exterior: en las páginas pares se invierten.
  */
-export const MARGENES_NOTARIA = { sup: 1701, der: 1134, inf: 510, izq: 1701 };
+export const MARGENES_NOTARIA = { sup: 1701, der: 1247, inf: 510, izq: 1758 };
 
 /** Tamaño carta reglamentario (twips): 21,59 × 27,94 cm */
 export const PAGINA_CARTA = { ancho: 12240, alto: 15840 };
