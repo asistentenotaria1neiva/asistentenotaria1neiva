@@ -55,7 +55,7 @@ export function MenuLateral({ enlaces, children }: { enlaces: EnlaceMenu[]; chil
 }
 
 /** Pestañas del expediente: la activa es la que coincide exactamente con la página */
-export function PestanasExpediente({ base, pestanas }: { base: string; pestanas: { href: string; texto: string }[] }) {
+export function PestanasExpediente({ base, pestanas }: { base: string; pestanas: { href: string; texto: React.ReactNode }[] }) {
   const ruta = usePathname();
   const lista = useRef<HTMLUListElement>(null);
   // En móvil las pestañas se desplazan a lo ancho: la activa se lleva a la vista

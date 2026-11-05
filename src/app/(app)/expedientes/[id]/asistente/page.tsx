@@ -177,7 +177,7 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
                 <p style={{ marginTop: 0 }}><EtiquetaNivel nivel={o.nivel} /> <strong>{o.mensaje}</strong></p>
                 {ev.detalle && <p className="suave">Evidencia: {ev.detalle}</p>}
                 {editable && (
-                  <div className="fila" style={{ gap: '0.4rem' }}>
+                  <div className="fila" style={{ gap: '0.5rem' }}>
                     <Link className="boton secundario pequeno" href={`/expedientes/${id}/documentos${doc ? `#doc-${doc.id}` : ''}`}>{doc ? `Recargar «${doc.nombreOriginal}»` : 'Recargar documentos'}</Link>
                     <BotonAccion accion={accionContinuarConDatos.bind(null, id, [o.id])} texto="Continuar con los datos actuales" clase="secundario pequeno" />
                   </div>

@@ -21,7 +21,7 @@ export default async function Notificaciones() {
                 <strong>{n.enlace ? <Link href={n.enlace}>{n.titulo}</Link> : n.titulo}</strong>
                 <span className="suave">{!n.leidaEn && <span className="etiqueta informativa">nueva</span>} {fecha(n.creadaEn)}</span>
               </div>
-              <p style={{ margin: '0.35rem 0 0' }}>{n.mensaje}</p>
+              <p style={{ margin: '0.25rem 0 0' }}>{n.mensaje}</p>
             </li>
           ))}
         </ul>

@@ -44,7 +44,7 @@ async function enviar(f: Pick<Fila, 'archivo' | 'tipoId' | 'notas'> & { otros?: 
 
 function Resultado({ r }: { r: ResultadoCarga }) {
   return (
-    <div className="fila" style={{ gap: '0.3rem' }}>
+    <div className="fila" style={{ gap: '0.25rem' }}>
       <Conversion c={r.conversion} />
       <TipoVerificado r={r} />
     </div>
@@ -139,7 +139,7 @@ export function CargaPlantillas({ tipos, inicial }: { tipos: TipoCargable[]; ini
                     </td>
                     <td data-etiqueta="Resultado">
                       {f.estado.fase === 'lista' && <span className="suave">Lista para cargar</span>}
-                      {f.estado.fase === 'cargando' && <span className="fila" style={{ gap: '0.4rem' }}><span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} /> Analizando…</span>}
+                      {f.estado.fase === 'cargando' && <span className="fila" style={{ gap: '0.5rem' }}><span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} /> Analizando…</span>}
                       {f.estado.fase === 'error' && <span className="texto-peligro">{f.estado.error}</span>}
                       {f.estado.fase === 'hecha' && <Resultado r={f.estado.r} />}
                     </td>
@@ -222,11 +222,11 @@ export function CargaRapida({ tipoId, nombre }: { tipoId: string; nombre: string
   return (
     <>
       {estado.fase === 'cargando' ? (
-        <span className="fila" role="status" style={{ gap: '0.4rem' }}><span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} /> Analizando con IA…</span>
+        <span className="fila" role="status" style={{ gap: '0.5rem' }}><span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} /> Analizando con IA…</span>
       ) : estado.fase === 'hecha' ? (
-        <span className="fila" style={{ gap: '0.3rem' }}><Resultado r={estado.r} /><Link className="boton pequeno" href={`/plantillas/${estado.r.id}`}>Abrir v{estado.r.version}</Link></span>
+        <span className="fila" style={{ gap: '0.25rem' }}><Resultado r={estado.r} /><Link className="boton pequeno" href={`/plantillas/${estado.r.id}`}>Abrir v{estado.r.version}</Link></span>
       ) : estado.fase === 'error' ? (
-        <span className="fila" style={{ gap: '0.3rem' }}>
+        <span className="fila" style={{ gap: '0.25rem' }}>
           <span className="texto-peligro">{estado.error}</span>
           <button type="button" className="secundario pequeno" onClick={() => ventana.current?.showModal()}>Reintentar</button>
         </span>

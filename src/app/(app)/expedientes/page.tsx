@@ -29,7 +29,7 @@ export default async function Expedientes({ searchParams }: { searchParams: Prom
     <>
       <div className="fila entre encabezado">
         <h1>Expedientes</h1>
-        <Link className="boton" href="/expedientes/nuevo">+ Nuevo expediente</Link>
+        <Link className="boton" href="/expedientes/nuevo">Nuevo expediente</Link>
       </div>
       <form className="tarjeta filtros" method="get" role="search">
         <div className="ancho"><label htmlFor="q">Buscar</label><input id="q" name="q" type="search" defaultValue={q} placeholder="Número, nombre, documento o matrícula" /></div>

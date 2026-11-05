@@ -106,7 +106,7 @@ export function Cuestionario({ accion, preguntas, actos }: {
       {preguntas.map((p, i) => (
         <div className="campo" key={p.id}>
           <label htmlFor={`q-${p.id}`} id={`e-${p.id}`}>
-            <strong>{i + 1}. {p.pregunta}</strong>{p.obligatoria ? <span className="etiqueta advertencia" style={{ marginLeft: '0.4rem' }}>obligatorio</span> : null}
+            <strong>{i + 1}. {p.pregunta}</strong>{p.obligatoria ? <span className="etiqueta advertencia" style={{ marginLeft: '0.5rem' }}>obligatorio</span> : null}
           </label>
           {p.pregunta !== p.etiqueta && <div className="ayuda">{p.etiqueta}</div>}
           <Entrada p={p} error={errores[p.id]} />

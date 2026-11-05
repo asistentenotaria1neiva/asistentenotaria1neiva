@@ -276,7 +276,7 @@ function SeleccionCorreccionIA({ accion, observaciones, alResultado }: {
   const advertencias = observaciones.filter((o) => o.nivel === 'ADVERTENCIA').length;
   return (
     <div>
-      <div className="fila" style={{ gap: '0.4rem', marginBottom: '0.6rem' }}>
+      <div className="fila" style={{ gap: '0.5rem', marginBottom: '0.5rem' }}>
         {advertencias > 0 && <button type="button" className="secundario pequeno" onClick={() => marcar('ADVERTENCIA')} disabled={pendiente}>Todas las advertencias ({advertencias})</button>}
         <button type="button" className="secundario pequeno" onClick={() => marcar()} disabled={pendiente}>Todas ({observaciones.length})</button>
         <button type="button" className="secundario pequeno" onClick={() => setElegidas([])} disabled={pendiente}>Ninguna</button>

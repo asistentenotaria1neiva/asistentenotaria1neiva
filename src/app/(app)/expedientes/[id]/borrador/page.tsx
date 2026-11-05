@@ -36,7 +36,7 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
                 <td data-etiqueta="Fecha">{fecha(v.creadoEn)}</td>
                 <td data-etiqueta="Plantillas" className="suave">{(v.plantillasUsadas as { tipoId: string; version: number }[]).map((p) => `${p.tipoId} v${p.version}`).join(', ')}</td>
                 <td data-etiqueta="Descargar">
-                  <div className="fila" style={{ gap: '0.4rem' }}>
+                  <div className="fila" style={{ gap: '0.5rem' }}>
                     <a className="boton secundario pequeno" href={`/api/borradores/${v.id}?formato=docx`}>Word</a>
                     {v.rutaPdfCifrada && <a className="boton secundario pequeno" href={`/api/borradores/${v.id}?formato=pdf`} target="_blank" rel="noopener">PDF</a>}
                   </div>

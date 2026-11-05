@@ -16,18 +16,24 @@ export default async function ExpedienteLayout({ children, params }: { children:
     db.observacion.count({ where: { expedienteId: id, estado: 'ABIERTA' } }),
     db.borrador.count({ where: { expedienteId: id } }),
   ]);
+  const paso = (n: number, texto: string, conteo?: number, detalle?: string) => (
+    <>
+      <span className="numero-paso" aria-hidden="true">{n}</span>{texto}
+      {conteo !== undefined && <span className="conteo">{conteo}{detalle && <span className="solo-lectores"> {detalle}</span>}</span>}
+    </>
+  );
   const pestanas = [
-    { href: '', texto: 'Resumen y flujo' },
-    { href: '/documentos', texto: `1 · Documentos (${docs})` },
-    { href: '/asistente', texto: '2 · Asistente IA' },
-    { href: '/observaciones', texto: `3 · Observaciones (${abiertas} abierta${abiertas === 1 ? '' : 's'})` },
-    { href: '/borrador', texto: `4 · Borrador (${borradores})` },
+    { href: '', texto: <>Resumen y flujo</> },
+    { href: '/documentos', texto: paso(1, 'Documentos', docs) },
+    { href: '/asistente', texto: paso(2, 'Asistente IA') },
+    { href: '/observaciones', texto: paso(3, 'Observaciones', abiertas, abiertas === 1 ? 'abierta' : 'abiertas') },
+    { href: '/borrador', texto: paso(4, 'Borrador', borradores) },
   ];
   return (
     <>
-      <p className="suave" style={{ marginBottom: '0.35rem' }}><Link href="/expedientes">← Expedientes</Link></p>
+      <p className="suave" style={{ marginBottom: '0.25rem' }}><Link href="/expedientes">← Expedientes</Link></p>
       <div className="encabezado">
-        <h1>{e.numeroInterno} <EtiquetaEstado estado={e.estado} /></h1>
+        <h1><span className="radicado">{e.numeroInterno}</span> <EtiquetaEstado estado={e.estado} /></h1>
         <p className="suave">
           {(e.actos as string[]).map((a) => a.replace(/_/g, ' ')).join(' + ')}
           <br />Responsable: {e.responsable.nombreCompleto}{e.revisor ? ` · Revisor: ${e.revisor.nombreCompleto}` : ''}

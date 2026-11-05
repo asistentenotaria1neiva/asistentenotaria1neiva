@@ -17,7 +17,7 @@ export const CATEGORIA: Record<string, string> = {
 };
 
 export function EtiquetaVeredicto({ revision }: { revision: RevisionPlantilla | null }) {
-  if (enRevision(revision)) return <span className="etiqueta informativa fila" style={{ gap: '0.35rem', display: 'inline-flex' }}><span className="girador pequeno" aria-hidden="true" /> Analizando con IA…</span>;
+  if (enRevision(revision)) return <span className="etiqueta informativa fila" style={{ gap: '0.5rem', display: 'inline-flex' }}><span className="girador pequeno" aria-hidden="true" /> Analizando con IA…</span>;
   if (!revision) return <span className="etiqueta">sin revisar</span>;
   if (!revision.ia) return <span className="etiqueta">{revision.errorIA ? 'IA sin respuesta' : 'sin revisión IA'}</span>;
   const [clase, texto] = VEREDICTO[revision.ia.veredicto];

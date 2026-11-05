@@ -125,12 +125,12 @@ test('digitador: cambio de contraseña, expediente, carga cifrada, formulario y 
   await captura(page, '03-documentos');
 
   // Asistente: sin clave de la API no se puede analizar (las preguntas las prepara la IA)
-  await page.getByRole('link', { name: '2 · Asistente IA' }).click();
+  await page.getByRole('link', { name: 'Asistente IA' }).click();
   await expect(page.getByText('El asistente no está disponible')).toBeVisible();
   await captura(page, '04-asistente');
 
   // Reglas: el expediente incompleto tiene observaciones críticas
-  await page.getByRole('link', { name: /3 · Observaciones/ }).click();
+  await page.getByRole('link', { name: /^Observaciones/ }).click();
   await page.getByRole('button', { name: 'Ejecutar reglas' }).click();
   await expect(page.locator('.aviso[role=status]').last()).toContainText('Revisión ejecutada');
   await page.reload();
@@ -138,7 +138,7 @@ test('digitador: cambio de contraseña, expediente, carga cifrada, formulario y 
   await captura(page, '05-observaciones');
 
   // El borrador no se genera con críticas abiertas
-  await page.getByRole('link', { name: /4 · Borrador/ }).click();
+  await page.getByRole('link', { name: /^Borrador/ }).click();
   await expect(page.getByText(/observación\(es\) crítica\(s\) abiertas/)).toBeVisible();
   await cerrarSesion(page);
 });

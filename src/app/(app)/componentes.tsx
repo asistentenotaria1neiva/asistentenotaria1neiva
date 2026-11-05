@@ -79,7 +79,7 @@ export function TablaExpedientes({ filas }: { filas: ({ id: string; numeroIntern
           const otorgantes = otorgantesDe(e);
           return (
           <tr key={e.id}>
-            <td className="principal-celda"><Link href={`/expedientes/${e.id}`}><strong>{e.numeroInterno}</strong></Link></td>
+            <td className="principal-celda"><Link href={`/expedientes/${e.id}`} className="radicado">{e.numeroInterno}</Link></td>
             <td data-etiqueta="Otorgantes">{otorgantes.length ? <>{otorgantes.slice(0, 4).join(', ')}{otorgantes.length > 4 && <span className="suave"> y {otorgantes.length - 4} más</span>}</> : <span className="suave">—</span>}</td>
             <td data-etiqueta="Actos">{Array.isArray(e.actos) ? (e.actos as string[]).map((a) => a.replace(/_/g, ' ')).join(' + ') : e.tipo.nombre}</td>
             <td data-etiqueta="Estado"><EtiquetaEstado estado={e.estado} /></td>

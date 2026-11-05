@@ -94,7 +94,7 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
       </div>
 
       <details className="tarjeta carga-nueva" id="cargar" open={!!nuevo}>
-        <summary>+ Cargar plantillas <span className="suave">(una o varias a la vez{sinPlantilla ? ` · ${sinPlantilla} tipos aún no tienen plantilla` : ''})</span></summary>
+        <summary>Cargar plantillas <span className="suave">(una o varias a la vez{sinPlantilla ? ` · ${sinPlantilla} tipos aún no tienen plantilla` : ''})</span></summary>
         <p className="suave">
           Cargue plantillas con variables <code>{'{{variable}}'}</code> y bloques condicionales <code>{'{{#condicion}} … {{/condicion}}'}</code>,
           o la escritura de un caso real: la IA cambia sus datos por variables, y queda la plantilla sin datos y su vista con datos de ejemplo ficticios.
@@ -151,7 +151,7 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
                       <div className="suave">{t.esBloque ? 'Parte común' : t.categoria} · prioridad {t.prioridad.toLowerCase()}</div>
                     </td>
                     <td data-etiqueta="Estado">
-                      <div className="fila" style={{ gap: '0.3rem' }}>
+                      <div className="fila" style={{ gap: '0.25rem' }}>
                         {!principal && <span className={`etiqueta ${clasePrioridad(t.prioridad)}`}>Sin plantilla · prioridad {t.prioridad.toLowerCase()}</span>}
                         {vigente && <span className="etiqueta ok">Aprobada v{vigente.version}</span>}
                         {pendiente && <span className="etiqueta advertencia">Pendiente v{pendiente.version}</span>}

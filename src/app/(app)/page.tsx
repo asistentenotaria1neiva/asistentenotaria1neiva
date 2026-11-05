@@ -19,8 +19,8 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<{
   return (
     <>
       <div className="fila entre encabezado">
-        <div><h1>Inicio</h1><p className="suave">Bienvenido(a), {s.usuario.nombre}. Aquí están sus expedientes en curso{rol !== 'DIGITADOR' ? ' y los que esperan revisión' : ''}.</p></div>
-        <Link className="boton" href="/expedientes/nuevo">+ Nuevo expediente</Link>
+        <div><h1>Inicio</h1><p className="suave">Sus expedientes en curso{rol !== 'DIGITADOR' ? ' y los que esperan revisión' : ''}</p></div>
+        <Link className="boton" href="/expedientes/nuevo">Nuevo expediente</Link>
       </div>
       {error === 'permiso' && <div className="aviso error">No tiene permiso para esa sección.</div>}
       {devueltos > 0 && <div className="aviso alerta">Tiene {devueltos} expediente(s) devuelto(s) por el revisor.</div>}

@@ -60,7 +60,7 @@ export function ConvertirDatosReales({ plantillas, compacto }: { plantillas: Pla
               <li key={p.id} className="fila entre">
                 <span><Link href={`/plantillas/${p.id}`}>{p.nombre}</Link> <span className="suave">v{p.version}</span></span>
                 <span>
-                  {e.fase === 'cargando' && <span className="fila" style={{ gap: '0.4rem' }}><span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} /> Convirtiendo…</span>}
+                  {e.fase === 'cargando' && <span className="fila" style={{ gap: '0.5rem' }}><span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} /> Convirtiendo…</span>}
                   {e.fase === 'error' && <span className="texto-peligro">{e.error}</span>}
                   {e.fase === 'hecha' && (e.r.nueva
                     ? <Link className="boton pequeno" href={`/plantillas/${e.r.nueva.id}`}>Abrir v{e.r.nueva.version}</Link>
