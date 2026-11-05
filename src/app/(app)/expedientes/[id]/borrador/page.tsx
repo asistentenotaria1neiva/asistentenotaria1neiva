@@ -63,7 +63,14 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
         <section className="tarjeta">
           <h3 style={{ marginTop: 0 }}>Versión {ultimo.version}</h3>
           {info.resumen && <p>{info.resumen}</p>}
-          {!!info.faltantes?.length && <div className="aviso error">Faltan {info.faltantes.length} dato(s), marcados «FALTA» en el texto: {info.faltantes.join(', ')}. Cargue el documento o escríbalos en las indicaciones y genere de nuevo.</div>}
+          {(!!info.faltantes?.length || !!info.verificar?.length) && <p className="suave">En el Word, lo que falta y lo que toca verificar va <mark>resaltado en amarillo</mark> (lo que falta, además en negrilla). Búsquelos en Word con Ctrl+B por «FALTA» o «VERIFICAR».</p>}
+          {!!info.faltantes?.length && <div className="aviso error">Faltan {info.faltantes.length} dato(s), marcados <mark><strong>«FALTA»</strong></mark> en el texto: {info.faltantes.join(', ')}. Cargue el documento o escríbalos en las indicaciones y genere de nuevo.</div>}
+          {!!info.verificar?.length && (
+            <div className="aviso alerta">
+              {info.verificar.length} punto(s) por verificar, marcados <mark>[VERIFICAR]</mark> en el texto:
+              <ul>{info.verificar.map((v, i) => <li key={i}>{v}</li>)}</ul>
+            </div>
+          )}
           {alertas.length > 0 ? (
             <Tabla>
               <thead><tr><th>Alerta</th><th>Dato o parte</th><th>Detalle</th></tr></thead>

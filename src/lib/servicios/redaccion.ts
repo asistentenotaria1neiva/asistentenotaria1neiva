@@ -71,6 +71,8 @@ export interface InfoRedaccion {
   documentosNoUtilizados: RespuestaRedaccion['documentos_no_utilizados'];
   /** Datos marcados «FALTA» en el texto */
   faltantes: string[];
+  /** Puntos marcados «[VERIFICAR: …]» en el texto */
+  verificar?: string[];
   indicaciones: string | null;
   modelo: string;
 }
@@ -254,6 +256,7 @@ async function redactar(s: SesionActiva, expedienteId: string, analisisId: strin
     alertas,
     documentosNoUtilizados: (r.datos.documentos_no_utilizados ?? []).slice(0, 30).map((d) => ({ documento: d.documento.slice(0, 300), motivo: d.motivo.slice(0, 500) })),
     faltantes: resultado.faltantes,
+    verificar: resultado.verificar,
     indicaciones,
     modelo: r.modelo,
   };

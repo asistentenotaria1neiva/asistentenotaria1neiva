@@ -102,6 +102,23 @@ describe('armado del Word desde el texto redactado por la IA', () => {
     expect(xml).not.toContain('**');
   });
 
+  it('resalta en amarillo lo que falta (en negrilla) y lo que hay que verificar', () => {
+    const r = armarEscritura(base, [
+      { texto: 'El lindero sur colinda con el lote 33B [VERIFICAR: se lee 33B o 338] y el precio es «FALTA: precio de la venta».', alineacion: 'JUSTIFICADO' },
+      { texto: 'Texto sin marcas que no se resalta en ninguna parte del párrafo.', alineacion: 'JUSTIFICADO' },
+    ]);
+    const xml = new PizZip(r.docx).file('word/document.xml')!.asText();
+    const resaltados = [...xml.matchAll(/<w:r>(<w:rPr>[\s\S]*?<\/w:rPr>)<w:t[^>]*>([^<]*)<\/w:t><\/w:r>/g)].filter((m) => m[1].includes('<w:highlight w:val="yellow"/>'));
+    // El formato notarial puede partir una marca en varios tramos (negrillas automáticas): todos quedan resaltados
+    const texto = resaltados.map((m) => m[2]).join('');
+    expect(texto).toBe('[VERIFICAR: se lee 33B o 338]«FALTA: precio de la venta»');
+    expect(resaltados.filter((m) => m[2].includes('FALTA')).every((m) => m[1].includes('<w:b/>'))).toBe(true);
+    // Los guiones de relleno no quedan resaltados
+    expect(resaltados.some((m) => /^-+\s*$/.test(m[2].trim()))).toBe(false);
+    expect(r.verificar).toEqual(['se lee 33B o 338']);
+    expect(r.faltantes).toEqual(['precio de la venta']);
+  });
+
   it('detecta las marcas FALTA del texto', () => {
     expect(faltantesEn('a «FALTA: precio» b «FALTA: precio» c «FALTA: fecha»')).toEqual(['precio', 'fecha']);
   });

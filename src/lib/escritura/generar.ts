@@ -7,7 +7,9 @@
  * interlineado 1,5, justificado, sin renglones en blanco, guiones de relleno y negrillas):
  * src/lib/escritura/formato-notarial.ts.
  *
- * Un dato que la IA no encontró queda escrito como «FALTA: …» (nunca en blanco en silencio).
+ * Un dato que la IA no encontró queda escrito como «FALTA: …» (nunca en blanco en silencio) y uno
+ * dudoso como «[VERIFICAR: …]». Ambos van con resaltado amarillo en el Word para encontrarlos
+ * rápido (lo que falta, además en negrilla).
  */
 import PizZip from 'pizzip';
 import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, aplicarMargenes, anchoTextoDe } from './formato-notarial';
@@ -22,6 +24,8 @@ export interface ResultadoGeneracion {
   docx: Buffer;
   texto: string; // texto plano de la escritura (para las reglas y la revisión de la IA)
   faltantes: string[];
+  /** Puntos marcados «[VERIFICAR: …]» en el texto */
+  verificar: string[];
 }
 
 const JC: Record<Alineacion, string> = { JUSTIFICADO: 'both', CENTRADO: 'center', IZQUIERDA: 'left', DERECHA: 'right' };
@@ -29,8 +33,13 @@ const codificar = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').
 // Caracteres que Word no admite en el XML (controles distintos de tabulación y salto)
 const limpiar = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/\r\n?/g, '\n');
 
-function run(texto: string, negrita: boolean): string {
-  const rPr = negrita ? '<w:rPr><w:b/><w:bCs/></w:rPr>' : '';
+/** Resaltado de Word de las marcas «FALTA: …» y [VERIFICAR: …] */
+export const RESALTADO = 'yellow';
+const MARCAS = /(«FALTA:[^»]*»|\[VERIFICAR:[^\]]*\])/;
+
+function run(texto: string, negrita: boolean, resaltar = false): string {
+  const props = `${negrita ? '<w:b/><w:bCs/>' : ''}${resaltar ? `<w:highlight w:val="${RESALTADO}"/>` : ''}`;
+  const rPr = props ? `<w:rPr>${props}</w:rPr>` : '';
   const partes = texto.split(/(\n|\t)/).map((t) => (t === '\n' ? '<w:br/>' : t === '\t' ? '<w:tab/>' : t ? `<w:t xml:space="preserve">${codificar(t)}</w:t>` : '')).join('');
   return partes ? `<w:r>${rPr}${partes}</w:r>` : '';
 }
@@ -38,7 +47,11 @@ function run(texto: string, negrita: boolean): string {
 /** XML de un párrafo redactado */
 export function parrafoXml(p: ParrafoRedactado): string {
   const texto = limpiar(p.texto ?? '');
-  const runs = texto.split(/\*\*/).map((t, i) => run(t, i % 2 === 1)).join('');
+  // Negrilla explícita (**…**) y, dentro, las marcas resaltadas en amarillo (lo que falta, además en negrilla)
+  const runs = texto.split(/\*\*/).flatMap((t, i) => t.split(MARCAS).map((x) => {
+    const falta = x.startsWith('«FALTA:');
+    return run(x, i % 2 === 1 || falta, falta || x.startsWith('[VERIFICAR:'));
+  })).join('');
   return `<w:p><w:pPr><w:jc w:val="${JC[p.alineacion] ?? 'both'}"/></w:pPr>${runs}</w:p>`;
 }
 
@@ -63,6 +76,9 @@ function formatoPaquete(zip: PizZip): void {
 
 export const textoPlano = (parrafos: ParrafoRedactado[]) => parrafos.map((p) => limpiar(p.texto ?? '').replace(/\*\*/g, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
+/** Puntos marcados [VERIFICAR: …] en el texto */
+export const verificarEn = (texto: string) => [...new Set([...texto.matchAll(/\[VERIFICAR:\s*([^\]]*)\]/g)].map((m) => m[1].trim()).filter(Boolean))];
+
 /** Datos marcados «FALTA: …» en el texto */
 export const faltantesEn = (texto: string) => [...new Set([...texto.matchAll(new RegExp(`${MARCA_FALTANTE}\\s*([^»]*)»`, 'g'))].map((m) => m[1].trim()).filter(Boolean))];
 
@@ -78,7 +94,7 @@ export function armarEscritura(base: Buffer, parrafos: ParrafoRedactado[]): Resu
   zip.file('word/document.xml', formatoImpresion(xml.slice(0, inicio) + cuerpo + xml.slice(finSeccion)));
   formatoPaquete(zip);
   const texto = textoPlano(parrafos);
-  return { docx: zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer, texto, faltantes: faltantesEn(texto) };
+  return { docx: zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer, texto, faltantes: faltantesEn(texto), verificar: verificarEn(texto) };
 }
 
 /**

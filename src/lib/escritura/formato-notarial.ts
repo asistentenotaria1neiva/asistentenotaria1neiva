@@ -201,9 +201,9 @@ const runTexto = (rPr: string, texto: string) => texto.split(/(\n|\t)/).map((t) 
 /** Tras los guiones escritos, una tabulación que completa el renglón hasta el margen (ver tabRelleno) */
 const FIN_RELLENO = '\t';
 
-/** El rPr de un run sin negrilla, subrayado ni cursiva: para los guiones */
+/** El rPr de un run sin negrilla, subrayado, cursiva ni resaltado: para los guiones */
 const rPrNeutro = (rPr: string) => {
-  const r = rPr.replace(/<w:(?:b|bCs|i|iCs|u)(?:\s[^>]*)?\/>/g, '');
+  const r = rPr.replace(/<w:(?:b|bCs|i|iCs|u|highlight)(?:\s[^>]*)?\/>/g, '');
   return r === '<w:rPr></w:rPr>' ? '' : r;
 };
 
