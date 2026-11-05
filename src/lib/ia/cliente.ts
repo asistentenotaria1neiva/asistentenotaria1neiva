@@ -4,18 +4,20 @@
  * razonamiento se pueden cambiar por variables de entorno, sin cambiar código:
  *   - EXTRACCION (leer documentos): Haiku, CLAUDE_MODELO_DOCUMENTOS / CLAUDE_ESFUERZO_DOCUMENTOS;
  *   - REVISION (asistente, revisión y corrección del expediente): Sonnet, CLAUDE_MODELO_EXPEDIENTE / CLAUDE_ESFUERZO_EXPEDIENTE;
- *   - PLANTILLA (convertir, revisar y corregir plantillas): Sonnet, CLAUDE_MODELO_PLANTILLAS / CLAUDE_ESFUERZO_PLANTILLAS.
+ *   - REDACCION (redactar la escritura sobre la plantilla aprobada): Sonnet, CLAUDE_MODELO_REDACCION / CLAUDE_ESFUERZO_REDACCION;
+ *   - PLANTILLA (revisar y corregir plantillas): Sonnet, CLAUDE_MODELO_PLANTILLAS / CLAUDE_ESFUERZO_PLANTILLAS.
  * Si Haiku declina el contenido, se repite una vez con CLAUDE_MODELO_RESPALDO.
  */
 import 'server-only';
 import Anthropic, { toFile } from '@anthropic-ai/sdk';
 
 type Esfuerzo = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-export type Proposito = 'EXTRACCION' | 'REVISION' | 'PLANTILLA';
+export type Proposito = 'EXTRACCION' | 'REVISION' | 'REDACCION' | 'PLANTILLA';
 
 const PREDETERMINADOS: Record<Proposito, { variable: string; modelo: string; esfuerzo: Esfuerzo }> = {
   EXTRACCION: { variable: 'DOCUMENTOS', modelo: 'claude-haiku-5-5', esfuerzo: 'medium' },
   REVISION: { variable: 'EXPEDIENTE', modelo: 'claude-sonnet-5-5', esfuerzo: 'high' },
+  REDACCION: { variable: 'REDACCION', modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' },
   PLANTILLA: { variable: 'PLANTILLAS', modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' },
 };
 const RESPALDO = 'claude-sonnet-5-5';

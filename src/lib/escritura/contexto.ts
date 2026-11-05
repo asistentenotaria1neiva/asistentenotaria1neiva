@@ -31,7 +31,7 @@ export interface ContextoEscritura {
   /** Lleva la carátula y el cierre comunes: no, si todos los actos son por plantilla (su plantilla es la escritura completa) */
   conCaratula: boolean;
   global: Record<string, unknown>;
-  actos: { id: string; plantilla: string; anexo?: string; contexto: Record<string, unknown>; repetir?: { grupo: string; variables: string[] }[] }[];
+  actos: { id: string; plantilla: string; anexo?: string; contexto: Record<string, unknown> }[];
 }
 
 export function prepararContexto(datos: DatosExpediente, ordenActos: string[], notaria: ConfigNotaria = NOTARIA_POR_DEFECTO): ContextoEscritura {
@@ -182,18 +182,14 @@ export function prepararContexto(datos: DatosExpediente, ordenActos: string[], n
   };
 
   const varios = preparados.length > 1;
-  const automaticos = valoresAutomaticos(e, notaria);
   return {
     conCaratula: preparados.some(({ id }) => !ACTOS[id].porPlantilla),
-    global,
+    global: { ...global, valores_notaria: valoresAutomaticos(e, notaria) },
     actos: preparados.map(({ id, p }, i) => ({
       id,
       plantilla: ACTOS[id].plantilla,
       anexo: ACTOS[id].anexo,
-      ...(p.repetir?.length ? { repetir: p.repetir } : {}),
       contexto: {
-        ...global,
-        ...(p.plano ? { ...automaticos, ...p.plano } : {}),
         a: p.a,
         titulo_acto: varios ? `${ORDINAL_ACTO[i]} ACTO - ${p.especificacion.map((x) => x.acto).join(' - ')}` : '',
       },

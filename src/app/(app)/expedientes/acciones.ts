@@ -17,7 +17,7 @@ import { iniciarTarea } from '@/lib/servicios/tareas';
 import { urlAplicacion } from '@/lib/seguridad/red';
 import { ejecutarRevision, resolverObservacion } from '@/lib/servicios/revision';
 import { proponerCorrecciones, aplicarCorrecciones } from '@/lib/servicios/correccion-ia';
-import { generarBorradorExpediente } from '@/lib/servicios/borradores';
+import { iniciarRedaccion } from '@/lib/servicios/redaccion';
 import { db } from '@/lib/db';
 import type { Errores } from '@/lib/escritura/validar-formulario';
 
@@ -122,8 +122,10 @@ export async function accionAplicarCorrecciones(expedienteId: string, analisisId
 export async function accionGenerarBorrador(expedienteId: string): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {
-    const r = await generarBorradorExpediente(s, expedienteId);
-    return `Borrador versión ${r.borrador.version} generado sobre las plantillas aprobadas.${r.avisoPdf ? ` ${r.avisoPdf}` : ''}`;
+    const r = await iniciarRedaccion(s, expedienteId);
+    // La IA redacta después de responder: la persona puede salir de la página
+    after(r.tarea);
+    return 'La IA está redactando la escritura sobre la plantilla aprobada; tarda unos minutos. Puede salir de esta página: le avisaremos al terminar.';
   }, `/expedientes/${expedienteId}`);
 }
 
@@ -171,7 +173,7 @@ export async function accionResponderAsistente(expedienteId: string, analisisId:
     if (errores) return `${base} Revise ${errores} respuesta(s) marcada(s).`;
     if (x.obligatoriasPendientes) return `${base} Faltan ${x.obligatoriasPendientes} dato(s) obligatorio(s).`;
     if (x.pendientes) return `${base} Quedan ${x.pendientes} pregunta(s) opcional(es); puede responderlas u omitirlas.`;
-    return `${base} Ya puede generar la escritura en Word.`;
+    return `${base} Ya puede redactar la escritura en Word.`;
   }, `/expedientes/${expedienteId}`);
   return { ...r, erroresPreguntas };
 }

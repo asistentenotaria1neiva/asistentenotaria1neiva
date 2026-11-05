@@ -1,65 +1,50 @@
 /**
- * Generación del borrador: reemplaza las variables de las plantillas APROBADAS y une
- * los bloques (carátula → actos → cierre y firmas → anexos) en un solo .docx.
- * La IA no interviene aquí: el texto proviene exclusivamente de las plantillas.
+ * Armado del Word de la escritura a partir del texto que redactó la IA (src/lib/servicios/redaccion.ts)
+ * tomando como base las plantillas APROBADAS. Del paquete .docx de la plantilla base se conservan los
+ * estilos, el encabezado («Hoja No.») y la sección; el cuerpo se reemplaza por los párrafos redactados.
  *
- * Cualquier variable sin valor se imprime como «FALTA: nombre» (nunca queda vacía en
- * silencio) y el borrador se marca con observación CRÍTICA.
+ * Después se aplica el formato de impresión de la notaría (Resolución 9146 de 2012: márgenes, Arial 12,
+ * interlineado 1,5, justificado, sin renglones en blanco, guiones de relleno y negrillas):
+ * src/lib/escritura/formato-notarial.ts.
+ *
+ * Un dato que la IA no encontró queda escrito como «FALTA: …» (nunca en blanco en silencio).
  */
 import PizZip from 'pizzip';
-import Docxtemplater from 'docxtemplater';
-import expressionParser from 'docxtemplater/expressions.js';
-import { filtrosConcordancia } from '../texto/concordancia';
-import type { ContextoEscritura } from './contexto';
 import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, aplicarMargenes, anchoTextoDe } from './formato-notarial';
-
-const ORDINALES = ['PRIMERO', 'SEGUNDO', 'TERCERO', 'CUARTO', 'QUINTO', 'SEXTO', 'SEPTIMO', 'OCTAVO', 'NOVENO', 'DECIMO',
-  'DECIMO PRIMERO', 'DECIMO SEGUNDO', 'DECIMO TERCERO', 'DECIMO CUARTO', 'DECIMO QUINTO', 'DECIMO SEXTO', 'DECIMO SEPTIMO',
-  'DECIMO OCTAVO', 'DECIMO NOVENO', 'VIGESIMO'];
-
 import { MARCA_FALTANTE } from './marcas';
-import { repetirEnPlantilla } from './repetir';
 export { MARCA_FALTANTE };
 
-const parser = expressionParser.configure({ filters: filtrosConcordancia });
-
-/** Obtiene el .docx de una plantilla (aprobada) por su id */
-export type CargadorPlantillas = (id: string) => Promise<Buffer>;
+export type Alineacion = 'JUSTIFICADO' | 'CENTRADO' | 'IZQUIERDA' | 'DERECHA';
+/** Un párrafo redactado. En el texto, **así** va en negrilla explícita; «\n» es un salto de línea. */
+export interface ParrafoRedactado { texto: string; alineacion: Alineacion }
 
 export interface ResultadoGeneracion {
   docx: Buffer;
-  texto: string; // texto plano del borrador (para la revisión de la IA y las reglas)
+  texto: string; // texto plano de la escritura (para las reglas y la revisión de la IA)
   faltantes: string[];
 }
 
-/** Renderiza un bloque y devuelve el XML del cuerpo (sin la sección final) */
-function renderizarBloque(plantilla: Buffer, contexto: Record<string, unknown>, faltantes: string[]): { cuerpo: string; zip: PizZip } {
-  const zip = new PizZip(plantilla);
-  let n = 0;
-  const doc = new Docxtemplater(zip, {
-    paragraphLoop: true,
-    linebreaks: true,
-    delimiters: { start: '{{', end: '}}' },
-    parser,
-    nullGetter(part) {
-      // Secciones ({{#x}}) sin valor: no se imprimen. Variables ({{x}}) sin valor: marca visible.
-      if (part.module) return '';
-      const nombre = part.value ?? '';
-      if (!faltantes.includes(nombre)) faltantes.push(nombre);
-      return `${MARCA_FALTANTE} ${nombre}»`;
-    },
-  });
-  doc.render({ ...contexto, ord: () => ORDINALES[n++] ?? `CLÁUSULA ${n}` });
-  const xml = doc.getZip().file('word/document.xml')!.asText();
-  const inicio = xml.indexOf('<w:body>') + '<w:body>'.length;
-  const finSeccion = xml.lastIndexOf('<w:sectPr');
-  return { cuerpo: xml.slice(inicio, finSeccion), zip: doc.getZip() };
+const JC: Record<Alineacion, string> = { JUSTIFICADO: 'both', CENTRADO: 'center', IZQUIERDA: 'left', DERECHA: 'right' };
+const codificar = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Caracteres que Word no admite en el XML (controles distintos de tabulación y salto)
+const limpiar = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/\r\n?/g, '\n');
+
+function run(texto: string, negrita: boolean): string {
+  const rPr = negrita ? '<w:rPr><w:b/><w:bCs/></w:rPr>' : '';
+  const partes = texto.split(/(\n|\t)/).map((t) => (t === '\n' ? '<w:br/>' : t === '\t' ? '<w:tab/>' : t ? `<w:t xml:space="preserve">${codificar(t)}</w:t>` : '')).join('');
+  return partes ? `<w:r>${rPr}${partes}</w:r>` : '';
+}
+
+/** XML de un párrafo redactado */
+export function parrafoXml(p: ParrafoRedactado): string {
+  const texto = limpiar(p.texto ?? '');
+  const runs = texto.split(/\*\*/).map((t, i) => run(t, i % 2 === 1)).join('');
+  return `<w:p><w:pPr><w:jc w:val="${JC[p.alineacion] ?? 'both'}"/></w:pPr>${runs}</w:p>`;
 }
 
 /**
  * Formato de impresión de la notaría sobre el documento completo (márgenes, guiones escritos,
- * negrillas, carátula): src/lib/escritura/formato-notarial.ts. El texto para las reglas y la IA
- * se toma antes, sin los guiones.
+ * negrillas, carátula).
  */
 function formatoImpresion(xml: string): string {
   const conMargenes = aplicarMargenes(xml);
@@ -68,10 +53,7 @@ function formatoImpresion(xml: string): string {
   return conMargenes.slice(0, inicio) + aplicarFormatoNotarial(conMargenes.slice(inicio, finSeccion), anchoTextoDe(conMargenes)) + conMargenes.slice(finSeccion);
 }
 
-/**
- * Resolución 9146 de 2012 en el paquete: estilos en Arial 12 y márgenes simétricos (cara frontal
- * y posterior del papel notarial)
- */
+/** Resolución 9146 de 2012 en el paquete: estilos en Arial 12 y márgenes simétricos */
 function formatoPaquete(zip: PizZip): void {
   const estilos = zip.file('word/styles.xml');
   if (estilos) zip.file('word/styles.xml', aplicarEstilosNotariales(estilos.asText()));
@@ -79,49 +61,24 @@ function formatoPaquete(zip: PizZip): void {
   if (ajustes) zip.file('word/settings.xml', aplicarAjustesNotariales(ajustes.asText()));
 }
 
-/** Renderiza una sola plantilla con un contexto (prueba con datos de ejemplo en el panel de plantillas) */
-export function renderizarPlantilla(plantilla: Buffer, contexto: Record<string, unknown>): { docx: Buffer; faltantes: string[] } {
-  const faltantes: string[] = [];
-  const { zip } = renderizarBloque(plantilla, contexto, faltantes);
-  zip.file('word/document.xml', formatoImpresion(zip.file('word/document.xml')!.asText()));
-  formatoPaquete(zip);
-  return { docx: zip.generate({ type: 'nodebuffer' }) as Buffer, faltantes };
-}
+export const textoPlano = (parrafos: ParrafoRedactado[]) => parrafos.map((p) => limpiar(p.texto ?? '').replace(/\*\*/g, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
-const textoPlano = (xml: string) => xml
-  .replace(/<w:tab\/>/g, ' ').replace(/<\/w:p>/g, '\n').replace(/<w:br[^>]*\/>/g, '\n').replace(/<[^>]+>/g, '')
-  .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-  .replace(/\n{3,}/g, '\n\n').trim();
+/** Datos marcados «FALTA: …» en el texto */
+export const faltantesEn = (texto: string) => [...new Set([...texto.matchAll(new RegExp(`${MARCA_FALTANTE}\\s*([^»]*)»`, 'g'))].map((m) => m[1].trim()).filter(Boolean))];
 
-export async function generarBorrador(ctx: ContextoEscritura, cargar: CargadorPlantillas): Promise<ResultadoGeneracion> {
-  const faltantes: string[] = [];
-  // Si todos los actos son por plantilla, cada plantilla es la escritura completa: sin carátula ni cierre comunes
-  const caratula = ctx.conCaratula === false ? null : renderizarBloque(await cargar('caratula'), ctx.global, faltantes);
-  const cuerpos = caratula ? [caratula.cuerpo] : [];
-  let primero: PizZip | null = null;
-  for (const acto of ctx.actos) {
-    // Varias personas con el mismo papel en una plantilla hecha para una: su texto se repite
-    const plantilla = await cargar(acto.plantilla);
-    const r = renderizarBloque(acto.repetir?.length ? repetirEnPlantilla(plantilla, acto.repetir) : plantilla, acto.contexto, faltantes);
-    primero ??= r.zip;
-    cuerpos.push(r.cuerpo);
-  }
-  if (caratula) {
-    cuerpos.push(renderizarBloque(await cargar('cierre'), ctx.global, faltantes).cuerpo);
-    const anexos = [...new Set(ctx.actos.map((a) => a.anexo).filter((x): x is string => !!x))];
-    for (const anexo of anexos) cuerpos.push(renderizarBloque(await cargar(anexo), ctx.global, faltantes).cuerpo);
-  }
-
-  // Se usa el paquete de la carátula (estilos, encabezado "Hoja No.", página) como base; sin ella, el del primer acto
-  const zip = caratula?.zip ?? primero!;
-  const xml = zip.file('word/document.xml')!.asText();
+/** Arma el .docx de la escritura: el paquete de `base` (plantilla aprobada) con los párrafos redactados */
+export function armarEscritura(base: Buffer, parrafos: ParrafoRedactado[]): ResultadoGeneracion {
+  const zip = new PizZip(base);
+  const xml = zip.file('word/document.xml')?.asText();
+  if (!xml || !xml.includes('<w:body>')) throw new Error('La plantilla base no tiene documento principal.');
   const inicio = xml.indexOf('<w:body>') + '<w:body>'.length;
-  const finSeccion = xml.lastIndexOf('<w:sectPr');
-  const unido = formatoImpresion(xml.slice(0, inicio) + cuerpos.join('') + xml.slice(finSeccion));
-  zip.file('word/document.xml', unido);
+  let finSeccion = xml.lastIndexOf('<w:sectPr');
+  if (finSeccion < inicio) finSeccion = xml.lastIndexOf('</w:body>');
+  const cuerpo = parrafos.map(parrafoXml).join('');
+  zip.file('word/document.xml', formatoImpresion(xml.slice(0, inicio) + cuerpo + xml.slice(finSeccion)));
   formatoPaquete(zip);
-  const docx = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
-  return { docx, texto: textoPlano(cuerpos.join('')), faltantes };
+  const texto = textoPlano(parrafos);
+  return { docx: zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer, texto, faltantes: faltantesEn(texto) };
 }
 
 /**

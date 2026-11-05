@@ -1,12 +1,11 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { enRevision, tieneDatosReales, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
+import { enRevision, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import { RefrescoAutomatico } from '../expedientes/formularios';
 import { Tabla, fecha } from '../componentes';
 import { CargaPlantillas, CargaRapida, type TipoCargable } from './carga';
 import { EtiquetaVeredicto } from './componentes';
-import { ConvertirDatosReales, type PlantillaConDatos } from './convertir';
 import { FiltrosPlantillas } from './filtros';
 
 const PESTANAS = { '': 'Todas', pendiente: 'Pendientes de aprobación', aprobada: 'Aprobadas', sin_plantilla: 'Sin plantilla' } as const;
@@ -23,7 +22,7 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
   const filtro: Filtro = estado in PESTANAS ? (estado as Filtro) : '';
   const tipos = await db.tipoEscritura.findMany({
     orderBy: [{ categoria: 'asc' }, { nombre: 'asc' }],
-    include: { plantillas: { select: { id: true, version: true, estado: true, creadaEn: true, revision: true, variabilizacion: true }, orderBy: { version: 'desc' } } },
+    include: { plantillas: { select: { id: true, version: true, estado: true, creadaEn: true, revision: true }, orderBy: { version: 'desc' } } },
   });
   type Tipo = (typeof tipos)[number];
   // La versión que representa al tipo en la lista: la pendiente, si no la vigente, si no la última
@@ -71,11 +70,6 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
       id: t.id, nombre: t.esBloque ? `[Parte común] ${t.nombre}` : t.nombre, grupo: t.plantillas.length ? 'version' : 'nueva',
       detalle: t.plantillas.length ? `será la v${Math.max(...t.plantillas.map((p) => p.version)) + 1}` : `prioridad ${t.prioridad.toLowerCase()}`,
     }));
-  // La última versión de cada tipo (si no está retirada) en la que la revisión encontró datos de un caso real
-  const conDatosReales: PlantillaConDatos[] = tipos.flatMap((t) => {
-    const ultima = t.plantillas[0];
-    return ultima && ultima.estado !== 'RETIRADA' && tieneDatosReales(ultima) ? [{ id: ultima.id, nombre: t.nombre, version: ultima.version }] : [];
-  });
   const enlace = (f: Filtro) => `/plantillas?${new URLSearchParams(Object.entries({ estado: f, q, categoria, prioridad, ia, orden }).filter(([, v]) => v))}`;
 
   const revisandose = tipos.some((t) => t.plantillas.some((p) => enRevision(p.revision as RevisionPlantilla | null)));
@@ -87,8 +81,8 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
         <div>
           <h1>Plantillas</h1>
           <p className="suave">
-            Abra una plantilla para ver su diseño, probarla con datos de ejemplo, leer la revisión de la IA o cargar una nueva versión.
-            Solo las versiones aprobadas se usan para generar borradores{s.usuario.rol === 'REVISOR' ? '; las aprueba el administrador por indicación del notario' : ''}.
+            Cada plantilla es el modelo de redacción de un tipo de escritura: la IA la toma como base y redacta cada escritura con los datos del caso.
+            Abra una plantilla para ver su diseño, leer la revisión de la IA o cargar una nueva versión. Solo las versiones aprobadas se usan para redactar{s.usuario.rol === 'REVISOR' ? '; las aprueba el administrador por indicación del notario' : ''}.
           </p>
         </div>
       </div>
@@ -96,24 +90,11 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
       <details className="tarjeta carga-nueva" id="cargar" open={!!nuevo}>
         <summary>Cargar plantillas <span className="suave">(una o varias a la vez{sinPlantilla ? ` · ${sinPlantilla} tipos aún no tienen plantilla` : ''})</span></summary>
         <p className="suave">
-          Cargue plantillas con variables <code>{'{{variable}}'}</code> y bloques condicionales <code>{'{{#condicion}} … {{/condicion}}'}</code>,
-          o la escritura de un caso real: la IA cambia sus datos por variables, y queda la plantilla sin datos y su vista con datos de ejemplo ficticios.
-          Cada archivo se prueba con datos de ejemplo y la IA lo revisa, todos al mismo tiempo; quedan pendientes de aprobación.
+          Cargue una escritura modelo de cada tipo, tal como la redacta la notaría (no hace falta poner variables ni quitar los datos del caso:
+          la IA usa el modelo por su estructura, sus cláusulas y su redacción, y nunca copia los datos de ese caso). Quedan pendientes de aprobación.
         </p>
         <CargaPlantillas tipos={cargables} inicial={nuevo} />
       </details>
-
-      {conDatosReales.length > 0 && process.env.ANTHROPIC_API_KEY && (
-        <details className="tarjeta carga-nueva">
-          <summary>Plantillas con datos de un caso real <span className="suave">({conDatosReales.length} por revisar)</span></summary>
-          <p className="suave">
-            La revisión de la IA encontró datos de un caso real que siguen escritos en estas plantillas (se cargaron antes de la conversión automática o la conversión al cargarlas quedó incompleta). Al convertirlas, la IA cambia esos datos por variables
-            y cada una queda como una versión nueva pendiente de aprobación: la plantilla sin datos y su vista con datos de ejemplo ficticios. La versión actual no cambia.
-            Cada plantilla se intenta una sola vez y sale de esta lista; cuando no quede ninguna, este recuadro desaparece. Las plantillas que se cargan ahora ya salen convertidas al cargarlas.
-          </p>
-          <ConvertirDatosReales plantillas={conDatosReales} />
-        </details>
-      )}
 
       <FiltrosPlantillas valores={{ q, estado: filtro, categoria, prioridad, ia, orden }} activos={filtrosActivos}
         categorias={categorias.map((c) => [c, c === 'Bloques comunes' ? 'Partes comunes' : c])} />

@@ -3,14 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import PizZip from 'pizzip';
 import { vistaPreviaDocx, textoDeParrafos, etiquetasDe } from '@/lib/escritura/vista-previa';
-import { prepararContexto } from '@/lib/escritura/contexto';
-import { renderizarPlantilla, MARCA_FALTANTE } from '@/lib/escritura/generar';
-import type { DatosExpediente } from '@/lib/escritura/tipos';
+import { MARCA_FALTANTE } from '@/lib/escritura/generar';
 
 const raiz = path.resolve(__dirname, '..');
 const docx = (id: string) => fs.readFileSync(path.join(raiz, 'plantillas', 'docx', `${id}.docx`));
-const casos = JSON.parse(fs.readFileSync(path.join(raiz, 'datos_prueba', 'casos.json'), 'utf8')).casos as
-  { clave: string; actos: string[]; datos: DatosExpediente }[];
 
 /** .docx mínimo con el cuerpo dado */
 function docxCon(cuerpo: string): Buffer {
@@ -20,7 +16,7 @@ function docxCon(cuerpo: string): Buffer {
 }
 
 describe('vista previa de plantillas', () => {
-  it.each(fs.readdirSync(path.join(raiz, 'plantillas', 'docx')).map((f) => f.replace('.docx', '')))('%s se lee con sus variables', (id) => {
+  it.each(fs.readdirSync(path.join(raiz, 'plantillas', 'docx')).map((f) => f.replace('.docx', '')))('%s se lee (las plantillas de la compraventa conservan sus etiquetas como guía)', (id) => {
     const parrafos = vistaPreviaDocx(docx(id));
     expect(parrafos.length).toBeGreaterThan(0);
     const e = etiquetasDe(parrafos);
@@ -44,16 +40,8 @@ describe('vista previa de plantillas', () => {
     expect(etiquetasDe([p])).toEqual({ variables: ['a.vendedor'], condiciones: ['x'] });
   });
 
-  it('el ejemplo llenado no deja etiquetas y marca los faltantes', () => {
-    const caso = casos.find((c) => c.clave === 'compraventa_simple')!;
-    const ctx = prepararContexto(caso.datos, caso.actos);
-    const r = renderizarPlantilla(docx('compraventa'), ctx.actos[0].contexto);
-    expect(r.faltantes).toEqual([]);
-    expect(textoDeParrafos(vistaPreviaDocx(r.docx))).not.toMatch(/\{\{/);
-
-    const conFaltante = renderizarPlantilla(docxCon('<w:p><w:r><w:t>Dato: {{a.no_existe}}</w:t></w:r></w:p>'), {});
-    expect(conFaltante.faltantes).toEqual(['a.no_existe']);
-    const [p] = vistaPreviaDocx(conFaltante.docx, { marcarFaltantes: true });
-    expect(p.segmentos.find((s) => s.clase === 'faltante')).toMatchObject({ clase: 'faltante', texto: `${MARCA_FALTANTE} a.no_existe»` });
+  it('marca los datos faltantes del borrador', () => {
+    const [p] = vistaPreviaDocx(docxCon('<w:p><w:r><w:t>Dato: «FALTA: precio» fin</w:t></w:r></w:p>'), { marcarFaltantes: true });
+    expect(p.segmentos.find((s) => s.clase === 'faltante')).toMatchObject({ clase: 'faltante', texto: `${MARCA_FALTANTE} precio»` });
   });
 });

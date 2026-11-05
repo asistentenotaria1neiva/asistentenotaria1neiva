@@ -99,7 +99,7 @@ function nombreParte(original: string, p: ParteDocumento): string {
 }
 
 /** Instrucciones adicionales aprobadas por el administrador (entrenamiento) para la extracción */
-async function instruccionesAprobadas(proposito: 'EXTRACCION' | 'REVISION', tipoIds: string[]) {
+async function instruccionesAprobadas(proposito: 'EXTRACCION' | 'REVISION' | 'REDACCION', tipoIds: string[]) {
   const filas = await db.instruccionIA.findMany({ where: { proposito, estado: 'APROBADA', OR: [{ tipoId: null }, { tipoId: { in: tipoIds } }] }, orderBy: [{ tipoId: 'asc' }, { version: 'desc' }] });
   // la versión aprobada más reciente por tipo
   const vistas = new Set<string>();

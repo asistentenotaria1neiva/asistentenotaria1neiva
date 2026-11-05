@@ -1,7 +1,6 @@
 /** Presentación del panel de plantillas (servidor) */
 import type { Parrafo } from '@/lib/escritura/vista-previa';
 import { enRevision, type RevisionPlantilla, type Veredicto } from '@/lib/servicios/revision-plantillas';
-import type { Variabilizacion } from '@/lib/servicios/variabilizar-plantilla';
 import { EtiquetaNivel } from '../componentes';
 
 export const ESTADO_PLANTILLA: Record<string, [string, string]> = {
@@ -13,7 +12,7 @@ const VEREDICTO: Record<Veredicto, [string, string]> = {
 };
 
 export const CATEGORIA: Record<string, string> = {
-  VARIABLES: 'Variables', DATO_FIJO: 'Dato fijo', REDACCION: 'Redacción', CONTENIDO: 'Contenido del acto', CAMBIO: 'Cambio', FORMATO: 'Formato',
+  TIPO: 'Tipo de escritura', VARIABLES: 'Variables', DATO_FIJO: 'Dato fijo', REDACCION: 'Redacción', CONTENIDO: 'Contenido del acto', CAMBIO: 'Cambio', FORMATO: 'Formato',
 };
 
 export function EtiquetaVeredicto({ revision }: { revision: RevisionPlantilla | null }) {
@@ -24,7 +23,7 @@ export function EtiquetaVeredicto({ revision }: { revision: RevisionPlantilla | 
   return <span className={`etiqueta ${clase}`}>{texto}</span>;
 }
 
-/** El documento como se ve en papel, con las variables y condiciones resaltadas */
+/** El documento como se ve en papel (si una plantilla antigua tiene etiquetas {{…}}, se resaltan) */
 export function VistaDocumento({ parrafos }: { parrafos: Parrafo[] }) {
   return (
     <div className="documento">
@@ -40,48 +39,6 @@ export function VistaDocumento({ parrafos }: { parrafos: Parrafo[] }) {
         </p>
       ))}
     </div>
-  );
-}
-
-export function LeyendaPlantilla() {
-  return (
-    <div className="fila suave leyenda">
-      <span><span className="marca-variable">{'{{variable}}'}</span> dato del expediente</span>
-      <span><span className="marca-condicion">{'{{#condición}}'}</span> inicio de texto condicional</span>
-      <span><span className="marca-cierre">{'{{/condición}}'}</span> fin del texto condicional</span>
-    </div>
-  );
-}
-
-/** Resultado de convertir un caso real en plantilla: qué dato se cambió por qué variable (sin los datos reales) */
-export function PanelConversion({ conversion: c }: { conversion: Variabilizacion }) {
-  return (
-    <section className="tarjeta">
-      <h2 style={{ marginTop: 0 }}>Conversión de caso real</h2>
-      {c.tipoCorrecto === true && <p><span className="etiqueta ok">Corresponde al tipo de escritura</span>{c.motivoTipo ? <span className="suave"> {c.motivoTipo}</span> : null}</p>}
-      {c.tipoCorrecto === false && <div className="aviso error">El archivo <strong>no corresponde</strong> a este tipo de escritura{c.motivoTipo ? `: ${c.motivoTipo}` : '.'}</div>}
-      {c.error ? <div className="aviso alerta">La IA no pudo convertir el archivo ({c.error}); se cargó tal como venía. Si tiene datos de un caso, la revisión los señala como «Dato fijo».</div>
-        : !c.esCasoReal ? <p className="suave">La IA no encontró datos de un caso real: el archivo se cargó tal como venía.{c.resumen ? ` ${c.resumen}` : ''}</p>
-        : (
-          <>
-            <p>{c.resumen}</p>
-            {c.reemplazos.length > 0 && (
-              <details open={c.reemplazos.length <= 8}>
-                <summary>{c.reemplazos.length} dato(s) cambiados por variables</summary>
-                <ul className="lista-codigo">{c.reemplazos.map((r) => <li key={r.variable}>{r.dato} → <code>{r.variable}</code>{r.veces > 1 ? <span className="suave"> ({r.veces} veces)</span> : null}{c.nuevas.includes(r.variable.slice(2, -2).split('|')[0].trim()) && <> <span className="etiqueta advertencia">nueva</span></>}</li>)}</ul>
-              </details>
-            )}
-            {c.nuevas.length > 0 && <p className="suave">Las variables marcadas «nueva» aún no las sabe llenar el sistema: en la vista con datos de ejemplo se llenan con los valores ficticios que propuso la IA, pero para generar escrituras hay que incorporarlas.</p>}
-            {c.noAplicados.length > 0 && (
-              <div className="aviso alerta">
-                Siguen escritos en la plantilla (cámbielos en Word):
-                <ul>{c.noAplicados.map((x, i) => <li key={i}>{x.dato}: {x.motivo}</li>)}</ul>
-              </div>
-            )}
-          </>
-        )}
-      {c.reemplazos.length > 0 && <p className="suave">Los datos reales del archivo no se guardan; la plantilla quedó sin datos y la vista «Con datos de ejemplo» la muestra llenada con datos ficticios.</p>}
-    </section>
   );
 }
 
@@ -122,18 +79,13 @@ export function PanelRevision({ revision, revisadaEn, ocultarHallazgos }: { revi
           )}
         </>
       )}
-      <details open={!!a.prueba?.faltantes.length || !!a.prueba?.error}>
+      <details>
         <summary>Verificación automática</summary>
         <ul>
-          <li>{a.etiquetas.variables.length} variables y {a.etiquetas.condiciones.length} condiciones distintas.</li>
+          {a.parrafos !== undefined && <li>{a.parrafos} párrafos y {a.palabras} palabras.</li>}
           {a.comparadaCon
-            ? <li>Frente a la versión aprobada {a.comparadaCon}: {a.nuevas.length ? <>nuevas <code>{a.nuevas.join(', ')}</code></> : 'sin etiquetas nuevas'}; {a.eliminadas.length ? <>ya no aparecen <code>{a.eliminadas.join(', ')}</code></> : 'no se retiró ninguna'}.</li>
+            ? <li>Frente a la versión aprobada {a.comparadaCon}{a.parrafosCambiados !== undefined ? `: ${a.parrafosCambiados} párrafo(s) cambiaron` : ''}.</li>
             : <li>No hay versión aprobada con la cual comparar.</li>}
-          {!a.prueba ? <li>No hay caso de datos de ejemplo para este tipo: no se probó el llenado.</li>
-            : a.prueba.error ? <li className="texto-peligro">Prueba con datos de ejemplo: {a.prueba.error}</li>
-            : a.prueba.faltantes.length ? <li className="texto-peligro">Con datos de ejemplo, el sistema no supo llenar: <code>{a.prueba.faltantes.join(', ')}</code></li>
-            : a.prueba.deMuestra?.length ? <li>Con datos de ejemplo se llenaron todas las variables; {a.prueba.deMuestra.length} con valores genéricos de muestra porque el formulario del expediente aún no las pide: <code>{a.prueba.deMuestra.join(', ')}</code></li>
-            : <li>Con datos de ejemplo se llenaron todas las variables.</li>}
         </ul>
       </details>
     </>

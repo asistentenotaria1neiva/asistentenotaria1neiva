@@ -1,7 +1,7 @@
 /**
  * Revisión del expediente (paso 5 del flujo):
  *   1. Reglas fijas (validaciones y cruces deterministas).
- *   2. Revisión de la IA sobre el conjunto (datos + documentos + texto del borrador).
+ *   2. Revisión de la IA sobre el conjunto (datos + documentos + texto del último borrador que redactó la IA).
  * Las observaciones se sincronizan: las nuevas se agregan, las que dejan de cumplirse se
  * marcan CORREGIDA (el dato se corrigió), y las resueltas por una persona se conservan.
  * Ninguna observación se descarta sola: aceptar o descartar queda registrado con justificación.
@@ -14,7 +14,7 @@ import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { evaluarReglas, type Hallazgo, type DocumentoAnalizado } from '../reglas/reglas';
 import { prepararContexto } from '../escritura/contexto';
 import { ErrorDatos } from '../escritura/personas';
-import { generarBorrador } from '../escritura/generar';
+import { textoUltimoBorrador } from './borradores';
 import { obtenerConfig } from '../configuracion';
 import { llamarEstructurado, configuracionModelo, ErrorIA } from '../ia/cliente';
 import { SISTEMA_REVISION, ESQUEMA_REVISION } from '../ia/instrucciones';
@@ -24,17 +24,12 @@ import { instruccionesAprobadas } from './documentos';
 import { registrarCorreccion } from './aprendizaje';
 import { notificar } from './notificaciones';
 
-/** Texto de vista previa con la última versión de cada plantilla (aprobada o no), solo para revisar */
-async function textoVistaPrevia(datos: ReturnType<typeof datosDe>, actos: string[]) {
-  const notaria = await obtenerConfig('notaria');
-  const ctx = prepararContexto(datos, actos, notaria);
-  const r = await generarBorrador(ctx, async (id) => {
-    const p = (await db.plantilla.findFirst({ where: { tipoId: id, estado: 'APROBADA' }, orderBy: { version: 'desc' } }))
-      ?? (await db.plantilla.findFirst({ where: { tipoId: id, estado: 'PENDIENTE_APROBACION' }, orderBy: { version: 'desc' } }));
-    if (!p) throw new ErrorNegocio(`No existe plantilla para ${id}.`);
-    return Buffer.from(p.archivo);
-  });
-  return r.texto;
+/** Actos (y bloques comunes) sin plantilla aprobada: sin su modelo no se puede redactar la escritura */
+async function sinPlantillaAprobada(datos: ReturnType<typeof datosDe>, actos: string[]): Promise<string[]> {
+  const ctx = prepararContexto(datos, actos, await obtenerConfig('notaria'));
+  const ids = ctx.conCaratula ? ['caratula', ...ctx.actos.map((a) => a.plantilla), 'cierre', ...ctx.actos.flatMap((a) => (a.anexo ? [a.anexo] : []))] : ctx.actos.map((a) => a.plantilla);
+  const aprobadas = await db.plantilla.findMany({ where: { tipoId: { in: ids }, estado: 'APROBADA' }, select: { tipoId: true } });
+  return [...new Set(ids)].filter((id) => !aprobadas.some((p) => p.tipoId === id));
 }
 
 export async function evaluarExpediente(expedienteId: string, s: SesionActiva) {
@@ -45,9 +40,10 @@ export async function evaluarExpediente(expedienteId: string, s: SesionActiva) {
   const documentos = await db.documento.findMany({ where: { expedienteId, estadoAnalisis: { not: 'DIVIDIDO' } } });
   const pendientes = await db.datoExtraido.count({ where: { expedienteId, estado: 'PENDIENTE', revisionManual: true } });
   const hallazgos: Hallazgo[] = [];
-  let borradorTexto: string | undefined;
+  const borradorTexto = (await textoUltimoBorrador(expedienteId)) ?? undefined;
   try {
-    borradorTexto = await textoVistaPrevia(datos, actos);
+    const faltan = await sinPlantillaAprobada(datos, actos);
+    if (faltan.length) hallazgos.push({ codigo: 'R00-PLANTILLA', nivel: 'CRITICA', mensaje: `No hay plantilla APROBADA (modelo de redacción) para: ${faltan.join(', ')}. El administrador debe aprobarla en Plantillas.` });
   } catch (err) {
     if (err instanceof ErrorDatos) err.faltantes.forEach((f, i) => hallazgos.push({ codigo: 'R00-DATO-FALTANTE', nivel: 'CRITICA', mensaje: `Falta: ${f}.`, ...(err.campos[i] ? { campo: err.campos[i] } : {}) }));
     else if (err instanceof ErrorNegocio) hallazgos.push({ codigo: 'R00-PLANTILLA', nivel: 'CRITICA', mensaje: err.message });
@@ -131,7 +127,7 @@ export async function ejecutarRevision(s: SesionActiva, expedienteId: string, co
         datos_formulario: datos,
         documentos: documentos.map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: d.tipoDocumental, hechos: compactarHechos(d.hechos) })),
         observaciones_automaticas: hallazgos.map((h) => ({ nivel: h.nivel, mensaje: h.mensaje })),
-        borrador: borradorTexto ?? '(no se pudo generar el borrador: faltan datos)',
+        borrador: borradorTexto ?? '(aún no se ha redactado la escritura)',
       };
       const r = await llamarEstructurado<{ observaciones: { nivel: 'CRITICA' | 'ADVERTENCIA' | 'INFORMATIVA'; mensaje: string; campo: string | null; evidencia: string }[] }>({
         proposito: 'REVISION',

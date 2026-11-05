@@ -42,10 +42,6 @@ export interface Oficio {
 
 export interface ActoPreparado {
   a: Record<string, unknown>;
-  /** Actos por plantilla: valores de las variables, que van sueltos en el contexto ({{nombre_propietario}}) */
-  plano?: Record<string, unknown>;
-  /** Actos por plantilla: papeles con varias personas, cuyo texto se repite en la plantilla (src/lib/escritura/repetir.ts) */
-  repetir?: { grupo: string; variables: string[] }[];
   especificacion: { acto: string; valor: string }[];
   unidades: UnidadComparecencia[];
   /** Personas que firman sin estar en una unidad de comparecencia (p. ej. coadyuvante) */

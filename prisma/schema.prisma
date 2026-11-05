@@ -136,7 +136,7 @@ model Plantilla {
   version       Int
   estado        EstadoAprobacion @default(PENDIENTE_APROBACION)
   nombreArchivo String
-  archivo       Bytes // .docx con variables {{...}}
+  archivo       Bytes // .docx: modelo de redacción del tipo de escritura (la IA redacta sobre él; sin variables)
   hashSha256    String
   notas         String?
   cargadaPor    Usuario?         @relation("cargadaPor", fields: [cargadaPorId], references: [id])
@@ -146,7 +146,6 @@ model Plantilla {
   aprobadaEn    DateTime?
   revision      Json? // verificación automática + revisión de la IA (src/lib/servicios/revision-plantillas.ts)
   revisadaEn    DateTime?
-  variabilizacion Json? // caso real convertido en plantilla por la IA (src/lib/servicios/variabilizar-plantilla.ts)
   creadaEn      DateTime         @default(now())
 
   @@unique([tipoId, version])
@@ -377,7 +376,8 @@ model Borrador {
   expediente        Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
   expedienteId      String
   version           Int
-  plantillasUsadas  Json // ids y versiones de las plantillas aprobadas usadas
+  plantillasUsadas  Json // ids y versiones de las plantillas aprobadas (modelos) sobre las que se redactó
+  redaccion         Json? // resumen, datos faltantes y advertencias de la redacción de la IA (src/lib/servicios/redaccion.ts)
   rutaDocxCifrada   String
   rutaPdfCifrada    String?
   hashSha256        String

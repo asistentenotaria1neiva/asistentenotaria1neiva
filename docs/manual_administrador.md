@@ -37,21 +37,20 @@ Desde el resumen de cualquier expediente puede **reasignar** el responsable, **r
 - **Checklist**: cuántos tipos tienen plantilla aprobada, cuántos pendientes y cuáles faltan por prioridad (la notaría debe entregarlos). Detalle en `docs/plantillas/`.
 El panel está en **Plantillas** (menú principal) y lo usan el administrador y los revisores.
 
-- **Cargar plantillas** (arriba de la lista): seleccione uno o varios .docx (hasta 6 a la vez) y elija el tipo de escritura de cada uno (si el nombre del archivo contiene el tipo, p. ej. `hipoteca.docx`, se elige solo). Un tipo sin plantilla recibe su primera versión; uno que ya tiene, una versión nueva. Todos se analizan **al mismo tiempo** y cada fila muestra su resultado y el enlace a la versión. Dentro de una plantilla también está **Cargar nueva versión** para un solo archivo. Cada versión queda **pendiente de aprobación**. La aplicación verifica que las etiquetas estén bien formadas, la prueba con datos ficticios y la IA la revisa (variables, datos fijos de un caso real, redacción, partes del acto y cambios frente a la versión aprobada). Puede tardar unos minutos.
-- **Cargar la escritura de un caso real**: si el archivo tiene los datos de un caso (nombres, cédulas, matrículas, valores, fechas…), la IA cambia cada dato por su variable en todas sus apariciones, usando las variables que el sistema ya conoce para ese tipo (o creando nombres nuevos, marcados «nueva»). La versión queda **sin datos**, y la pestaña *Con datos de ejemplo* la muestra llenada con datos **ficticios**. El cuadro **Conversión de caso real** dice qué dato se cambió por qué variable, cuáles siguieron escritos (cámbielos en Word) y qué revisar. Los datos reales no se guardan. En la carga de varias se puede desmarcar la casilla de conversión.
-- **Ver cada versión**: pestañas *Diseño* (la plantilla como en Word: páginas, márgenes, encabezados, logos y tablas, con las variables resaltadas), *Con datos de ejemplo* (cómo queda llenada; en rojo lo que el sistema no supo llenar), *Solo texto* y *Variables*. Encima están **Descargar plantilla sin datos** y **Descargar con datos de ejemplo** para revisarlas en Word. Al lado, el veredicto de la IA (apta, con observaciones, no apta) con cada hallazgo y el fragmento citado. **Revisar de nuevo con IA** repite la revisión.
+Cada plantilla es el **modelo de redacción** de su tipo de escritura: una escritura de la notaría tal como está en Word. **No lleva variables ni se llena**: la IA la toma como base (estructura, orden y texto de las cláusulas, fórmulas legales, constancias, estilo) y redacta cada escritura con los datos del caso. Los datos del caso que trae el modelo no se copian.
+
+- **Cargar plantillas** (arriba de la lista): seleccione uno o varios .docx (hasta 6 a la vez) y elija el tipo de escritura de cada uno (si el nombre del archivo contiene el tipo, p. ej. `hipoteca.docx`, se elige solo). Un tipo sin plantilla recibe su primera versión; uno que ya tiene, una versión nueva. En la lista, **Cargar** sube un archivo para ese tipo. Cada versión queda **pendiente de aprobación**.
+- **Revisar con IA**: la IA verifica que el modelo sea del tipo indicado, que traiga las partes que ese acto necesita, su redacción y los cambios frente a la versión aprobada. **Arreglar con IA** propone cambios de texto y crea una versión nueva, pendiente de aprobación.
+- **Ver cada versión**: pestañas *Diseño* (como en Word) y *Solo texto* (lo que la IA lee como modelo). **Descargar plantilla** la abre en Word.
 - **Aprobar** (solo el administrador): solo después de que el notario haya leído el texto y los hallazgos; para confirmar debe escribir `APROBADA POR EL NOTARIO`. La IA solo advierte: no aprueba. La versión aprobada anterior queda retirada automáticamente. Todo queda en la auditoría.
 - **Descargar .docx** permite abrir la plantilla en Word (márgenes, encabezados y tablas se revisan allí).
 
-### Cómo escribir una plantilla
+### Cómo preparar una plantilla
 
-- Variables entre llaves dobles: `{{a.precio_letras}}`, `{{escritura.fecha_letras}}`.
-- Bloques condicionales: `{{#a.afecta_si}} … {{/a.afecta_si}}`; contrarios: `{{^a.afecta_si}} … {{/a.afecta_si}}`.
-- Repeticiones: `{{#a.inmuebles}} … {{matricula}} … {{/a.inmuebles}}`.
-- Concordancia automática: `{{a.vendedores | el:'vendedor'}}` → "la vendedora / los vendedores"; `{{a.compradores | v:'pagó':'pagaron'}}`; `{{a.conyuges | nombres}}` → "A y B".
-- Cláusulas numeradas solas: `{{ord()}}` → PRIMERO, SEGUNDO…
-- Use las fuentes de `plantillas/fuentes/` como referencia de las variables disponibles por acto.
-- Si una variable queda vacía, el borrador muestra **«FALTA: nombre»** y genera una observación crítica.
+- Use la mejor escritura de la notaría para ese tipo de acto, completa (encabezado, comparecencia, cláusulas, constancias, otorgamiento, firmas).
+- Si el modelo trae cláusulas que solo aplican a algunos casos, déjelas: la IA las incluye solo cuando el caso lo pide (la revisión lo advierte).
+- Para orientar a la IA en todos los casos de un tipo, el administrador puede agregar instrucciones en **Entrenamiento** con el propósito «Redacción de la escritura».
+- Lo que la IA no encuentra queda escrito **«FALTA: dato»** en el borrador y genera una observación crítica hasta que se complete el dato y se redacte de nuevo.
 
 ## 6. Auditoría
 

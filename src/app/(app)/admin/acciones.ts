@@ -138,7 +138,7 @@ export async function accionInstruccion(_: ResultadoAdmin, f: FormData): Promise
     const op = t(f, 'operacion');
     if (op === 'crear') {
       const tipoId = t(f, 'tipoId') || null;
-      const proposito = t(f, 'proposito') === 'REVISION' ? 'REVISION' : 'EXTRACCION';
+      const proposito = ['REVISION', 'REDACCION'].includes(t(f, 'proposito')) ? t(f, 'proposito') : 'EXTRACCION';
       const contenido = t(f, 'contenido');
       if (contenido.length < 20) throw new ErrorAdmin('La instrucción es demasiado corta.');
       const ultima = await db.instruccionIA.findFirst({ where: { tipoId, proposito }, orderBy: { version: 'desc' } });

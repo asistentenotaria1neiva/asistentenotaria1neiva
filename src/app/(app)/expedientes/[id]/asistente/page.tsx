@@ -5,13 +5,14 @@ import { expedienteDePagina, puedeEditar, datosDe, actosDe, bloqueos } from '@/l
 import { after } from 'next/server';
 import { estadoAsistente, esAdicional, CODIGO_INCONSISTENCIA } from '@/lib/servicios/asistente';
 import { tareaEnCurso, tareaPorReanudar } from '@/lib/servicios/tareas';
+import { redaccionEnCurso } from '@/lib/servicios/redaccion';
 import { ProgresoAnalisis } from '../progreso';
 import { ESQUEMAS, PASOS_COMUNES, CAMPOS_PERSONA, CAMPOS_INMUEBLE, type Campo } from '@/lib/escritura/esquemas';
 import { resolverRuta, CAMPOS_TERMINACION } from '@/lib/escritura/rutas';
 import { leerRuta, campoVisible } from '@/lib/escritura/validar-formulario';
 import type { DatosExpediente } from '@/lib/escritura/tipos';
 import { accionIniciarAsistente, accionResponderAsistente, accionContinuarConDatos, accionGenerarBorrador, accionCorregirDato } from '../../acciones';
-import { BotonAccion } from '../../formularios';
+import { BotonAccion, RefrescoAutomatico } from '../../formularios';
 import { EtiquetaNivel, Tabla, fecha } from '../../../componentes';
 import { Cuestionario, type PreguntaVista } from './Cuestionario';
 
@@ -56,13 +57,14 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
   const reanudar = editable ? await tareaPorReanudar(id) : null;
   if (reanudar) after(reanudar);
   const tarea = await tareaEnCurso(id);
-  const [estado, nDocs, inconsistencias, b, ultimoBorrador, nombresLeidos] = await Promise.all([
+  const [estado, nDocs, inconsistencias, b, ultimoBorrador, nombresLeidos, redactando] = await Promise.all([
     estadoAsistente(id),
     db.documento.count({ where: { expedienteId: id } }),
     db.observacion.findMany({ where: { expedienteId: id, codigo: CODIGO_INCONSISTENCIA, estado: 'ABIERTA' }, orderBy: { creadaEn: 'asc' } }),
     bloqueos(id),
     db.borrador.findFirst({ where: { expedienteId: id }, orderBy: { version: 'desc' } }),
     db.datoExtraido.findMany({ where: { expedienteId: id, estado: 'PENDIENTE', campo: { startsWith: 'persona:', endsWith: '.nombre' } }, select: { campo: true, valor: true } }),
+    redaccionEnCurso(id),
   ]);
   const iaDisponible = !!process.env.ANTHROPIC_API_KEY;
   const r = estado.resultado;
@@ -238,12 +240,13 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
       {r && (
         <section className="tarjeta">
           <h2 style={{ marginTop: 0 }}>Escritura en Word</h2>
-          <p className="suave">El Word se arma con las plantillas aprobadas por el notario, con el formato de las escrituras de la notaría. Quedan en blanco, para el funcionario que hace la terminación:</p>
+          <p className="suave">La IA redacta la escritura tomando como base la plantilla aprobada por el notario y las respuestas que usted dio, con el formato de las escrituras de la notaría. Quedan en blanco, para el funcionario que hace la terminación:</p>
           <ul className="suave">{TERMINACION.map((t) => <li key={t}>{t}</li>)}</ul>
-          {!listo && <div className="aviso info">{!r.actosConfirmados ? 'Confirme el tipo de escritura' : `Responda ${obligatoriasPendientes} pregunta(s) obligatoria(s)`} para generar la escritura.</div>}
-          {b.criticas.length > 0 && <div className="aviso error">Hay {b.criticas.length} observación(es) crítica(s) de las reglas: <Link href={`/expedientes/${id}/observaciones`}>revíselas</Link> antes de generar.</div>}
+          {!listo && <div className="aviso info">{!r.actosConfirmados ? 'Confirme el tipo de escritura' : `Responda ${obligatoriasPendientes} pregunta(s) obligatoria(s)`} para redactar la escritura.</div>}
+          {b.criticas.some((o) => o.codigo !== 'R12-BORRADOR-INCOMPLETO') && <div className="aviso error">Hay observaciones críticas de las reglas: <Link href={`/expedientes/${id}/observaciones`}>revíselas</Link> antes de redactar.</div>}
+          {redactando && <div className="aviso info" role="status"><RefrescoAutomatico segundos={8} /><span className="girador pequeno" aria-hidden="true" /> La IA está redactando la escritura; tarda unos minutos. Le avisaremos al terminar.</div>}
           <div className="fila" style={{ gap: '0.5rem' }}>
-            {editable && listo && <BotonAccion accion={accionGenerarBorrador.bind(null, id)} texto={ultimoBorrador ? 'Generar nueva versión del Word' : 'Generar escritura en Word'} textoPendiente="Generando…" />}
+            {editable && listo && !redactando && <BotonAccion accion={accionGenerarBorrador.bind(null, id)} texto={ultimoBorrador ? 'Redactar nueva versión con IA' : 'Redactar escritura con IA'} textoPendiente="Iniciando…" />}
             {ultimoBorrador && <a className="boton secundario" href={`/api/borradores/${ultimoBorrador.id}?formato=docx`}>Descargar Word (v{ultimoBorrador.version})</a>}
             {ultimoBorrador && <Link className="boton secundario" href={`/expedientes/${id}/borrador`}>Ver versiones</Link>}
           </div>

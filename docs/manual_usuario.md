@@ -41,9 +41,9 @@ Al pulsar **"Analizar documentos y preparar preguntas"** la IA trabaja en segund
 4. Señala las **inconsistencias** entre documentos (nombres o cédulas distintos, vendedor que no es el titular, certificados vencidos, gravámenes vigentes…). Para cada una puede:
    - **Recargar el documento**: retírelo en *Documentos*, cargue el correcto y pulse **"Analizar de nuevo"**.
    - **Continuar con los datos actuales**: la inconsistencia queda registrada como aceptada y el revisor la verá.
-5. Hace las **preguntas** necesarias para completar la escritura (estado civil, quién vende y quién compra, precio…). La **afectación a vivienda familiar** (Ley 258 de 1996, modificada por la Ley 854 de 2003) no se pregunta: se aplica automáticamente según el estado civil de los compradores y el tipo de inmueble. Cuando un documento sugiere la respuesta, aparece ya escrita con su fuente: verifíquela. Las preguntas marcadas como *obligatorio* deben responderse; las demás pueden dejarse sin respuesta. Si al guardar falta algún dato obligatorio, el asistente agrega la pregunta.
+5. Lee la plantilla aprobada (el **modelo de redacción** de ese tipo de escritura) y hace las **preguntas** necesarias para redactarla: los datos del formulario (estado civil, quién vende y quién compra, precio…) y, en texto libre, lo que el modelo necesita y no está en los documentos («Para redactar la escritura»). La **afectación a vivienda familiar** (Ley 258 de 1996, modificada por la Ley 854 de 2003) no se pregunta: se aplica automáticamente según el estado civil de los compradores y el tipo de inmueble. Cuando un documento sugiere la respuesta, aparece ya escrita con su fuente: verifíquela. Las preguntas marcadas como *obligatorio* deben responderse; las demás pueden dejarse sin respuesta. Si al guardar falta algún dato obligatorio, el asistente agrega la pregunta.
 
-La IA no redacta la escritura: el Word se arma con las plantillas aprobadas por el notario y con el formato de la notaría. Quedan **en blanco** para el funcionario que hace la terminación: número y fecha de la escritura, hojas de papel notarial, derechos notariales y retención en la fuente, y los datos de firma de cada otorgante.
+Con las respuestas, pulse **Redactar escritura con IA**: la IA escribe la escritura completa siguiendo la plantilla aprobada por el notario (su estructura, cláusulas y forma de redactar), con los datos del caso y el formato de la notaría. Tarda unos minutos y le avisa al terminar. Quedan **en blanco** para el funcionario que hace la terminación: número y fecha de la escritura, hojas de papel notarial, derechos notariales y retención en la fuente, y los datos de firma de cada otorgante.
 
 ### Revisar y corregir datos
 
@@ -70,9 +70,10 @@ Todo se resuelve en el asistente; no hay formulario aparte.
 
 ## 4. Borrador
 
-- Se arma reemplazando los datos en la **plantilla aprobada por el notario**. La IA no redacta ni cambia el texto.
-- No se genera si hay observaciones críticas abiertas o si falta un dato que la plantilla necesita.
-- Si cambia un dato después de generar el borrador, debe generarlo de nuevo antes de enviarlo a revisión.
+- Lo **redacta la IA** tomando como base la **plantilla aprobada por el notario**, con los datos del expediente, de los documentos y sus respuestas. No copia los datos del modelo.
+- Lo que la IA no encuentra queda marcado **«FALTA: dato»** y aparece como observación crítica: complete el dato (o escríbalo en *Indicaciones para la redacción*) y redacte de nuevo.
+- La página del borrador muestra el resumen de la redacción y lo que el revisor debe mirar con cuidado (cláusulas agregadas o adaptadas). **Lea siempre el texto completo**.
+- No se redacta si hay otras observaciones críticas abiertas. Si cambia un dato después de redactar, redacte de nuevo antes de enviar a revisión.
 - Cada descarga queda registrada.
 
 ## 5. Para el revisor
@@ -83,7 +84,7 @@ Todo se resuelve en el asistente; no hay formulario aparte.
 - **Aprobar** lo deja listo para firma. **Devolver** exige un comentario que explique qué corregir.
 - Usted no puede aprobar expedientes que elaboró.
 - Después de la firma del notario, registre el número de escritura con **"Marcar como firmada"**.
-- En **Plantillas** puede ver cada plantilla con sus variables resaltadas, probarla con datos de ejemplo, cargar una versión nueva y leer la revisión de la IA. La aprobación la hace el administrador por indicación del notario.
+- En **Plantillas** puede ver cada plantilla (modelo de redacción), cargar una versión nueva y leer la revisión de la IA. La aprobación la hace el administrador por indicación del notario.
 
 ## 6. Buenas prácticas
 

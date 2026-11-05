@@ -28,7 +28,7 @@ export async function accionCargarPlantilla(_: ResultadoAdmin, f: FormData): Pro
   let id: string;
   try {
     // Si el archivo es un caso real, la IA cambia sus datos por variables antes de guardarlo
-    ({ id } = await cargarYRevisarPlantilla(s, { tipoId: t(f, 'tipoId'), nombreArchivo: archivo.name.slice(0, 120), archivo: Buffer.from(await archivo.arrayBuffer()), notas: t(f, 'notas') || undefined, convertir: true }));
+    ({ id } = await cargarYRevisarPlantilla(s, { tipoId: t(f, 'tipoId'), nombreArchivo: archivo.name.slice(0, 120), archivo: Buffer.from(await archivo.arrayBuffer()), notas: t(f, 'notas') || undefined }));
   } catch (e) {
     if (e instanceof ErrorPlantilla) return { error: e.message };
     console.error('[plantillas]', e);

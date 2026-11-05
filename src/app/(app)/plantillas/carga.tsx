@@ -1,8 +1,9 @@
 'use client';
 /**
  * Carga de varias plantillas a la vez: un archivo por fila, cada uno con su tipo de escritura.
- * Cada archivo va en su propia petición (api/plantillas/cargar) y todas salen al mismo tiempo,
- * así la conversión del caso real y la revisión de la IA corren en paralelo.
+ * Cada archivo va en su propia petición (api/plantillas/cargar) y todas salen al mismo tiempo.
+ * Cada archivo es el MODELO de redacción de su tipo de escritura: se guarda tal como viene (la IA lo
+ * toma como base para redactar; no se convierte en variables).
  */
 import { useRef, useState } from 'react';
 import Link from 'next/link';
@@ -25,14 +26,12 @@ function adivinarTipo(nombre: string, tipos: TipoCargable[]): string {
   return tipos.filter((t) => n.includes(` ${t.id.replace(/_/g, ' ')} `)).sort((a, b) => b.id.length - a.id.length)[0]?.id ?? '';
 }
 
-/** Sube un archivo a api/plantillas/cargar; la respuesta trae la conversión y si el archivo es del tipo elegido */
-async function enviar(f: Pick<Fila, 'archivo' | 'tipoId' | 'notas'> & { otros?: File[] }, convertir: boolean): Promise<Estado> {
+/** Sube un archivo a api/plantillas/cargar */
+async function enviar(f: Pick<Fila, 'archivo' | 'tipoId' | 'notas'>): Promise<Estado> {
   const datos = new FormData();
   datos.set('archivo', f.archivo);
   datos.set('tipoId', f.tipoId);
   datos.set('notas', f.notas);
-  datos.set('convertir', convertir ? '1' : '');
-  for (const o of f.otros ?? []) datos.append('otros', o);
   try {
     const respuesta = await fetch('/api/plantillas/cargar', { method: 'POST', body: datos });
     const cuerpo = await respuesta.json().catch(() => ({ error: respuesta.status === 413 ? 'El archivo es demasiado grande.' : 'El servidor no respondió a tiempo. Revise la lista: la plantilla pudo haber quedado cargada.' }));
@@ -43,33 +42,12 @@ async function enviar(f: Pick<Fila, 'archivo' | 'tipoId' | 'notas'> & { otros?: 
 }
 
 function Resultado({ r }: { r: ResultadoCarga }) {
-  return (
-    <div className="fila" style={{ gap: '0.25rem' }}>
-      <Conversion c={r.conversion} />
-      <TipoVerificado r={r} />
-    </div>
-  );
-}
-
-/** Lo único que la IA verifica al cargar: que el archivo sea del tipo de escritura elegido */
-function TipoVerificado({ r }: { r: ResultadoCarga }) {
-  if (r.tipoCorrecto === null) return null;
-  return r.tipoCorrecto
-    ? <span className="etiqueta ok" title={r.motivoTipo ?? undefined}>Es {r.tipo}</span>
-    : <span className="etiqueta critica" title={r.motivoTipo ?? undefined}>No es {r.tipo}{r.motivoTipo ? `: ${r.motivoTipo}` : ''}</span>;
-}
-
-function Conversion({ c }: { c: ResultadoCarga['conversion'] }) {
-  if (!c) return null;
-  if (c.error) return <span className="etiqueta advertencia" title={c.error}>No se convirtió: se cargó tal cual</span>;
-  if (!c.esCasoReal) return <span className="etiqueta">Ya era plantilla</span>;
-  return <span className="etiqueta informativa">Caso real: {c.reemplazos} dato(s) → variables{c.noAplicados ? ` · ${c.noAplicados} sin cambiar` : ''}</span>;
+  return <span className="etiqueta ok">Cargada v{r.version}: pendiente de aprobación</span>;
 }
 
 export function CargaPlantillas({ tipos, inicial }: { tipos: TipoCargable[]; inicial?: string }) {
   const router = useRouter();
   const [filas, setFilas] = useState<Fila[]>([]);
-  const [convertir, setConvertir] = useState(true);
   const [aviso, setAviso] = useState<string>();
   const enCurso = filas.some((f) => f.estado.fase === 'cargando');
   const pendientes = filas.filter((f) => f.estado.fase === 'lista' || f.estado.fase === 'error');
@@ -92,7 +70,7 @@ export function CargaPlantillas({ tipos, inicial }: { tipos: TipoCargable[]; ini
 
   async function cargarUna(f: Fila) {
     cambiar(f.clave, { estado: { fase: 'cargando' } });
-    cambiar(f.clave, { estado: await enviar(f, convertir) });
+    cambiar(f.clave, { estado: await enviar(f) });
   }
 
   async function cargarTodas() {
@@ -139,7 +117,7 @@ export function CargaPlantillas({ tipos, inicial }: { tipos: TipoCargable[]; ini
                     </td>
                     <td data-etiqueta="Resultado">
                       {f.estado.fase === 'lista' && <span className="suave">Lista para cargar</span>}
-                      {f.estado.fase === 'cargando' && <span className="fila" style={{ gap: '0.5rem' }}><span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} /> Analizando…</span>}
+                      {f.estado.fase === 'cargando' && <span className="fila" style={{ gap: '0.5rem' }}><span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} /> Cargando…</span>}
                       {f.estado.fase === 'error' && <span className="texto-peligro">{f.estado.error}</span>}
                       {f.estado.fase === 'hecha' && <Resultado r={f.estado.r} />}
                     </td>
@@ -156,65 +134,28 @@ export function CargaPlantillas({ tipos, inicial }: { tipos: TipoCargable[]; ini
         </div>
       )}
 
-      <label className="casilla" style={{ marginBottom: '0.75rem' }}>
-        <input type="checkbox" checked={convertir} disabled={enCurso} onChange={(e) => setConvertir(e.target.checked)} />
-        Si un archivo es la escritura de un caso real, cambiar sus datos por variables con la IA
-      </label>
+      <p className="ayuda">Cargue escrituras modelo de la notaría, tal como están en Word: la IA las toma como base para redactar cada caso (no hace falta poner variables).</p>
       {aviso && <div className="aviso alerta" role="alert">{aviso}</div>}
-      {enCurso && <div className="aviso info" role="status">Analizando {filas.filter((f) => f.estado.fase === 'cargando').length} plantilla(s) al mismo tiempo. Puede tardar unos minutos; no cierre esta página.</div>}
+      {enCurso && <div className="aviso info" role="status">Cargando {filas.filter((f) => f.estado.fase === 'cargando').length} plantilla(s). No cierre esta página.</div>}
       <button type="button" className="pequeno" disabled={enCurso || !pendientes.length} aria-busy={enCurso} onClick={cargarTodas}>
-        {pendientes.length > 1 ? `Cargar y analizar ${pendientes.length} plantillas` : 'Cargar y analizar'}
+        {pendientes.length > 1 ? `Cargar ${pendientes.length} plantillas` : 'Cargar'}
       </button>
     </div>
   );
 }
 
-/**
- * Botón «Cargar» de una fila de la lista: abre de una vez el selector de archivos (uno o varios) y
- * una ventana para analizarlos con la IA. Con varios archivos, uno es la base (su formato es el de
- * la plantilla) y los demás son otros casos del mismo tipo que la IA compara para saber qué es
- * texto fijo y qué son datos. Al analizar, la ventana se cierra y la fila muestra el avance, así
- * se pueden cargar otras plantillas mientras tanto.
- */
-const MAXIMO_CASOS = 6;
-
-export function CargaRapida({ tipoId, nombre }: { tipoId: string; nombre: string }) {
+/** Botón «Cargar» de una fila de la lista: elige un .docx y lo carga como nueva versión del tipo */
+export function CargaRapida({ tipoId }: { tipoId: string; nombre: string }) {
   const router = useRouter();
   const entrada = useRef<HTMLInputElement>(null);
-  const ventana = useRef<HTMLDialogElement>(null);
-  const [archivos, setArchivos] = useState<File[]>([]);
-  const [base, setBase] = useState(0);
-  const [notas, setNotas] = useState('');
-  const [convertir, setConvertir] = useState(true);
-  const [aviso, setAviso] = useState<string>();
   const [estado, setEstado] = useState<Estado>({ fase: 'lista' });
-  const varios = archivos.length > 1;
-  const total = archivos.reduce((s, a) => s + a.size, 0);
-  const grande = total > LIMITE_MB * 1024 * 1024;
 
-  function elegir(lista: FileList | null) {
-    // Con la ventana abierta se agregan a los que ya hay; si no, empieza una carga nueva
-    const previos = ventana.current?.open ? archivos : [];
-    const nuevos = [...(lista ?? [])].filter((a) => !previos.some((x) => x.name === a.name && x.size === a.size));
-    if (!nuevos.length) return;
-    const todos = [...previos, ...nuevos];
-    setAviso(todos.length > MAXIMO_CASOS ? `Se usan hasta ${MAXIMO_CASOS} archivos; se tomaron los primeros ${MAXIMO_CASOS}.` : undefined);
-    if (!ventana.current?.open) { setBase(0); setNotas(''); }
-    setArchivos(todos.slice(0, MAXIMO_CASOS));
-    setEstado({ fase: 'lista' });
-    if (!ventana.current?.open) ventana.current?.showModal();
-  }
-
-  function quitar(i: number) {
-    setArchivos((as) => as.filter((_, j) => j !== i));
-    setBase((b) => (i === b ? 0 : i < b ? b - 1 : b));
-  }
-
-  async function analizar() {
-    if (!archivos.length || grande) return;
-    ventana.current?.close();
+  async function cargar(lista: FileList | null) {
+    const archivo = lista?.[0];
+    if (!archivo) return;
+    if (archivo.size > LIMITE_MB * 1024 * 1024) return setEstado({ fase: 'error', error: `El archivo supera ${LIMITE_MB} MB.` });
     setEstado({ fase: 'cargando' });
-    const r = await enviar({ archivo: archivos[base], otros: archivos.filter((_, i) => i !== base), tipoId, notas }, convertir || varios);
+    const r = await enviar({ archivo, tipoId, notas: '' });
     setEstado(r);
     if (r.fase === 'hecha') router.refresh();
   }
@@ -222,56 +163,17 @@ export function CargaRapida({ tipoId, nombre }: { tipoId: string; nombre: string
   return (
     <>
       {estado.fase === 'cargando' ? (
-        <span className="fila" role="status" style={{ gap: '0.5rem' }}><span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} /> Analizando con IA…</span>
+        <span className="fila" role="status" style={{ gap: '0.5rem' }}><span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} /> Cargando…</span>
       ) : estado.fase === 'hecha' ? (
         <span className="fila" style={{ gap: '0.25rem' }}><Resultado r={estado.r} /><Link className="boton pequeno" href={`/plantillas/${estado.r.id}`}>Abrir v{estado.r.version}</Link></span>
-      ) : estado.fase === 'error' ? (
-        <span className="fila" style={{ gap: '0.25rem' }}>
-          <span className="texto-peligro">{estado.error}</span>
-          <button type="button" className="secundario pequeno" onClick={() => ventana.current?.showModal()}>Reintentar</button>
-        </span>
       ) : (
-        <button type="button" className="secundario pequeno" onClick={() => entrada.current?.click()}>Cargar</button>
+        <span className="fila" style={{ gap: '0.25rem' }}>
+          {estado.fase === 'error' && <span className="texto-peligro">{estado.error}</span>}
+          <button type="button" className="secundario pequeno" onClick={() => entrada.current?.click()}>{estado.fase === 'error' ? 'Reintentar' : 'Cargar'}</button>
+        </span>
       )}
-      <input ref={entrada} type="file" hidden multiple accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        onChange={(e) => { elegir(e.target.files); e.target.value = ''; }} />
-      <dialog ref={ventana} className="ventana" aria-labelledby={`ventana-${tipoId}`}>
-        <h2 id={`ventana-${tipoId}`}>Cargar plantilla: {nombre}</h2>
-        {varios && <p className="suave">La IA compara los {archivos.length} casos para separar el texto fijo de los datos y arma la plantilla sobre el archivo base, con su mismo formato.</p>}
-        <ul className="lista-conversion">
-          {archivos.map((a, i) => (
-            <li key={`${a.name}-${a.size}`} className="fila entre">
-              {varios ? (
-                <label className="casilla" style={{ margin: 0 }}>
-                  <input type="radio" name={`base-${tipoId}`} checked={i === base} onChange={() => setBase(i)} />
-                  <span><strong style={{ overflowWrap: 'anywhere' }}>{a.name}</strong> <span className="suave">· {(a.size / 1024).toFixed(0)} KB{i === base ? ' · base' : ''}</span></span>
-                </label>
-              ) : <span><strong style={{ overflowWrap: 'anywhere' }}>{a.name}</strong> <span className="suave">· {(a.size / 1024).toFixed(0)} KB</span></span>}
-              {varios && <button type="button" className="secundario pequeno" onClick={() => quitar(i)}>Quitar</button>}
-            </li>
-          ))}
-        </ul>
-        {varios && <p className="ayuda">Marque como base el archivo cuyo formato quiere conservar.</p>}
-        {aviso && <div className="aviso alerta" role="alert">{aviso}</div>}
-        {grande && <div className="aviso alerta" role="alert">Entre todos, los archivos superan {LIMITE_MB} MB.</div>}
-        {estado.fase === 'error' && <div className="aviso error" role="alert">{estado.error}</div>}
-        <div className="campo">
-          <label htmlFor={`notas-${tipoId}`}>Notas</label>
-          <input id={`notas-${tipoId}`} type="text" value={notas} placeholder="Origen u observaciones" onChange={(e) => setNotas(e.target.value)} />
-        </div>
-        {!varios && (
-          <label className="casilla" style={{ marginBottom: '0.75rem' }}>
-            <input type="checkbox" checked={convertir} onChange={(e) => setConvertir(e.target.checked)} />
-            Si es la escritura de un caso real, cambiar sus datos por variables con la IA
-          </label>
-        )}
-        <p className="ayuda">Al analizar, esta ventana se cierra y la fila muestra el avance: puede seguir cargando otras plantillas.</p>
-        <div className="fila" style={{ justifyContent: 'flex-end', gap: '0.5rem' }}>
-          <button type="button" className="secundario pequeno" onClick={() => ventana.current?.close()}>Cancelar</button>
-          <button type="button" className="secundario pequeno" disabled={archivos.length >= MAXIMO_CASOS} onClick={() => entrada.current?.click()}>Agregar archivos</button>
-          <button type="button" className="pequeno" disabled={!archivos.length || grande} onClick={analizar}>Analizar con IA</button>
-        </div>
-      </dialog>
+      <input ref={entrada} type="file" hidden accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        onChange={(e) => { cargar(e.target.files); e.target.value = ''; }} />
     </>
   );
 }

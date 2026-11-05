@@ -3,8 +3,7 @@
  * Es un Route Handler y no una acción del servidor porque Next.js ejecuta las acciones de un
  * cliente una por una: así cada archivo va en su propia petición y los análisis corren en paralelo
  * (cada uno con su propio límite de tiempo y de tamaño).
- * Recibe: archivo (.docx), tipoId, notas, convertir ("1" para convertir un caso real en plantilla) y
- * otros (.docx de otros casos del mismo tipo, opcionales, para que la IA compare al convertir).
+ * Recibe: archivo (.docx: el modelo de redacción del tipo de escritura), tipoId y notas.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
@@ -12,7 +11,7 @@ import { leerSesion } from '@/lib/sesion';
 import { ErrorPlantilla } from '@/lib/servicios/plantillas';
 import { cargarYRevisarPlantilla } from '@/lib/servicios/carga-plantillas';
 
-// La conversión del caso real y la revisión de la IA pueden tardar varios minutos
+// La carga de varios archivos a la vez puede tardar
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
@@ -32,8 +31,6 @@ export async function POST(request: NextRequest) {
       nombreArchivo: archivo.name.slice(0, 120),
       archivo: Buffer.from(await archivo.arrayBuffer()),
       notas: String(f.get('notas') ?? '').trim().slice(0, 4000) || undefined,
-      convertir: f.get('convertir') === '1',
-      otros: await Promise.all(f.getAll('otros').filter((o): o is File => o instanceof File && o.size > 0).slice(0, 5).map(async (o) => Buffer.from(await o.arrayBuffer()))),
     });
     revalidatePath('/plantillas', 'layout');
     return NextResponse.json(r);

@@ -6,21 +6,19 @@
  *   3. El usuario elige qué cambios aplicar. Se crea una NUEVA versión pendiente de aprobación:
  *      la versión revisada no se modifica y el notario sigue aprobando antes de que se use.
  * Cada cambio se valida antes de proponerlo y otra vez al aplicarlo: el fragmento debe estar una
- * sola vez en la plantilla, las etiquetas deben quedar bien formadas y solo se usan variables conocidas.
+ * sola vez en la plantilla y el documento debe quedar válido.
  */
 import 'server-only';
 import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
-import { vistaPreviaDocx, textoDeParrafos, etiquetasDe } from '../escritura/vista-previa';
+import { vistaPreviaDocx, textoDeParrafos } from '../escritura/vista-previa';
 import { reemplazarEnDocx, type ResultadoReemplazo } from '../escritura/editar-docx';
 import { llamarEstructurado, ErrorIA } from '../ia/cliente';
 import { SISTEMA_CORRECCION_PLANTILLA, ESQUEMA_CORRECCION_PLANTILLA } from '../ia/instrucciones';
 import { validarDocxPlantilla, cargarPlantilla, ErrorPlantilla } from './plantillas';
 import { revisarPlantilla, type RevisionPlantilla, type CorreccionPlantilla, type PropuestaPlantilla } from './revision-plantillas';
-import { TIPOS_CON_FORMULARIO_PROPIO } from '../escritura/esquemas';
-import { VARIABLES_AUTOMATICAS } from '../escritura/actos-plantilla';
 
 /** Una corrección EN_CURSO más antigua que esto se da por interrumpida (p. ej., el servidor se reinició) */
 const LIMITE_CORRECCION_MS = 30 * 60 * 1000;
@@ -33,31 +31,11 @@ const MOTIVOS: Record<Exclude<ResultadoReemplazo, 'APLICADO'>, string> = {
 };
 const motivo = (r: ResultadoReemplazo | { rechazado: string }) => (typeof r === 'string' ? MOTIVOS[r as keyof typeof MOTIVOS] : r.rechazado);
 
-/** Nombre base de una etiqueta: "#a.es_cuota" → "a.es_cuota"; "a.vendedor | g:'señor'" → "a.vendedor" */
-const baseEtiqueta = (etiqueta: string) => etiqueta.replace(/^[#^/]\s*/, '').split('|')[0].trim().replace(/\s+/g, ' ');
-const etiquetasEn = (texto: string) => [...texto.matchAll(/\{\{\s*([\s\S]*?)\s*\}\}/g)].map((m) => baseEtiqueta(m[1]));
-
-/** Etiquetas que la IA puede usar: las de esta versión y las de la versión aprobada del mismo tipo */
-async function etiquetasConocidas(tipoId: string, archivo: Buffer): Promise<string[]> {
-  const aprobada = await db.plantilla.findFirst({ where: { tipoId, estado: 'APROBADA' }, orderBy: { version: 'desc' } });
-  const conjunto = new Set<string>(['ord()']);
-  for (const doc of [archivo, ...(aprobada ? [Buffer.from(aprobada.archivo)] : [])]) {
-    const e = etiquetasDe(vistaPreviaDocx(doc));
-    for (const x of [...e.variables, ...e.condiciones]) conjunto.add(baseEtiqueta(x));
-  }
-  return [...conjunto].sort();
-}
-
-/**
- * Valida el documento después de un cambio: etiquetas bien formadas y solo variables conocidas. Con
- * formulario automático se aceptan variables nuevas (cada una será un campo), con nombre válido.
- */
-function validador(conocidas: string[], automatico: boolean) {
+/** Valida el documento después de un cambio: debe seguir siendo un .docx válido */
+function validador() {
   return (doc: Buffer): string | null => {
     const v = validarDocxPlantilla(doc);
-    if (!v.ok) return `dejaría la plantilla con etiquetas mal formadas (${v.error})`;
-    const nuevas = etiquetasEn(textoDeParrafos(vistaPreviaDocx(doc))).filter((e) => !conocidas.includes(e) && !(automatico && /^[a-z0-9_]+$/.test(e)));
-    return nuevas.length ? `usa variables que el sistema no conoce: ${[...new Set(nuevas)].map((e) => `{{${e}}}`).join(', ')}` : null;
+    return v.ok ? null : `dejaría el documento inválido (${v.error})`;
   };
 }
 
@@ -101,9 +79,6 @@ export async function proponerCorreccionesPlantilla(s: SesionActiva, id: string,
   const tarea = async () => {
     let correccion: CorreccionPlantilla;
     try {
-      // Con formulario automático la IA puede crear variables (cada una será un campo) y conoce las del sistema
-      const automatico = !p.tipo.esBloque && !TIPOS_CON_FORMULARIO_PROPIO.has(p.tipoId);
-      const conocidas = [...new Set([...(await etiquetasConocidas(p.tipoId, archivo)), ...(automatico ? VARIABLES_AUTOMATICAS : [])])].sort();
       const texto = textoDeParrafos(vistaPreviaDocx(archivo));
       const lista = elegidos.map((i) => ({ hallazgo: i, ...revision.ia!.hallazgos[i] }));
       const r = await llamarEstructurado<{ correcciones: { hallazgo: number; original: string; corregido: string; explicacion: string }[]; sin_correccion: { hallazgo: number; motivo: string }[] }>({
@@ -111,9 +86,6 @@ export async function proponerCorreccionesPlantilla(s: SesionActiva, id: string,
         sistema: SISTEMA_CORRECCION_PLANTILLA,
         contenido: [{ type: 'text', text: [
           `TIPO: ${p.tipo.nombre} (${p.tipoId}) · versión ${p.version}`,
-          automatico
-            ? `FORMULARIO AUTOMÁTICO: puede crear variables y condiciones nuevas. Variables del sistema (notaría y terminación): ${VARIABLES_AUTOMATICAS.map((e) => `{{${e}}}`).join(', ')}. Etiquetas que ya usa: ${conocidas.filter((e) => !VARIABLES_AUTOMATICAS.includes(e)).map((e) => `{{${e}}}`).join(', ') || 'ninguna'}`
-            : `ETIQUETAS CONOCIDAS (las únicas que puede usar): ${conocidas.map((e) => `{{${e}}}`).join(', ') || 'ninguna'}`,
           `HALLAZGOS A CORREGIR:\n${JSON.stringify(lista)}`,
           `<plantilla>\n${texto.slice(0, LIMITE_TEXTO)}\n</plantilla>`,
           'Propón las correcciones de los hallazgos recibidos.',
@@ -123,7 +95,7 @@ export async function proponerCorreccionesPlantilla(s: SesionActiva, id: string,
       });
 
       // Cada propuesta se prueba sola sobre la versión actual: solo quedan las que se pueden aplicar
-      const aceptar = validador(conocidas, automatico);
+      const aceptar = validador();
       const propuestas: PropuestaPlantilla[] = [];
       const sinCorreccion: CorreccionPlantilla['sinCorreccion'] = [];
       for (const c of r.datos.correcciones) {
@@ -162,7 +134,7 @@ export async function aplicarCorreccionesPlantilla(s: SesionActiva, id: string, 
   const elegidas = c.propuestas.map((x, i) => ({ x, i })).filter(({ x, i }) => x.estado === 'PENDIENTE' && indices.includes(i));
   const archivo = Buffer.from(p.archivo);
   const r = elegidas.length
-    ? reemplazarEnDocx(archivo, elegidas.map(({ x }) => ({ original: x.original, nuevo: x.corregido })), validador([...(await etiquetasConocidas(p.tipoId, archivo)), ...VARIABLES_AUTOMATICAS], !p.tipo.esBloque && !TIPOS_CON_FORMULARIO_PROPIO.has(p.tipoId)))
+    ? reemplazarEnDocx(archivo, elegidas.map(({ x }) => ({ original: x.original, nuevo: x.corregido })), validador())
     : null;
   const fallidas: string[] = [];
   c.propuestas.forEach((x, i) => {
@@ -181,8 +153,7 @@ export async function aplicarCorreccionesPlantilla(s: SesionActiva, id: string, 
     const notas = [`Correcciones de la IA sobre la versión ${p.version}, elegidas por ${s.usuario.nombre}:`,
       ...aplicadas.map((x) => `- ${hallazgos[x.hallazgo]?.mensaje ?? 'Hallazgo'} → «${x.original.slice(0, 150)}» por «${x.corregido.slice(0, 150)}»`),
       ...(fallidas.length ? ['No se pudieron aplicar (corríjalos en Word):', ...fallidas.map((f) => `- ${f}`)] : [])].join('\n');
-    // La conversión del caso real (y sus valores ficticios para la vista de ejemplo) pasa a la nueva versión
-    const nueva = await cargarPlantilla(p.tipoId, p.nombreArchivo, r.docx, s.usuario.id, notas.slice(0, 4000), (p.variabilizacion ?? undefined) as Prisma.InputJsonValue | undefined);
+    const nueva = await cargarPlantilla(p.tipoId, p.nombreArchivo, r.docx, s.usuario.id, notas.slice(0, 4000));
     nuevaId = nueva.id;
     await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_CARGADA', entidad: 'plantilla', entidadId: nueva.id, detalle: { tipoId: p.tipoId, version: nueva.version, sha256: nueva.hashSha256, origen: 'correccion_ia', desde: p.version } });
   }

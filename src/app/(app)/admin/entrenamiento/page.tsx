@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { SISTEMA_EXTRACCION, SISTEMA_REVISION } from '@/lib/ia/instrucciones';
+import { SISTEMA_EXTRACCION, SISTEMA_REVISION, SISTEMA_REDACCION } from '@/lib/ia/instrucciones';
 import { configuracionModelo } from '@/lib/ia/cliente';
 import { accionInstruccion } from '../acciones';
 import { FormAdmin } from '../formularios';
@@ -60,7 +60,7 @@ export default async function Entrenamiento() {
       <section className="tarjeta">
         <h2>Nueva instrucción (queda pendiente de aprobación)</h2>
         <FormAdmin accion={accionInstruccion} ocultos={{ operacion: 'crear' }} campos={[
-          { nombre: 'proposito', etiqueta: 'Para', tipo: 'select', opciones: [['EXTRACCION', 'Extracción de datos de documentos'], ['REVISION', 'Revisión y observaciones']] },
+          { nombre: 'proposito', etiqueta: 'Para', tipo: 'select', opciones: [['EXTRACCION', 'Extracción de datos de documentos'], ['REVISION', 'Revisión y observaciones'], ['REDACCION', 'Redacción de la escritura']] },
           { nombre: 'tipoId', etiqueta: 'Tipo de escritura', tipo: 'select', opciones: [['', 'Todas'], ...tipos.map((t) => [t.id, t.nombre] as [string, string])] },
           { nombre: 'contenido', etiqueta: 'Instrucción', tipo: 'area', ayuda: 'Ej.: "En los certificados de tradición de la ORIP de La Plata la fecha de impresión aparece al pie de la última página."' },
           { nombre: 'motivo', etiqueta: 'Patrón de error que la motiva', tipo: 'area' },
@@ -72,6 +72,7 @@ export default async function Entrenamiento() {
         <details><summary>Instrucciones base (versión fija del código)</summary>
           <h3>Extracción</h3><pre className="vista-previa">{SISTEMA_EXTRACCION}</pre>
           <h3>Revisión</h3><pre className="vista-previa">{SISTEMA_REVISION}</pre>
+          <h3>Redacción</h3><pre className="vista-previa">{SISTEMA_REDACCION}</pre>
         </details>
         {!instrucciones.length ? <p className="suave">Aún no hay instrucciones adicionales.</p> : (
           <Tabla><thead><tr><th>Para</th><th>Tipo</th><th>Versión</th><th>Estado</th><th>Contenido</th><th aria-label="Acciones" /></tr></thead>

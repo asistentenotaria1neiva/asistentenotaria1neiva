@@ -28,7 +28,7 @@ export default async function ResumenExpediente({ params }: { params: Promise<{ 
     { t: 'La IA analiza los documentos y prepara las preguntas', hecho: nAnalizados > 0 },
     { t: 'Responder las preguntas del asistente y resolver inconsistencias', hecho: !!ultimoBorrador },
     { t: 'Revisión (reglas + IA) y observaciones resueltas', hecho: nRevisiones > 0 && !b.criticas.length && !b.advertencias.length },
-    { t: 'Escritura en Word generada sobre la plantilla aprobada (con espacios para la terminación)', hecho: !!ultimoBorrador },
+    { t: 'Escritura en Word redactada por la IA sobre la plantilla aprobada (con espacios para la terminación)', hecho: !!ultimoBorrador },
     { t: 'Aprobación del revisor', hecho: cerrado },
     { t: 'Lista para firma del notario', hecho: cerrado },
   ];

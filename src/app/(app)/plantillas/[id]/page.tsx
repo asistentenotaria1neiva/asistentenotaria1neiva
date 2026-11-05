@@ -2,16 +2,15 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { ESQUEMAS, TIPOS_CON_FORMULARIO_PROPIO } from '@/lib/escritura/esquemas';
-import { vistaPreviaDocx, etiquetasDe } from '@/lib/escritura/vista-previa';
-import { enRevision, probarConEjemplo, tieneDatosReales, tieneEjemplo, valoresEjemploDe, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
-import type { Variabilizacion } from '@/lib/servicios/variabilizar-plantilla';
+import { ESQUEMAS } from '@/lib/escritura/esquemas';
+import { vistaPreviaDocx } from '@/lib/escritura/vista-previa';
+import { enRevision, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import { estadoCorreccionPlantilla } from '@/lib/servicios/correccion-plantillas';
 import { accionCargarPlantilla, accionPlantilla, accionEliminarPlantilla, accionRevisarPlantilla, accionProponerCorreccionesPlantilla, accionAplicarCorreccionesPlantilla } from '../acciones';
 import { FormAdmin } from '../../admin/formularios';
 import { PanelCorreccionIA, RefrescoAutomatico } from '../../expedientes/formularios';
 import { fecha } from '../../componentes';
-import { CATEGORIA, ESTADO_PLANTILLA, LeyendaPlantilla, PanelConversion, PanelRevision, VistaDocumento, hallazgosOrdenados } from '../componentes';
+import { CATEGORIA, ESTADO_PLANTILLA, PanelRevision, VistaDocumento, hallazgosOrdenados } from '../componentes';
 
 const TEXTOS_CORRECCION = {
   seleccion: 'Elija los hallazgos que quiere arreglar. La IA propone cada cambio de texto; usted decide cuáles aplicar. Se crea una versión nueva, pendiente de aprobación: esta no cambia.',
@@ -19,12 +18,11 @@ const TEXTOS_CORRECCION = {
   sinCorreccion: 'Se corrigen a mano en Word',
 };
 import { VisorDocx } from '../VisorDocx';
-import { ConvertirDatosReales } from '../convertir';
 
 // La revisión de la IA puede tardar uno o dos minutos
 export const maxDuration = 300;
 
-const VISTAS = [['diseno', 'Diseño (como en Word)'], ['ejemplo', 'Con datos de ejemplo'], ['texto', 'Solo texto'], ['variables', 'Variables']] as const;
+const VISTAS = [['diseno', 'Diseño (como en Word)'], ['texto', 'Solo texto']] as const;
 
 export default async function VersionPlantilla({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ vista?: string; corregida?: string }> }) {
   const s = await requerirSesion({ roles: ['ADMINISTRADOR', 'REVISOR'] });
@@ -40,19 +38,11 @@ export default async function VersionPlantilla({ params, searchParams }: { param
     },
   });
   if (!p) notFound();
-  const archivo = Buffer.from(p.archivo);
   const revision = p.revision as RevisionPlantilla | null;
-  const parrafos = vistaPreviaDocx(archivo);
-  const etiquetas = etiquetasDe(parrafos);
-  const conversion = p.variabilizacion as Variabilizacion | null;
-  const ejemplo = vista === 'ejemplo' ? await probarConEjemplo(p.tipoId, archivo, valoresEjemploDe(p)) : null;
+  const parrafos = vistaPreviaDocx(Buffer.from(p.archivo));
   const admin = s.usuario.rol === 'ADMINISTRADOR';
-  const conEjemplo = tieneEjemplo(p.tipoId, valoresEjemploDe(p));
   const esquema = ESQUEMAS[p.tipoId];
   const revisando = enRevision(revision);
-  const formularioAutomatico = !p.tipo.esBloque && !TIPOS_CON_FORMULARIO_PROPIO.has(p.tipoId);
-  // Solo en la última versión: si ya hay una más nueva, la conversión se hace sobre esa
-  const conDatosReales = !!process.env.ANTHROPIC_API_KEY && p.estado !== 'RETIRADA' && p.tipo.plantillas[0]?.id === p.id && tieneDatosReales(p);
 
   // Corrección con IA de los hallazgos: elegir → la IA propone (en segundo plano) → aplicar en una versión nueva
   const hallazgos = hallazgosOrdenados(revision);
@@ -70,7 +60,8 @@ export default async function VersionPlantilla({ params, searchParams }: { param
         <h1 style={{ marginBottom: 0 }}>{p.tipo.nombre}</h1>
         <span className={`etiqueta ${ESTADO_PLANTILLA[p.estado][0]}`}>v{p.version} {ESTADO_PLANTILLA[p.estado][1]}</span>
       </div>
-      <p className="suave">{p.tipo.esBloque ? 'Bloque común de todas las escrituras' : p.tipo.categoria}{p.tipo.descripcion ? ` · ${p.tipo.descripcion}` : ''}</p>
+      <p className="suave">{p.tipo.esBloque ? 'Bloque común de las escrituras con formulario propio' : p.tipo.categoria}{p.tipo.descripcion ? ` · ${p.tipo.descripcion}` : ''}</p>
+      <p className="suave">Modelo de redacción: la IA lo toma como base (estructura, cláusulas y forma de redactar) y escribe cada escritura con los datos del caso. Los datos que trae este modelo no se copian.</p>
 
       {p.tipo.plantillas.length > 1 && (
         <nav className="pestanas" aria-label="Versiones">
@@ -89,64 +80,21 @@ export default async function VersionPlantilla({ params, searchParams }: { param
           </nav>
 
           <div className="fila descargas">
-            <a className="boton pequeno" href={`/api/plantillas/${p.id}`}>Descargar plantilla sin datos (.docx)</a>
-            {conEjemplo && <a className="boton secundario pequeno" href={`/api/plantillas/${p.id}?ejemplo=1`}>Descargar con datos de ejemplo (.docx)</a>}
-            <span className="suave">Ábralos en Word para confirmar márgenes, fuentes y saltos de página exactos.</span>
+            <a className="boton pequeno" href={`/api/plantillas/${p.id}`}>Descargar plantilla (.docx)</a>
+            <span className="suave">Ábrala en Word para confirmar márgenes, fuentes y saltos de página exactos.</span>
           </div>
 
           {vista === 'diseno' && (
-            <>
-              <LeyendaPlantilla />
-              <VisorDocx url={`/api/plantillas/${p.id}?vista=1`} />
-            </>
+            <VisorDocx url={`/api/plantillas/${p.id}?vista=1`} />
           )}
 
           {vista === 'texto' && (
             <>
-              <LeyendaPlantilla />
               <VistaDocumento parrafos={parrafos} />
-              <p className="suave">Solo el texto del cuerpo, con todas las variables resaltadas. El diseño completo está en la pestaña «Diseño».</p>
+              <p className="suave">Solo el texto del cuerpo, que es lo que la IA lee como modelo. El diseño completo está en la pestaña «Diseño».</p>
             </>
           )}
 
-          {vista === 'ejemplo' && (!ejemplo
-            ? <div className="aviso alerta">Aún no hay un caso de datos de ejemplo para este tipo de escritura, así que no se puede probar el llenado. Revise el diseño en la pestaña «Diseño».</div>
-            : 'error' in ejemplo
-              ? <div className="aviso error">{ejemplo.error}</div>
-              : (
-                <>
-                  <div className="aviso info">
-                    {ejemplo.caso.clave === 'valores_ia'
-                      ? <>Datos <strong>ficticios</strong> que propuso la IA para esta plantilla.</>
-                      : ejemplo.caso.clave === 'muestra'
-                        ? <>Datos <strong>ficticios</strong> genéricos de muestra. Pulse «Revisar con IA» para que la IA proponga datos de ejemplo más realistas para cada variable.</>
-                        : <>Datos <strong>ficticios</strong> del caso «{ejemplo.caso.descripcion}»{conversion?.reemplazos.length ? ', completados con los que propuso la IA' : ''}.</>}
-                    {' '}Así se vería la escritura llenada por el sistema.
-                  </div>
-                  {ejemplo.deMuestra.length > 0 && !formularioAutomatico && <div className="aviso alerta">El caso de ejemplo no trae {ejemplo.deMuestra.length === 1 ? 'esta variable' : `estas ${ejemplo.deMuestra.length} variables`}, así que se llenaron con valores genéricos de muestra: <code>{ejemplo.deMuestra.join(', ')}</code>. {formularioAutomatico ? 'Al aprobarla, cada una será un campo del formulario del expediente que la IA llena con los documentos.' : 'Para generar escrituras reales con esta plantilla, el formulario del expediente debe pedir esos datos.'}</div>}
-                  {ejemplo.faltantes.length > 0 && <div className="aviso error">El sistema no supo llenar: <code>{ejemplo.faltantes.join(', ')}</code>. Revise que esas etiquetas estén bien escritas.</div>}
-                  <VisorDocx url={`/api/plantillas/${p.id}?ejemplo=1&vista=1`} />
-                </>
-              ))}
-
-          {vista === 'variables' && (
-            <div className="rejilla dos">
-              <section className="tarjeta">
-                <h2 style={{ marginTop: 0 }}>Variables ({etiquetas.variables.length})</h2>
-                <ul className="lista-codigo">{etiquetas.variables.map((v) => <li key={v}><code>{`{{${v}}}`}</code>{revision?.automatica.nuevas.includes(v) && <> <span className="etiqueta advertencia">nueva</span></>}</li>)}</ul>
-              </section>
-              <section className="tarjeta">
-                <h2 style={{ marginTop: 0 }}>Condiciones ({etiquetas.condiciones.length})</h2>
-                <ul className="lista-codigo">{etiquetas.condiciones.map((v) => <li key={v}><code>{`{{#${v}}}`}</code>{revision?.automatica.nuevas.includes(v) && <> <span className="etiqueta advertencia">nueva</span></>}</li>)}</ul>
-                {!!revision?.automatica.eliminadas.length && (
-                  <>
-                    <h3>Ya no aparecen (frente a v{revision.automatica.comparadaCon})</h3>
-                    <ul className="lista-codigo">{revision.automatica.eliminadas.map((v) => <li key={v}><code>{v}</code></li>)}</ul>
-                  </>
-                )}
-              </section>
-            </div>
-          )}
         </div>
 
         <aside>
@@ -164,16 +112,6 @@ export default async function VersionPlantilla({ params, searchParams }: { param
                 mensajePendiente="Iniciando la revisión…" />
             )}
           </section>
-
-          {conDatosReales && (
-            <section className="tarjeta">
-              <h2 style={{ marginTop: 0 }}>Datos de un caso real</h2>
-              <p className="suave">La revisión encontró datos de un caso real escritos en esta versión. La IA puede cambiarlos por variables: se crea la v{Math.max(...p.tipo.plantillas.map((v) => v.version)) + 1}, sin datos y con su vista con datos de ejemplo ficticios, pendiente de aprobación. Esta versión no cambia.</p>
-              <ConvertirDatosReales compacto plantillas={[{ id: p.id, nombre: p.tipo.nombre, version: p.version }]} />
-            </section>
-          )}
-
-          {conversion && <PanelConversion conversion={conversion} />}
 
           {corregible && (
             <section className="tarjeta">
@@ -216,12 +154,12 @@ export default async function VersionPlantilla({ params, searchParams }: { param
 
           <section className="tarjeta">
             <h2 style={{ marginTop: 0 }}>Cargar nueva versión</h2>
-            <p className="suave">Será la v{Math.max(...p.tipo.plantillas.map((v) => v.version)) + 1} de esta plantilla y quedará pendiente de aprobación. Si es la escritura de un caso real, la IA cambia sus datos por variables. El sistema la prueba con datos de ejemplo y la IA la revisa.</p>
+            <p className="suave">Será la v{Math.max(...p.tipo.plantillas.map((v) => v.version)) + 1} de esta plantilla y quedará pendiente de aprobación. Cargue la escritura modelo tal como está en Word; después puede pedir la revisión de la IA.</p>
             <FormAdmin accion={accionCargarPlantilla} ocultos={{ tipoId: p.tipoId }} campos={[
-              { nombre: 'archivo', etiqueta: 'Archivo .docx con variables', tipo: 'archivo' },
+              { nombre: 'archivo', etiqueta: 'Escritura modelo (.docx)', tipo: 'archivo' },
               { nombre: 'notas', etiqueta: 'Notas de la versión', tipo: 'area', ayuda: 'Qué cambió y por qué (la IA también lo lee).' },
-            ]} botones={[{ texto: 'Cargar y revisar con IA' }]}
-            mensajePendiente="Cargando la versión y revisándola con la IA. Puede tardar uno o dos minutos; no cierre esta página." />
+            ]} botones={[{ texto: 'Cargar versión' }]}
+            mensajePendiente="Cargando la versión…" />
           </section>
 
           {p.estado !== 'RETIRADA' && (
@@ -237,7 +175,7 @@ export default async function VersionPlantilla({ params, searchParams }: { param
                     botones={[{ operacion: 'aprobar', texto: 'Aprobar', clase: 'exito' }, { operacion: 'retirar', texto: 'Retirar', clase: 'secundario' }]} />
                 </>
               ) : (
-                <FormAdmin accion={accionPlantilla} ocultos={{ id: p.id }} botones={[{ operacion: 'retirar', texto: 'Retirar', clase: 'peligro' }]} confirmar={{ retirar: 'Sin una versión aprobada no se podrán generar borradores de este tipo. ¿Retirar?' }} />
+                <FormAdmin accion={accionPlantilla} ocultos={{ id: p.id }} botones={[{ operacion: 'retirar', texto: 'Retirar', clase: 'peligro' }]} confirmar={{ retirar: 'Sin una versión aprobada no se podrán redactar escrituras de este tipo. ¿Retirar?' }} />
               )}
             </section>
           )}

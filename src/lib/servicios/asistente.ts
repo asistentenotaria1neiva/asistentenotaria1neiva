@@ -10,8 +10,10 @@
  *      o continuar con los datos que tiene (queda registrado como observación justificada).
  * El número, la fecha, las hojas, los derechos y la retención no se preguntan: quedan en blanco en
  * el Word para el funcionario que hace la terminación.
- * Si el caso tiene algo poco común, la IA hace además preguntas adicionales que ningún campo del
- * formulario responde: se contestan con texto libre y quedan como observación para el revisor.
+ * La IA lee además el MODELO DE REDACCIÓN de cada acto (su plantilla aprobada) y pregunta, en texto
+ * libre, lo que la escritura necesita y no sale de los documentos (preguntas de redacción), y lo que
+ * exige un caso poco común. Las respuestas quedan como observación para el revisor y la IA las usa
+ * al redactar la escritura (src/lib/servicios/redaccion.ts).
  */
 import 'server-only';
 import type { Prisma } from '@prisma/client';
@@ -33,6 +35,8 @@ import { instruccionesAprobadas } from './documentos';
 import { buscarFaltantesEnDocumentos } from './busqueda';
 import { mencionadosEnActos, esDeLaEscritura } from '../escritura/relevantes';
 import { ejecutarRevision, resolverObservacion } from './revision';
+import { textoDePlantilla } from './revision-plantillas';
+import { CAMPO_INDICACIONES } from '../escritura/actos-plantilla';
 
 /** Código de las observaciones que crea el asistente */
 export const CODIGO_INCONSISTENCIA = 'IA-ASISTENTE';
@@ -141,7 +145,7 @@ const DEL_PODER = new Set(['apoderado_id', 'poder_tipo', 'poder_incluye_estado_c
 function sePregunta(destino: Destino, dudoso: boolean, hayPoder: boolean): boolean {
   const id = destino.campo.id;
   if (dudoso || destino.campo.obligatorio || OPCIONALES_DEL_CASO.has(id)) return true;
-  if (typeof destino.paso === 'object' && ESQUEMAS[destino.paso.acto]?.porPlantilla) return true;
+  if (typeof destino.paso === 'object' && ESQUEMAS[destino.paso.acto]?.porPlantilla) return id !== CAMPO_INDICACIONES;
   if (destino.paso === 'personas') return RECOMENDADOS_PERSONA.includes(id) || (DEL_PODER.has(id) && hayPoder);
   return false;
 }
@@ -209,6 +213,12 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
   // Las preguntas adicionales ya respondidas en un análisis anterior no se repiten
   const previo = (await estadoAsistente(expedienteId)).resultado;
   const adicionalesPrevias = (previo?.preguntas ?? []).filter((p) => esAdicional(p.ruta) && p.estado === 'RESPONDIDA');
+  // El modelo de redacción de cada acto elegido: la IA pregunta lo que ese texto necesita para este caso
+  const modelos = await db.plantilla.findMany({ where: { tipoId: { in: actosActuales }, estado: 'APROBADA' }, orderBy: { version: 'desc' }, select: { tipoId: true, archivo: true } });
+  const modelosDeRedaccion = actosActuales.flatMap((a) => {
+    const m = modelos.find((x) => x.tipoId === a);
+    return m ? [{ acto: a, texto: textoDePlantilla(m.archivo).slice(0, 60_000) }] : [];
+  });
 
   // 3. La IA: tipo, inconsistencias y preguntas
   const entrada = {
@@ -221,11 +231,15 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
     datos_dudosos: dudosos.map((x) => ({ ruta: rutaParaIA(datos, x.campo), motivo: x.motivo, valores: x.valores })),
     documentos_con_error: erroresDocumentos,
     respuestas_adicionales_previas: adicionalesPrevias.map((p) => ({ pregunta: p.pregunta, respuesta: p.respuesta })),
+    indicaciones_del_funcionario: Object.fromEntries(actosActuales.map((a) => [a, (datos.actos[a] as Record<string, unknown> | undefined)?.[CAMPO_INDICACIONES] ?? null])),
   };
   const r = await llamarEstructurado<RespuestaIA>({
     proposito: 'REVISION',
     sistema: SISTEMA_ASISTENTE + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
-    contenido: [{ type: 'text', text: `<expediente>\n${JSON.stringify(entrada)}\n</expediente>\nDetermina el tipo de escritura, las inconsistencias y todas las preguntas, incluidas las adicionales si el caso tiene algo poco común.` }],
+    contenido: [
+      ...modelosDeRedaccion.map((m) => ({ type: 'text' as const, text: `<modelo_de_redaccion acto="${m.acto}">\n${m.texto}\n</modelo_de_redaccion>` })),
+      { type: 'text', text: `<expediente>\n${JSON.stringify(entrada)}\n</expediente>\nDetermina el tipo de escritura, las inconsistencias y todas las preguntas, incluidas las de redacción que piden los modelos y las adicionales si el caso tiene algo poco común.` },
+    ],
     esquema: esquemaAsistente(Object.keys(ESQUEMAS)),
   });
 
@@ -293,7 +307,7 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
     const texto = p.pregunta.trim().slice(0, 500);
     if (!texto || preguntas.some((x) => x.pregunta === texto)) continue;
     preguntas.push({
-      id: `p${preguntas.length + 1}`, ruta: `adicional:${preguntas.length + 1}`, etiqueta: 'Pregunta adicional del caso', pregunta: texto, motivo: p.motivo.slice(0, 500),
+      id: `p${preguntas.length + 1}`, ruta: `adicional:${preguntas.length + 1}`, etiqueta: 'Para redactar la escritura', pregunta: texto, motivo: p.motivo.slice(0, 500),
       origen: 'IA', obligatoria: !!p.obligatoria, valorSugerido: null, fuente: null, estado: 'PENDIENTE',
     });
   }

@@ -16,7 +16,9 @@ import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { CAMPOS_PERSONA, CAMPOS_INMUEBLE, ESQUEMAS, type Campo } from '../escritura/esquemas';
-import { MAX_PERSONAS } from '../escritura/actos-plantilla';
+import { CAMPO_INDICACIONES } from '../escritura/actos-plantilla';
+/** Personas con un mismo papel que se buscan en la segunda pasada (actos con varias personas por papel) */
+const MAX_PERSONAS = 8;
 import { esHistorico, fechaReferencia } from '../escritura/paz-salvo';
 import { mencionadosEnActos, esDeLaEscritura, quienesEnajenan } from '../escritura/relevantes';
 import { RECOMENDADOS_PERSONA } from '../escritura/rutas';
@@ -136,7 +138,8 @@ export function faltantesBuscables(datos: ReturnType<typeof datosDe>, actos: str
     const valores = (datos.actos[a] ?? {}) as Record<string, unknown>;
     const campos = esq.pasos.flatMap((p) => p.campos);
     for (const c of campos) {
-      if (['lista', 'persona', 'personas', 'inmueble', 'inmuebles'].includes(c.tipo) || !campoVisible(c, valores, campos) || !vacio(leerRuta(valores, c.id))) continue;
+      // Las indicaciones para la redacción las escribe el funcionario: no se buscan
+      if (c.id === CAMPO_INDICACIONES || ['lista', 'persona', 'personas', 'inmueble', 'inmuebles'].includes(c.tipo) || !campoVisible(c, valores, campos) || !vacio(leerRuta(valores, c.id))) continue;
       if (soloVariasPersonas && !DE_OTRA_PERSONA.test(c.id)) continue;
       agregar({ entidad: 'acto', ref: a, campo: c, de: `Escritura de ${esq.titulo}: dato «${c.id}» de la plantilla` });
     }

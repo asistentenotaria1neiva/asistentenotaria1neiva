@@ -318,7 +318,7 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
     h.push({ codigo: 'R11-CONFIANZA-BAJA', nivel: 'ADVERTENCIA', mensaje: `${e.pendientesConfianzaBaja} dato(s) extraído(s) con confianza baja siguen pendientes de revisión manual.` });
   }
 
-  // R12 – Borrador con variables sin diligenciar
+  // R12 – Borrador con datos sin diligenciar (marcas «FALTA» que dejó la redacción de la IA)
   if (e.borradorTexto?.includes(MARCA_FALTANTE)) {
     const faltan = [...new Set([...e.borradorTexto.matchAll(/«FALTA: ([^»]+)»/g)].map((m) => m[1]))];
     h.push({ codigo: 'R12-BORRADOR-INCOMPLETO', nivel: 'CRITICA', mensaje: `El borrador tiene datos sin diligenciar: ${faltan.join(', ')}.` });

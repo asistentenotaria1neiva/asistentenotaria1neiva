@@ -1,6 +1,6 @@
 # Asistente de escrituración – Notaría Primera del Círculo de Neiva
 
-Aplicación web que asiste la elaboración de escrituras públicas: analiza los documentos soporte con la API de Claude (Anthropic), precarga los datos con su fuente y nivel de confianza, verifica cruces y advierte inconsistencias, y arma el borrador **únicamente** sobre plantillas aprobadas por el notario.
+Aplicación web que asiste la elaboración de escrituras públicas: analiza los documentos soporte con la API de Claude (Anthropic), precarga los datos con su fuente y nivel de confianza, verifica cruces y advierte inconsistencias, y **redacta el borrador con IA tomando como base las plantillas aprobadas por el notario** (cada plantilla es el modelo de redacción de su tipo de escritura: no se llenan variables).
 
 > La aplicación prepara, verifica y advierte. **No reemplaza al notario**: la firma, el control de legalidad y la responsabilidad siguen en cabeza del notario.
 
@@ -13,12 +13,12 @@ Desarrollado por Automind. Documentación: [`docs/`](docs/).
 | Ruta | Qué hay |
 | --- | --- |
 | `src/` | Aplicación Next.js 16 (React 19 + TypeScript). Lógica de negocio en `src/lib/` |
-| `src/lib/escritura/` | Datos del expediente, esquemas por tipo (definen las preguntas del asistente), fórmulas de personas e inmuebles, armado y generación del borrador |
+| `src/lib/escritura/` | Datos del expediente, esquemas por tipo (definen las preguntas del asistente), fórmulas de personas e inmuebles, armado del Word redactado y formato notarial |
 | `src/lib/reglas/` | Reglas fijas de validación y cruce (sin IA) |
 | `src/lib/ia/` | Integración con Claude: esquemas de extracción, instrucciones, cliente |
-| `src/lib/servicios/` | Expedientes, documentos, revisión, borradores, plantillas, aprendizaje |
+| `src/lib/servicios/` | Expedientes, documentos, asistente, redacción con IA (`redaccion.ts`), revisión, borradores, plantillas, aprendizaje |
 | `src/lib/seguridad/` | Cifrado, contraseñas, doble factor, red, límites de peticiones |
-| `plantillas/fuentes/` | Fuente de las plantillas convertidas (texto con `{{variables}}`) |
+| `plantillas/fuentes/` | Fuente de las plantillas iniciales de la compraventa (sus `{{etiquetas}}` solo orientan a la IA sobre qué dato va en cada lugar) |
 | `plantillas/docx/` | Plantillas .docx generadas (se cargan a la base como **pendientes de aprobación**) |
 | `plantillas/modelos/` | **Un modelo limpio por tipo de escritura** (el mejor ejemplo de la carpeta, sin datos personales): fuentes, .docx e `INDICE.md` |
 | `prisma/` | Modelo de datos y migraciones (incluye el disparador que hace inmodificable la auditoría) |
@@ -68,9 +68,9 @@ La primera vez, la aplicación abre **/instalacion** para crear el administrador
 | `ANTHROPIC_API_KEY` | Clave de la API de Claude. **Solo en el servidor** |
 | `ANTHROPIC_WORKSPACE_ID` | Opcional. ID del workspace (`wrkspc_...`) cuando la clave no está asignada a uno |
 | `ANTHROPIC_ADMIN_KEY` | Opcional. Clave de administrador (`sk-ant-admin...`) para mostrar el costo real y los créditos restantes en Estadísticas |
-| `CLAUDE_MODELO_DOCUMENTOS`, `CLAUDE_MODELO_EXPEDIENTE`, `CLAUDE_MODELO_PLANTILLAS` | Modelo por tarea (predeterminados: `claude-haiku-5-5` para leer documentos; `claude-sonnet-5-5` para el expediente y las plantillas) |
+| `CLAUDE_MODELO_DOCUMENTOS`, `CLAUDE_MODELO_EXPEDIENTE`, `CLAUDE_MODELO_REDACCION`, `CLAUDE_MODELO_PLANTILLAS` | Modelo por tarea (predeterminados: `claude-haiku-5-5` para leer documentos; `claude-sonnet-5-5` para el expediente, la redacción de la escritura y las plantillas) |
 | `CLAUDE_MODELO_RESPALDO` | Modelo que repite la lectura si Haiku declina el documento (predeterminado `claude-sonnet-5-5`) |
-| `CLAUDE_ESFUERZO_DOCUMENTOS`, `CLAUDE_ESFUERZO_EXPEDIENTE`, `CLAUDE_ESFUERZO_PLANTILLAS` | `low` · `medium` · `high` · `xhigh` · `max` (predeterminados: `medium`, `high`, `medium`) |
+| `CLAUDE_ESFUERZO_DOCUMENTOS`, `CLAUDE_ESFUERZO_EXPEDIENTE`, `CLAUDE_ESFUERZO_REDACCION`, `CLAUDE_ESFUERZO_PLANTILLAS` | `low` · `medium` · `high` · `xhigh` · `max` (predeterminados: `medium`, `high`, `medium`, `medium`) |
 | `CLAUDE_FALLBACKS` | `default` activa el respaldo del servidor de Anthropic ante rechazos por política; vacío lo desactiva |
 | `IPS_OFICINA` | IP públicas de la oficina (valor inicial; luego se administra en el panel) |
 | `CONFIAR_EN_PROXY` | `true` en Vercel (toma la IP real de `X-Real-IP`) |
@@ -99,7 +99,7 @@ Base de datos PostgreSQL y documentos cifrados en Supabase (proyecto en `us-east
    | `ANTHROPIC_API_KEY` y `CLAUDE_*` | Como en desarrollo |
    | `PDF_CONVERSOR_URL` | Vacío: en Vercel los borradores se entregan solo en Word |
 4. Ingresar a `/instalacion` desde la oficina, crear el administrador, configurar el doble factor, registrar la IP de la oficina en **Configuración**, crear usuarios y aprobar los equipos.
-5. El notario revisa y el administrador **aprueba las plantillas** (Administración → Plantillas). Sin plantillas aprobadas no se generan borradores.
+5. El notario revisa y el administrador **aprueba las plantillas** (Administración → Plantillas). Sin plantillas aprobadas no se redactan escrituras.
 
 Al iniciar, la app carga el catálogo y las plantillas (pendientes de aprobación); las migraciones no se aplican solas.
 
@@ -134,9 +134,12 @@ Para cada tipo encontrado toma el mejor ejemplo, reemplaza todos los datos del c
 
 ## Agregar o modificar una plantilla
 
-1. Escriba la plantilla en Word con variables `{{variable}}` y bloques `{{#condicion}} … {{/condicion}}` (vea las fuentes en `plantillas/fuentes/` como ejemplo y `docs/manual_administrador.md`).
-2. Cárguela en Administración → Plantillas: queda **pendiente de aprobación del notario**.
-3. Para un tipo de escritura nuevo también se necesita su esquema de formulario (`src/lib/escritura/esquemas.ts`) y su preparación (`src/lib/escritura/actos.ts`).
+La plantilla es el **modelo de redacción** del tipo de escritura: una escritura de la notaría, tal como está en Word. **No lleva variables.**
+
+1. Cargue la escritura modelo en Plantillas: queda **pendiente de aprobación del notario**. Puede pedir la revisión de la IA (tipo, partes del acto, redacción, cambios frente a la versión aprobada).
+2. Al aprobarla, el tipo queda disponible como acto. Su formulario solo pide quiénes comparecen, los inmuebles (si el acto recae sobre inmuebles) e indicaciones opcionales.
+3. El asistente lee el modelo y pregunta en texto libre lo que esa escritura necesita y no está en los documentos. Al pulsar **Redactar escritura con IA**, la IA escribe la escritura completa siguiendo el modelo (estructura, cláusulas, fórmulas, estilo) con los datos del caso; nunca copia los datos del modelo y lo que no encuentra lo deja «FALTA: …» (observación crítica R12 hasta redactar de nuevo con el dato).
+4. La compraventa conserva su formulario propio (`src/lib/escritura/esquemas.ts` y `actos.ts`): sus datos calculados (comparecencias, valores en letras, afectación…) se entregan a la IA, que redacta sobre la carátula, la compraventa, el cierre y los oficios aprobados.
 
 ## Arquitectura
 
