@@ -7,6 +7,7 @@
 import { PASOS_COMUNES, ESQUEMAS, CAMPOS_PERSONA, CAMPOS_INMUEBLE, type Campo } from './esquemas';
 import { validarPaso, validarCampos, campoVisible, leerRuta } from './validar-formulario';
 import type { DatosExpediente } from './tipos';
+import { mencionadosEnActos, esDeLaEscritura } from './relevantes';
 
 /** Campo del formulario al que apunta una ruta, con su ruta dentro de los datos */
 export interface Destino { campo: Campo; rutaDatos: string; etiqueta: string; paso: 'escritura' | 'personas' | 'inmuebles' | { acto: string } }
@@ -151,10 +152,14 @@ export function datosFaltantes(datos: DatosExpediente, actos: string[]): DatoFal
   for (const a of actos) for (const v of Object.values(datos.actos[a] ?? {})) for (const x of Array.isArray(v) ? v : [v]) if (typeof x === 'string') conRol.add(x);
   // Ya elegidos los inmuebles de la escritura, los demás del expediente no se preguntan (no van en ella)
   const hayInmueblesElegidos = datos.inmuebles.some((i) => conRol.has(i.id));
+  // En los actos por plantilla, los que el texto del acto menciona (matrícula, documento, nombre)
+  const mencionados = mencionadosEnActos(datos, actos);
   const agregar = (ruta: string | null, motivo: string, obligatorio: boolean) => {
     if (!ruta || faltantes.some((f) => f.ruta === ruta)) return;
     const inmueble = /^inmueble:([^.]+)\./.exec(ruta)?.[1];
     if (inmueble && hayInmueblesElegidos && !conRol.has(inmueble)) return;
+    const ajeno = /^(persona|inmueble):([^.]+)\./.exec(ruta);
+    if (ajeno && !conRol.has(ajeno[2]) && !esDeLaEscritura(mencionados, ajeno[1] as 'persona' | 'inmueble', ajeno[2])) return;
     const destino = resolverRuta(datos, actos, ruta);
     if (!destino || destino.campo.tipo === 'lista') return;
     if (destino.paso === 'escritura' && CAMPOS_TERMINACION.includes(destino.campo.id)) return;

@@ -17,6 +17,7 @@ import { validarPaso, validarCampos, leerRuta, escribirRuta, type Errores } from
 import { validarDocumento, validarMatricula, validarCedulaCatastral, corregirNumeroDocumento, pareceEntidad } from '../validaciones/formatos';
 import { pazYSalvosPorInmueble, pazYSalvosAntiguos, pazYSalvosHistoricos, aplicarPazYSalvoVigente, esHistorico, fechaReferencia } from '../escritura/paz-salvo';
 import type { ResultadoExtraccion } from '../ia/documentos';
+import { mencionadosEnActos } from '../escritura/relevantes';
 import { mismoValor, mismaCatastral, claveMatricula, documentoQueManda } from '../escritura/comparar';
 import { registrarCorreccion } from './aprendizaje';
 import { notificar } from './notificaciones';
@@ -410,7 +411,11 @@ export async function retirarInmueblesSobrantes(s: SesionActiva, expedienteId: s
   const deCertificado = (i: Inmueble) => matriculas.has(claveMatricula(i.matricula));
   if (!datos.inmuebles.some(deCertificado)) return 0;
   const usados = referenciadosEnActos(datos);
-  const sobrantes = datos.inmuebles.filter((i) => !usados.has(i.id) && !deCertificado(i));
+  // Si el acto ya dice cuál es el inmueble (por id o, en un acto por plantilla, por su matrícula), los
+  // demás sobran aunque tengan certificado: son de un documento de otro caso
+  const porPlantilla = actosDe(e).length > 0 && actosDe(e).every((a) => ESQUEMAS[a]?.porPlantilla);
+  const mencionados = porPlantilla ? mencionadosEnActos(datos, actosDe(e)).inmuebles : new Set<string>();
+  const sobrantes = datos.inmuebles.filter((i) => (mencionados.size ? !mencionados.has(i.id) : !usados.has(i.id) && !deCertificado(i)));
   if (!sobrantes.length) return 0;
   await guardarPaso(s, expedienteId, { paso: 'inmuebles', valor: datos.inmuebles.filter((i) => !sobrantes.includes(i)) });
   await auditar({ ...datosAuditoria(s), accion: 'INMUEBLES_SOBRANTES_RETIRADOS', entidad: 'expediente', entidadId: expedienteId, detalle: { inmuebles: sobrantes.map((i) => i.matricula || i.cedula_catastral || '(sin matrícula)') } });

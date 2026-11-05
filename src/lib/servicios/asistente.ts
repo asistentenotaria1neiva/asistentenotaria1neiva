@@ -31,6 +31,7 @@ import {
 } from './expedientes';
 import { instruccionesAprobadas } from './documentos';
 import { buscarFaltantesEnDocumentos } from './busqueda';
+import { mencionadosEnActos, esDeLaEscritura } from '../escritura/relevantes';
 import { ejecutarRevision, resolverObservacion } from './revision';
 
 /** Código de las observaciones que crea el asistente */
@@ -243,7 +244,14 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
     return v && 'valor' in v ? { valor: v.valor, fuente: x!.valores[0]?.documento ?? null } : null;
   };
   const preguntas: PreguntaAsistente[] = [];
+  // Personas e inmuebles que no son de esta escritura (los de un documento de otro caso): no se preguntan
+  const mencionados = mencionadosEnActos(datos, actos);
+  const ajeno = (ruta: string) => {
+    const m = /^(persona|inmueble):([^.]+)\./.exec(ruta);
+    return !!m && !esDeLaEscritura(mencionados, m[1] as 'persona' | 'inmueble', m[2]);
+  };
   for (const p of r.datos.preguntas) {
+    if (ajeno(p.ruta)) continue;
     const destino = resolverRuta(datos, actos, p.ruta);
     if (!destino || destino.campo.tipo === 'lista' || preguntas.some((x) => x.ruta === p.ruta)) continue;
     if (destino.paso === 'escritura' && CAMPOS_TERMINACION.includes(destino.campo.id)) continue;
@@ -270,6 +278,7 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
   // Todo dato dudoso se pregunta, aunque la IA no lo haya hecho: así se decide cada sugerencia pendiente
   for (const x of dudosos) {
     const ruta = rutaParaIA(datos, x.campo);
+    if (ajeno(ruta)) continue;
     const destino = resolverRuta(datos, actos, ruta);
     if (!destino || destino.campo.tipo === 'lista' || preguntas.some((p) => p.ruta === ruta)) continue;
     const sugerido = x.valores.map((v) => validarValor(destino.campo, v.valor, datos)).find((v) => !('error' in v));

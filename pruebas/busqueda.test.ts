@@ -104,3 +104,37 @@ describe('búsqueda de los datos de un acto por plantilla', () => {
     }
   });
 });
+
+describe('acto por plantilla: solo el inmueble y las personas que el acto menciona', () => {
+  it('no busca ni pregunta por los de una escritura de otro caso, y pide la tradición de quien vende', async () => {
+    const { ESQUEMAS } = await import('@/lib/escritura/esquemas');
+    const { mencionadosEnActos, quienesEnajenan } = await import('@/lib/escritura/relevantes');
+    ESQUEMAS.cuota_prueba = {
+      tipo: 'cuota_prueba', version: 1, titulo: 'Compraventa de cuota', plantillaFuente: 'prueba', porPlantilla: { plantillaId: 'x', version: 1 },
+      pasos: [{ id: 'cuota_prueba', titulo: 'Cuota', campos: [
+        { id: 'nombre_vendedor', etiqueta: 'Nombre vendedor', tipo: 'texto', obligatorio: true },
+        { id: 'matricula_inmobiliaria', etiqueta: 'Matricula', tipo: 'texto', obligatorio: true },
+        { id: 'titulo_adquisicion', etiqueta: 'Titulo', tipo: 'texto', obligatorio: true },
+      ] }],
+      documentosSoporte: [], reglas: [],
+    };
+    try {
+      const d = caso();
+      d.actos.cuota_prueba = { nombre_vendedor: 'ALVARO PRUEBA', matricula_inmobiliaria: '200-301776' };
+      const m = mencionadosEnActos(d, ['cuota_prueba']);
+      expect([...m.inmuebles]).toEqual(['i9']);
+      expect([...m.personas]).toEqual(['v']);
+      expect(quienesEnajenan(d, ['cuota_prueba'])).toEqual(['ALVARO PRUEBA']);
+      const f = faltantesBuscables(d, ['cuota_prueba']);
+      expect(f.some((x) => x.ref === '200-301770')).toBe(false);
+      expect(f.some((x) => x.ref === '1076000222')).toBe(false);
+      expect(datosFaltantes(d, ['cuota_prueba']).some((x) => x.ruta.startsWith('inmueble:i3.') || x.ruta.startsWith('persona:c.'))).toBe(false);
+      d.inmuebles[0].linderos = '';
+      d.inmuebles[0].tradicion.tradente = '';
+      expect(f.find((x) => x.campo.id === 'titulo_adquisicion')?.entidad).toBe('acto');
+      expect(faltantesBuscables(d, ['cuota_prueba']).find((x) => x.campo.id === 'tradicion.tradente')?.de).toContain('Adquisición de: ALVARO PRUEBA');
+    } finally {
+      delete ESQUEMAS.cuota_prueba;
+    }
+  });
+});

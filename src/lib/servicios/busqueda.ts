@@ -18,6 +18,7 @@ import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { CAMPOS_PERSONA, CAMPOS_INMUEBLE, ESQUEMAS, type Campo } from '../escritura/esquemas';
 import { MAX_PERSONAS } from '../escritura/actos-plantilla';
 import { esHistorico, fechaReferencia } from '../escritura/paz-salvo';
+import { mencionadosEnActos, esDeLaEscritura, quienesEnajenan } from '../escritura/relevantes';
 import { RECOMENDADOS_PERSONA } from '../escritura/rutas';
 import { campoVisible, leerRuta } from '../escritura/validar-formulario';
 import { VALIDADORES } from '../validaciones/formatos';
@@ -41,7 +42,7 @@ const BUSCAR_INMUEBLE: Record<string, string> = {
   involucrada_mayor_extension: 'true si algún documento dice que la cédula catastral está en mayor extensión o la marca «(INV.)»',
   matricula_matriz: 'Folio de matrícula matriz o de mayor extensión, si se menciona',
   fecha_certificado_tradicion: 'Fecha de expedición del certificado de tradición',
-  'tradicion.modo': 'Cómo lo adquirió el titular actual',
+  'tradicion.modo': 'Cómo lo adquirió el titular actual (en un folio con varios titulares de cuota, quien enajena en esta escritura)',
   'tradicion.tradente': 'De quién lo adquirió el titular actual (nombre completo)',
   'tradicion.escritura_numero': 'Número de la escritura por la que lo adquirió el titular actual',
   'tradicion.escritura_fecha': 'Fecha de esa escritura',
@@ -141,17 +142,23 @@ export function faltantesBuscables(datos: ReturnType<typeof datosDe>, actos: str
     }
   }
   if (soloActos || soloVariasPersonas) return faltantes.slice(0, MAX_FALTANTES);
-  // Si ya se eligieron los inmuebles (o las personas) de los actos, solo esos
-  const inmuebles = datos.inmuebles.some((i) => usados.has(i.id)) ? datos.inmuebles.filter((i) => usados.has(i.id)) : datos.inmuebles;
+  // Si los actos ya dicen cuáles son los inmuebles y las personas de la escritura (por id o, en los
+  // actos por plantilla, por su matrícula, documento o nombre), solo esos
+  const m = mencionadosEnActos(datos, actos.length ? actos : undefined);
+  for (const id of usados) { if (datos.inmuebles.some((i) => i.id === id)) m.inmuebles.add(id); else if (datos.personas.some((p) => p.id === id)) m.personas.add(id); }
+  const inmuebles = datos.inmuebles.filter((i) => esDeLaEscritura(m, 'inmueble', i.id));
+  // La tradición que importa es la de quien enajena: en un folio con muchos titulares de cuota no hay una sola «última adquisición»
+  const enajenan = quienesEnajenan(datos, actos.length ? actos : undefined);
   for (const i of inmuebles) {
     if (!i.matricula) continue;
     const de = `Inmueble de matrícula ${i.matricula}${i.nombre_corto ? `, ${i.nombre_corto}` : ''}${i.direccion ? `, ${i.direccion}` : ''}`;
     for (const c of CAMPOS_INMUEBLE) {
       if (!(c.id in BUSCAR_INMUEBLE) || !campoVisible(c, i as unknown as Record<string, unknown>) || !vacio(leerRuta(i, c.id))) continue;
-      agregar({ entidad: 'inmueble', ref: i.matricula, campo: { ...c, ayuda: BUSCAR_INMUEBLE[c.id] }, de });
+      const deQuien = c.id.startsWith('tradicion.') && enajenan.length ? `${de}. Adquisición de: ${enajenan.join(', ')}` : de;
+      agregar({ entidad: 'inmueble', ref: i.matricula, campo: { ...c, ayuda: BUSCAR_INMUEBLE[c.id] }, de: deQuien });
     }
   }
-  const personas = datos.personas.some((p) => usados.has(p.id)) ? datos.personas.filter((p) => usados.has(p.id)) : datos.personas;
+  const personas = datos.personas.filter((p) => esDeLaEscritura(m, 'persona', p.id));
   for (const p of personas) {
     const doc = digitos(p.numero_documento);
     if (!doc || p.menor_de_edad) continue;
