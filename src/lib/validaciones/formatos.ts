@@ -27,6 +27,38 @@ export function validarCedula(valor: string): Resultado {
   return { ok: true, normalizado: miles(d) };
 }
 
+/** Razón social de una entidad (banco, sociedad, fondo…): su «cédula» con dígito de verificación es un NIT */
+const ENTIDAD = /(^|[\s,.])(BANCO|BANCOLOMBIA|DAVIVIENDA|S\.?\s?A\.?(\s?S\.?)?|LTDA\.?|FONDO|CAJA|COOPERATIVA|FIDUCIARIA|CORPORACI[OÓ]N|FUNDACI[OÓ]N|ASOCIACI[OÓ]N|MUNICIPIO|DEPARTAMENTO|INSTITUTO|EMPRESA|COMPA[NÑ][IÍ]A|E\.?S\.?P\.?|FINANCIERA|LEASING)(?=$|[\s,.])/;
+export const pareceEntidad = (nombre: unknown) => ENTIDAD.test(String(nombre ?? '').toUpperCase());
+
+/**
+ * Corrige sin preguntar un número de documento tal como lo leyó la IA o lo digitaron:
+ * «C.C. No. 12.345.678 de Neiva», «12.345.678-», «CC#1075234567», una «O» o una «l» entre dígitos
+ * (lectura del escáner). Devuelve el número válido y normalizado, o null si ni así es válido.
+ * Con `esEntidad`, una «cédula» que es en realidad un NIT con su dígito de verificación correcto se devuelve como NIT.
+ */
+export function corregirNumeroDocumento(tipo: string, numero: unknown, esEntidad = false): { tipo: string; numero: string } | null {
+  let t = String(numero ?? '').toUpperCase().trim();
+  if (!t) return null;
+  // Rótulos al comienzo y el lugar de expedición al final
+  t = t.replace(/^(\s*(C\.?\s*C\.?|C[EÉ]DULA(\s+DE\s+CIUDADAN[IÍ]A)?|NIT\.?|NUIP\.?|T\.?\s*I\.?|N[OÚU°º]\.?|N[UÚ]MERO|#|:|-)\s*)+/, '');
+  t = t.replace(/\s+(DE|EXP|EXPEDIDA|EN)\b.*$/, '');
+  // Letras que el escáner confunde con dígitos, solo entre dígitos o junto a ellos
+  t = t.replace(/(?<=\d)[OQ]|[OQ](?=\d)/g, '0').replace(/(?<=\d)[IL|!]|[IL|](?=\d)/g, '1').replace(/(?<=\d)S(?=\d)/g, '5').replace(/(?<=\d)B(?=\d)/g, '8');
+  const nit = /^(\d[\d.\s]{5,18}\d)\s*-\s*(\d)$/.exec(t);
+  if (tipo === 'NIT' || (tipo === 'CC' && nit && esEntidad)) {
+    const r = validarNit(nit ? `${nit[1].replace(/\D/g, '')}-${nit[2]}` : t.replace(/[^\d-]/g, ''));
+    if (r.ok) return { tipo: 'NIT', numero: r.normalizado! };
+    if (tipo === 'NIT') return null;
+  }
+  // Una cédula con un guion y un dígito al final («12.345.678-9»): el guion y lo que sigue sobran
+  const d = (tipo === 'CC' && nit ? nit[1] : t).replace(/\D/g, '');
+  const validar = tipo === 'CC' ? validarCedula : tipo === 'NUIP' || tipo === 'TI' ? validarNuip : null;
+  if (!validar || !d) return null;
+  const r = validar(d);
+  return r.ok ? { tipo, numero: r.normalizado! } : null;
+}
+
 /** NUIP / registro civil / tarjeta de identidad: 10 u 11 dígitos */
 export function validarNuip(valor: string): Resultado {
   const d = soloDigitos(valor ?? '');

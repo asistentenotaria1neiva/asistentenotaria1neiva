@@ -19,7 +19,7 @@ import { obtenerConfig } from '../configuracion';
 import { llamarEstructurado, configuracionModelo, ErrorIA } from '../ia/cliente';
 import { SISTEMA_REVISION, ESQUEMA_REVISION } from '../ia/instrucciones';
 import { compactarHechos, type ResultadoExtraccion, type TipoDocumental } from '../ia/documentos';
-import { obtenerExpediente, datosDe, actosDe, ErrorNegocio } from './expedientes';
+import { obtenerExpediente, datosDe, actosDe, ErrorNegocio, corregirDatosAutomaticos } from './expedientes';
 import { instruccionesAprobadas } from './documentos';
 import { registrarCorreccion } from './aprendizaje';
 import { notificar } from './notificaciones';
@@ -110,6 +110,8 @@ export async function revisionIAEnCurso(expedienteId: string) {
  */
 export async function ejecutarRevision(s: SesionActiva, expedienteId: string, conIA: boolean) {
   if (conIA && await revisionIAEnCurso(expedienteId)) throw new ErrorNegocio('Ya hay una revisión de la IA en curso para este expediente. Espere a que termine.');
+  // Lo que se corrige solo (número de documento con rótulos, paz y salvo antiguo) no llega como observación
+  await corregirDatosAutomaticos(s, expedienteId);
   const { e, datos, actos, documentos, hallazgos, borradorTexto } = await evaluarExpediente(expedienteId, s);
   const nuevasReglas = await sincronizarReglas(expedienteId, hallazgos);
   const registrar = (nuevasIA: number, errorIA?: string) =>

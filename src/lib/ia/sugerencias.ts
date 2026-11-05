@@ -13,7 +13,7 @@
  * valor no pasa la validación de formato. Nunca se aplica sola: el usuario la acepta o corrige.
  */
 import { cedulasDe, type DatoConFuente, type ResultadoExtraccion, type TipoDocumental } from './documentos';
-import { validarCedula, validarMatricula, validarCedulaCatastral, validarNit, validarFecha, validarNuip } from '../validaciones/formatos';
+import { corregirNumeroDocumento, validarCedula, validarMatricula, validarCedulaCatastral, validarNit, validarFecha, validarNuip } from '../validaciones/formatos';
 
 export interface Sugerencia {
   campo: string;
@@ -81,7 +81,7 @@ export function sugerenciasDesdeHechos(tipo: TipoDocumental, r: ResultadoExtracc
           s.push(crear(`${p}.nombre`, { valor: `${nom?.valor ?? ''} ${ape?.valor ?? ''}`, pagina: nom?.pagina ?? ape?.pagina ?? null, fragmento: [nom?.fragmento, ape?.fragmento].filter(Boolean).join(' / '), confianza: peor }, may));
         }
         s.push({ campo: `${p}.tipo_documento`, valor: 'CC', pagina: c.numero?.pagina ?? null, fragmento: null, confianza: 'ALTA', revisionManual: false });
-        s.push(crear(`${p}.numero_documento`, c.numero, (v) => validarCedula(String(v)).normalizado ?? v, validarCedula));
+        s.push(crear(`${p}.numero_documento`, c.numero, (v) => corregirNumeroDocumento('CC', v)?.numero ?? v, validarCedula));
         s.push(crear(`${p}.lugar_expedicion`, c.lugar_expedicion, (v) => String(v).trim()));
         s.push(crear(`${p}.genero`, c.sexo, genero));
       }
@@ -118,7 +118,7 @@ export function sugerenciasDesdeHechos(tipo: TipoDocumental, r: ResultadoExtracc
         const num = digitos(p.documento?.valor);
         if (!num) continue;
         s.push(crear(`persona:${num}.nombre`, p.nombre, may));
-        s.push(crear(`persona:${num}.numero_documento`, p.documento, (v) => validarCedula(String(v)).normalizado ?? v));
+        s.push(crear(`persona:${num}.numero_documento`, p.documento, (v) => corregirNumeroDocumento('CC', v)?.numero ?? v));
       }
       const ua = r.datos.ultima_adquisicion as Record<string, DatoConFuente> | undefined;
       if (ua) {

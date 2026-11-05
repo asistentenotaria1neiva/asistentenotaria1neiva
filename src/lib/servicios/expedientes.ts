@@ -14,7 +14,9 @@ import { datosVacios, type DatosExpediente, type Persona, type Inmueble } from '
 import { PASOS_COMUNES, ESQUEMAS } from '../escritura/esquemas';
 import { cargarActosDePlantillas } from './actos-plantilla';
 import { validarPaso, validarCampos, leerRuta, escribirRuta, type Errores } from '../escritura/validar-formulario';
-import { validarDocumento, validarMatricula, validarCedulaCatastral } from '../validaciones/formatos';
+import { validarDocumento, validarMatricula, validarCedulaCatastral, corregirNumeroDocumento, pareceEntidad } from '../validaciones/formatos';
+import { pazYSalvosPorInmueble, pazYSalvosAntiguos, aplicarPazYSalvoVigente } from '../escritura/paz-salvo';
+import type { ResultadoExtraccion } from '../ia/documentos';
 import { mismoValor, mismaCatastral, claveMatricula, documentoQueManda } from '../escritura/comparar';
 import { registrarCorreccion } from './aprendizaje';
 import { notificar } from './notificaciones';
@@ -96,10 +98,18 @@ const limpiar = (v: unknown): unknown => {
   return v;
 };
 
-function normalizarPersona(p: Persona): Persona {
+export function normalizarPersona(p: Persona): Persona {
   const n = { ...p, nombre: p.nombre?.toUpperCase() };
   const r = n.tipo_documento && n.numero_documento ? validarDocumento(n.tipo_documento, n.numero_documento) : null;
   if (r?.ok && r.normalizado) n.numero_documento = r.normalizado;
+  // Un número con rótulos, lugar de expedición o letras del escáner («C.C. 12.345.678 de Neiva») se corrige sin preguntar
+  if (r && !r.ok) {
+    const c = corregirNumeroDocumento(n.tipo_documento, n.numero_documento, n.tipo_persona === 'JURIDICA' || pareceEntidad(n.nombre));
+    if (c) {
+      n.numero_documento = c.numero;
+      if (c.tipo !== n.tipo_documento) { n.tipo_documento = c.tipo as Persona['tipo_documento']; n.tipo_persona = 'JURIDICA'; }
+    }
+  }
   if (n.tipo_persona === 'JURIDICA') { delete n.genero; delete n.estado_civil; delete n.apoderado_id; }
   return n;
 }
@@ -295,16 +305,30 @@ export async function aplicarSugerenciasConfiables(s: SesionActiva, expedienteId
   };
   const grupos = [...porCampo].sort(([a], [b]) => compararSugerencias(a, b));
   for (const [campo, todos] of grupos.filter(([c]) => !c.startsWith('catastral:'))) procesar(campo, todos);
+  // Paz y salvos: ya creados los inmuebles del certificado, vale el vigente de cada predio. Lo de uno
+  // antiguo (el protocolizado en la escritura de la hipoteca, p. ej.) se descarta sin preguntar, y si
+  // el formulario había quedado con él, se corrige con el vigente
+  const porInmueble = pazYSalvosPorInmueble(datos.inmuebles, await documentosPazYSalvo(expedienteId));
+  const antiguos = pazYSalvosAntiguos(porInmueble);
+  const deAntiguo = (d: (typeof pendientes)[number]) => !!d.documentoId && antiguos.has(d.documentoId);
+  descartados.push(...pendientes.filter((d) => d.campo.startsWith('catastral:') && deAntiguo(d)));
+  const pazSalvoCorregido = aplicarPazYSalvoVigente(datos.inmuebles, porInmueble).length > 0;
   // Lo de los paz y salvos se agrupa por el inmueble al que va, ya creados los del certificado: dos
   // paz y salvos del mismo predio (el vigente y uno vencido) pueden escribir distinto la cédula catastral
   const porDestino = new Map<string, typeof pendientes>();
-  for (const [campo, todos] of grupos.filter(([c]) => c.startsWith('catastral:'))) {
+  for (const [campo, recibidos] of grupos.filter(([c]) => c.startsWith('catastral:'))) {
+    const todos = recibidos.filter((d) => !deAntiguo(d));
+    if (!todos.length) continue;
     const d = resolverDestino(datos, campo);
     const clave = d && d.indice >= 0 ? d.ruta : campo;
     porDestino.set(clave, [...(porDestino.get(clave) ?? []), ...todos]);
   }
   for (const todos of porDestino.values()) procesar(todos[0].campo, todos);
-  if (aceptados.length || descartados.length) {
+  // Números de documento con rótulos o letras del escáner: se corrigen sin preguntar
+  const antes = JSON.stringify(datos.personas);
+  datos.personas = datos.personas.map(normalizarPersona);
+  const personasCorregidas = JSON.stringify(datos.personas) !== antes;
+  if (aceptados.length || descartados.length || pazSalvoCorregido || personasCorregidas) {
     await db.$transaction([
       db.expediente.update({ where: { id: e.id }, data: { datos: datos as unknown as Prisma.InputJsonValue } }),
       ...aceptados.map(({ d, valor }) => db.datoExtraido.update({ where: { id: d.id }, data: { estado: 'ACEPTADO', valorFinal: valor as Prisma.InputJsonValue } })),
@@ -314,6 +338,33 @@ export async function aplicarSugerenciasConfiables(s: SesionActiva, expedienteId
     await auditar({ ...datosAuditoria(s), accion: 'SUGERENCIAS_APLICADAS_ASISTENTE', entidad: 'expediente', entidadId: e.id, detalle: { aplicadas: aceptados.length, dudosas: dudosos.length } });
   }
   return { aplicadas: aceptados.length, dudosos, datos };
+}
+
+/** Paz y salvos analizados del expediente, con lo que la IA leyó de cada uno */
+async function documentosPazYSalvo(expedienteId: string) {
+  const docs = await db.documento.findMany({ where: { expedienteId, estadoAnalisis: 'COMPLETADO' }, select: { id: true, nombreOriginal: true, tipoDocumental: true, hechos: true } });
+  return docs
+    .map((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: d.tipoDocumental, hechos: d.hechos as unknown as ResultadoExtraccion | null }))
+    .filter((d) => (d.hechos?.tipo_detectado ?? d.tipo) === 'PAZ_Y_SALVO');
+}
+
+/**
+ * Correcciones que no necesitan a nadie, antes de revisar las reglas (también en expedientes que ya
+ * venían con el dato mal): el número de documento limpio de rótulos y letras del escáner, y el paz y
+ * salvo vigente de cada inmueble en vez de uno antiguo. Devuelve si cambió algo.
+ */
+export async function corregirDatosAutomaticos(s: SesionActiva, expedienteId: string): Promise<boolean> {
+  const e = await obtenerExpediente(s, expedienteId);
+  if (!puedeEditar(s, e)) return false;
+  const datos = datosDe(e);
+  const antes = JSON.stringify(datos);
+  datos.personas = datos.personas.map(normalizarPersona);
+  const corregidos = aplicarPazYSalvoVigente(datos.inmuebles, pazYSalvosPorInmueble(datos.inmuebles, await documentosPazYSalvo(expedienteId)));
+  if (JSON.stringify(datos) === antes) return false;
+  await db.expediente.update({ where: { id: e.id }, data: { datos: datos as unknown as Prisma.InputJsonValue } });
+  await sincronizarEntidades(e.id, datos);
+  await auditar({ ...datosAuditoria(s), accion: 'DATOS_CORREGIDOS_AUTOMATICAMENTE', entidad: 'expediente', entidadId: e.id, detalle: { pazYSalvo: corregidos.length, personas: datos.personas.length } });
+  return true;
 }
 
 /** Ids de personas e inmuebles que algún acto referencia */

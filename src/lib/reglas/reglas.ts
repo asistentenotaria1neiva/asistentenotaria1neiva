@@ -13,6 +13,7 @@
 import type { DatosExpediente, Persona, Inmueble } from '../escritura/tipos';
 import { cedulasDe, type ResultadoExtraccion, type TipoDocumental, type DatoConFuente } from '../ia/documentos';
 import { mismaCatastral } from '../escritura/comparar';
+import { pazYSalvosPorInmueble, pazYSalvosAntiguos } from '../escritura/paz-salvo';
 import { deducirAfectacion, faltaCoadyuvante } from '../escritura/afectacion';
 import {
   validarDocumento, validarMatricula, validarCedulaCatastral, validarFecha,
@@ -190,17 +191,23 @@ export function evaluarReglas(e: EntradaReglas): Hallazgo[] {
     }
   }
 
-  // R04 – Paz y salvo: vigencia, catastral y avalúo
+  // R04 – Paz y salvo: vigencia, catastral y avalúo. De varios del mismo predio vale el vigente (el
+  // más reciente); uno antiguo, p. ej. el protocolizado en la escritura de la hipoteca, no cuenta
+  const pazSalvos = docs('PAZ_Y_SALVO');
+  const porInmueble = pazYSalvosPorInmueble(e.datos.inmuebles, pazSalvos);
+  const antiguos = pazYSalvosAntiguos(porInmueble);
   for (const i of e.datos.inmuebles) {
     if (!i.paz_salvo) continue;
-    const vence = i.paz_salvo.vigencia_hasta;
+    const delDocumento = porInmueble.get(i.id)?.[0]?.vigencia ?? '';
+    const vence = [i.paz_salvo.vigencia_hasta ?? '', delDocumento].sort().at(-1)!;
     if (vence && /^\d{4}-\d{2}-\d{2}$/.test(vence)) {
       const dias = diasEntre(fechaRef, vence);
       if (dias < 0) h.push({ codigo: 'R04-PAZ-SALVO-VENCIDO', nivel: 'CRITICA', mensaje: `El paz y salvo del inmueble ${i.matricula} venció el ${vence}.`, campo: `inmuebles.${i.id}.paz_salvo.vigencia_hasta` });
       else if (dias <= cfg.diasAvisoPazSalvo) h.push({ codigo: 'R04-PAZ-SALVO-POR-VENCER', nivel: 'INFORMATIVA', mensaje: `El paz y salvo del inmueble ${i.matricula} vence en ${dias} día(s) (${vence}).`, campo: `inmuebles.${i.id}.paz_salvo.vigencia_hasta` });
     }
   }
-  for (const ps of docs('PAZ_Y_SALVO')) {
+  for (const ps of pazSalvos) {
+    if (antiguos.has(ps.id)) continue;
     const cat = soloDigitos(v(ps.hechos, 'cedula_catastral')?.valor);
     const inm = e.datos.inmuebles.find((i) => [i.cedula_catastral, i.cedula_catastral_paz_salvo].some((x) => mismaCatastral(x, cat)));
     if (!inm) {

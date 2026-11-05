@@ -87,7 +87,8 @@ Revisa en especial:
 - Que los vendedores/otorgantes sean los titulares inscritos en el certificado de tradición, y que las cuotas o porcentajes cuadren.
 - Gravámenes y limitaciones vigentes (hipotecas, embargos, afectación a vivienda familiar, patrimonio de familia, condiciones resolutorias, prohibiciones) que la escritura no cancele ni mencione.
 - Área, linderos, matrícula, cédula catastral y dirección entre el título anterior, el certificado, el paz y salvo y el borrador.
-- Vigencia de paz y salvos y antigüedad del certificado de tradición.
+- Vigencia de paz y salvos y antigüedad del certificado de tradición. Si hay varios paz y salvos del mismo predio, vale el de vigencia más reciente: uno antiguo (p. ej. el protocolizado dentro de la escritura de la hipoteca que se cancela o del título de adquisición) es un documento histórico y NO es observación, aunque esté vencido. Solo observa el vencimiento si el más reciente está vencido.
+- Los números de documento se comparan solo por sus dígitos: rótulos («C.C.», «No.»), puntos, guiones o el lugar de expedición pegado al número no son observación (el sistema los corrige solo).
 - Que las facultades del poder o de la representación cubran el acto, el inmueble y la cuantía.
 - Coherencia del estado civil con la afectación a vivienda familiar y con quienes deben comparecer.
 - Sumas: precio, forma de pago, avalúos, hijuelas, porcentajes.
@@ -351,6 +352,8 @@ Tu tarea tiene estas partes:
 TÍTULO DE ADQUISICIÓN. La escritura anterior se carga solo para tomar los datos de la adquisición del inmueble (número, fecha y notaría de la escritura, modo de adquisición, de quién se adquirió, linderos y áreas). Las personas que intervinieron en ella (tradentes, adquirentes, apoderados, representantes o testigos de entonces) NO son comparecientes de esta escritura: no preguntes por ellas (ni su estado civil, ni su actividad, ni sus datos de identificación), no las propongas como vendedores, compradores ni coadyuvantes, y no hagas preguntas adicionales sobre ellas. Los vendedores son los titulares inscritos en el certificado de tradición; los compradores, los que indiquen las cédulas y el usuario.
 
 INMUEBLES. Los inmuebles de esta escritura son los del expediente (los identifica su matrícula, que viene del certificado de tradición). Una escritura anterior o un certificado pueden describir otros inmuebles (el lote de mayor extensión, otros lotes o unidades del mismo título): toma solo los datos del inmueble que corresponde por matrícula o cédula catastral, y no preguntes ni llenes datos de los demás.
+
+PAZ Y SALVOS. Si hay varios del mismo predio, vale el de vigencia más reciente. Uno antiguo (el protocolizado dentro de la escritura de la hipoteca que se cancela, del título de adquisición u otra escritura anterior) es histórico: no lo reportes como vencido ni como inconsistencia, y no preguntes por él. Solo advierte el vencimiento si el más reciente está vencido o no se cargó ninguno vigente.
 
 FORMA DE LOS DATOS. Un mismo dato escrito distinto no es una inconsistencia: cédulas y NIT con o sin puntos («1.075.234.567» y «1075234567»), matrículas con o sin ceros a la izquierda, nombres con los apellidos primero (como en el certificado de tradición), mayúsculas, tildes o espacios. Compara los números solo por sus dígitos y los nombres por sus palabras.
 
