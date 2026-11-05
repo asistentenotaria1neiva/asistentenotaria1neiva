@@ -1,62 +1,77 @@
 /**
- * Redacción de la escritura con IA (paso 6). Las plantillas aprobadas por el notario NO se llenan:
- * son el modelo de redacción de cada tipo de escritura. La IA escribe la escritura del caso tomando
- * ese modelo como base, con:
- *   - los datos del expediente (personas, inmuebles, escritura, actos) y los que calcula el sistema
- *     (comparecencias, valores en letras, notario, fecha en letras…: src/lib/escritura/contexto.ts);
- *   - lo que se leyó de los documentos soporte;
- *   - las respuestas del funcionario a las preguntas del asistente y sus indicaciones.
- * Lo que la IA no encuentra queda escrito «FALTA: …» y como observación CRÍTICA de las reglas (R12: debe resolverse antes de
- * enviar a revisión, redactando de nuevo). El Word se arma con el paquete de la plantilla base y el formato de la notaría
- * (src/lib/escritura/generar.ts), y se guarda cifrado y versionado como borrador.
+ * Redacción de la escritura con IA, directamente desde los documentos (como se haría con Claude):
+ *   1. El funcionario elige el tipo de escritura (al crear el expediente) y carga los documentos.
+ *   2. La plantilla es la APROBADA del tipo elegido: es la escritura de referencia (estructura,
+ *      cláusulas, lenguaje y formato), no un formulario que se llena.
+ *   3. La IA lee los documentos ORIGINALES (PDF e imágenes), extrae y cruza los datos y redacta la
+ *      escritura completa sobre la plantilla. No pregunta nada: lo dudoso queda «[VERIFICAR: …]», lo
+ *      que no está en ningún documento queda «FALTA: …», y todo va como alerta para el revisor.
+ * Si el funcionario ya diligenció datos, respondió el asistente o escribe indicaciones, la IA también
+ * los usa (las indicaciones prevalecen): así se corrige una versión sin volver a empezar.
  *
- * La redacción tarda (una escritura completa son miles de palabras): corre en segundo plano, como
- * la revisión de la IA, y la página muestra que está en curso.
+ * Las alertas quedan como observaciones (CRITICA impide enviar a revisión; REVISAR exige corregir o
+ * justificar). Las marcas «FALTA» las vigila la regla R12. El Word se arma con el paquete de la
+ * plantilla y el formato de la notaría (src/lib/escritura/generar.ts), cifrado y versionado.
+ * Corre en segundo plano (tarda unos minutos) y avisa al terminar.
  */
 import 'server-only';
+import type Anthropic from '@anthropic-ai/sdk';
 import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
-import { guardarCifrado } from '../almacenamiento';
+import { guardarCifrado, leerCifrado } from '../almacenamiento';
 import { sha256 } from '../seguridad/cifrado';
 import { prepararContexto, type ContextoEscritura } from '../escritura/contexto';
-import { ErrorDatos } from '../escritura/personas';
 import { ACTOS } from '../escritura/actos';
 import { ESQUEMAS } from '../escritura/esquemas';
-import { CAMPO_INDICACIONES } from '../escritura/actos-plantilla';
+import { CAMPO_INDICACIONES, valoresAutomaticos } from '../escritura/actos-plantilla';
 import { armarEscritura, convertirAPdf, type ParrafoRedactado } from '../escritura/generar';
-import type { DatosExpediente } from '../escritura/tipos';
+import { datosVacios, type DatosExpediente } from '../escritura/tipos';
 import { obtenerConfig } from '../configuracion';
-import { llamarEstructurado, configuracionModelo, ErrorIA } from '../ia/cliente';
+import { abrirPdf } from '../pdf';
+import { llamarEstructurado, configuracionModelo, prepararDocumento, ErrorIA, type ResultadoLlamada } from '../ia/cliente';
 import { SISTEMA_REDACCION, ESQUEMA_REDACCION } from '../ia/instrucciones';
-import { TIPOS_DOCUMENTALES, type TipoDocumental } from '../ia/documentos';
+import { TIPOS_DOCUMENTALES, compactarHechos, type TipoDocumental } from '../ia/documentos';
 import { plantillaAprobada, ErrorPlantilla } from './plantillas';
 import { textoDePlantilla } from './revision-plantillas';
 import { obtenerExpediente, puedeEditar, datosDe, actosDe, bloqueos, ErrorNegocio } from './expedientes';
-import { estadoAsistente, hechosParaAsistente, esAdicional } from './asistente';
+import { estadoAsistente, esAdicional } from './asistente';
 import { instruccionesAprobadas } from './documentos';
 import { ejecutarRevision } from './revision';
 import { notificar } from './notificaciones';
 
+/** Observaciones con las alertas de la redacción */
+export const CODIGO_REDACCION = 'IA-REDACCION';
 /** Regla de las marcas «FALTA» en el texto del borrador (src/lib/reglas/reglas.ts) */
 const CODIGO_BORRADOR_INCOMPLETO = 'R12-BORRADOR-INCOMPLETO';
+/** Observaciones que no impiden redactar de nuevo: precisamente se resuelven redactando otra versión */
+const NO_BLOQUEAN = new Set([CODIGO_BORRADOR_INCOMPLETO, CODIGO_REDACCION]);
 /** Una redacción EN_CURSO más antigua que esto se da por interrumpida */
 const LIMITE_REDACCION_MS = 15 * 60 * 1000;
-const LIMITE_MODELO = 120_000; // caracteres de cada modelo enviados a la IA
+const LIMITE_MODELO = 120_000; // caracteres de cada plantilla enviados a la IA
+/** Límites de una solicitud con documentos (la API admite 100 páginas de PDF y 32 MB) */
+const MAX_PAGINAS = 100;
+const MAX_BYTES_EN_LINEA = 22 * 1024 * 1024;
 
+type NivelAlerta = 'CRITICA' | 'REVISAR' | 'INFORMATIVA';
 interface RespuestaRedaccion {
   resumen: string;
+  datos_extraidos: { grupo: string; dato: string; valor: string; fuente: string }[];
   parrafos: ParrafoRedactado[];
-  faltantes: { dato: string; motivo: string }[];
-  advertencias: string[];
+  alertas: { nivel: NivelAlerta; campo: string; detalle: string }[];
+  documentos_no_utilizados: { documento: string; motivo: string }[];
 }
 
 /** Lo que se guarda en el borrador sobre su redacción */
 export interface InfoRedaccion {
   resumen: string;
-  faltantes: { dato: string; motivo: string }[];
-  advertencias: string[];
+  datosExtraidos: RespuestaRedaccion['datos_extraidos'];
+  alertas: RespuestaRedaccion['alertas'];
+  documentosNoUtilizados: RespuestaRedaccion['documentos_no_utilizados'];
+  /** Datos marcados «FALTA» en el texto */
+  faltantes: string[];
+  indicaciones: string | null;
   modelo: string;
 }
 
@@ -75,12 +90,8 @@ export async function redaccionEnCurso(expedienteId: string) {
 export const ultimaRedaccion = (expedienteId: string) =>
   db.analisisIA.findFirst({ where: { expedienteId, proposito: 'REDACCION' }, orderBy: { creadoEn: 'desc' } });
 
-/** Bloques (modelos) sobre los que se redacta, en el orden de la escritura */
-function modelosDe(ctx: ContextoEscritura): string[] {
-  if (!ctx.conCaratula) return ctx.actos.map((a) => a.plantilla);
-  const anexos = [...new Set(ctx.actos.map((a) => a.anexo).filter((x): x is string => !!x))];
-  return ['caratula', ...ctx.actos.map((a) => a.plantilla), 'cierre', ...anexos];
-}
+/** ¿El funcionario ya diligenció algo en el expediente? (si no, no se envía el expediente vacío) */
+const tieneDatos = (d: DatosExpediente) => d.personas.length > 0 || d.inmuebles.length > 0 || Object.values(d.actos).some((a) => a && Object.keys(a).length > 0);
 
 /** Una respuesta del asistente como texto (personas e inmuebles por su nombre) */
 function textoRespuesta(v: unknown, datos: DatosExpediente): string {
@@ -94,102 +105,163 @@ function textoRespuesta(v: unknown, datos: DatosExpediente): string {
   return String(v);
 }
 
+interface Plantilla { tipoId: string; nombre: string; version: number; id: string; archivo: Buffer }
+
+/** La plantilla aprobada de cada acto y, si el acto tiene formulario propio, los bloques comunes aprobados */
+async function plantillasDe(actos: string[]): Promise<Plantilla[]> {
+  const lista: Plantilla[] = [];
+  const agregar = async (tipoId: string, obligatoria: boolean) => {
+    try {
+      const p = await plantillaAprobada(tipoId);
+      lista.push({ tipoId, nombre: ESQUEMAS[tipoId]?.titulo ?? ACTOS[tipoId]?.nombre ?? tipoId, version: p.version, id: p.id, archivo: Buffer.from(p.archivo) });
+    } catch (e) {
+      if (obligatoria || !(e instanceof ErrorPlantilla)) throw e;
+    }
+  };
+  const conBloques = actos.some((a) => ACTOS[a] && !ACTOS[a].porPlantilla);
+  if (conBloques) await agregar('caratula', false);
+  for (const a of actos) await agregar(a, true);
+  if (conBloques) {
+    await agregar('cierre', false);
+    for (const anexo of new Set(actos.map((a) => ACTOS[a]?.anexo).filter((x): x is string => !!x))) await agregar(anexo, false);
+  }
+  return lista;
+}
+
 /**
  * Valida que se pueda redactar y deja la redacción EN_CURSO. Devuelve `tarea`, que la acción
  * programa para después de responder (la persona puede salir de la página).
+ * `indicaciones`: lo que el funcionario quiere que la IA tenga en cuenta en esta versión.
  */
-export async function iniciarRedaccion(s: SesionActiva, expedienteId: string) {
+export async function iniciarRedaccion(s: SesionActiva, expedienteId: string, indicaciones?: string) {
   const e = await obtenerExpediente(s, expedienteId);
   if (!puedeEditar(s, e)) throw new ErrorNegocio('La escritura solo se redacta mientras el expediente está en elaboración.');
   if (!process.env.ANTHROPIC_API_KEY) throw new ErrorNegocio('La IA no está configurada: sin ella no se puede redactar la escritura.');
   if (await redaccionEnCurso(expedienteId)) throw new ErrorNegocio('La IA ya está redactando esta escritura. Espere a que termine.');
+  if (!(await db.documento.count({ where: { expedienteId, origenId: null } }))) throw new ErrorNegocio('Cargue los documentos del negocio antes de generar la escritura.');
   // Las reglas fijas se ejecutan siempre antes de redactar
   await ejecutarRevision(s, expedienteId, false);
-  // Las marcas «FALTA» del borrador anterior (R12) no impiden redactar: se resuelven redactando de nuevo
-  const criticas = (await bloqueos(expedienteId)).criticas.filter((o) => o.codigo !== CODIGO_BORRADOR_INCOMPLETO);
+  const criticas = (await bloqueos(expedienteId)).criticas.filter((o) => !NO_BLOQUEAN.has(o.codigo));
   if (criticas.length) throw new ErrorNegocio(`No se puede redactar la escritura: hay ${criticas.length} observación(es) CRÍTICA(S) abiertas.`);
 
-  const datos = datosDe(e);
-  const actos = actosDe(e);
-  let ctx: ContextoEscritura;
+  let plantillas: Plantilla[];
   try {
-    ctx = prepararContexto(datos, actos, await obtenerConfig('notaria'));
-  } catch (err) {
-    if (err instanceof ErrorDatos) throw new ErrorNegocio(`Faltan datos para redactar la escritura: ${err.faltantes.join(', ')}.`);
-    throw err;
-  }
-  const asistente = (await estadoAsistente(expedienteId)).resultado;
-  const obligatorias = (asistente?.preguntas ?? []).filter((p) => p.obligatoria && p.estado === 'PENDIENTE');
-  if (obligatorias.length) throw new ErrorNegocio(`Responda primero ${obligatorias.length} pregunta(s) obligatoria(s) del asistente.`);
-
-  // Los modelos aprobados: si falta uno, no se redacta
-  const modelos: { tipoId: string; nombre: string; version: number; id: string; archivo: Buffer }[] = [];
-  try {
-    for (const tipoId of modelosDe(ctx)) {
-      const p = await plantillaAprobada(tipoId);
-      modelos.push({ tipoId, nombre: ACTOS[tipoId]?.nombre ?? tipoId, version: p.version, id: p.id, archivo: Buffer.from(p.archivo) });
-    }
+    plantillas = await plantillasDe(actosDe(e));
   } catch (err) {
     if (err instanceof ErrorPlantilla) throw new ErrorNegocio(err.message);
     throw err;
   }
-
+  const texto = indicaciones?.trim().slice(0, 4000) || null;
   const analisis = await db.analisisIA.create({ data: { expedienteId, proposito: 'REDACCION', modelo: configuracionModelo('REDACCION').modelo, estado: 'EN_CURSO' } });
-  const tarea = () => redactar(s, expedienteId, analisis.id, { datos, actos, ctx, modelos, asistente }).catch(async (err) => {
+  const tarea = () => redactar(s, expedienteId, analisis.id, plantillas, texto).catch(async (err) => {
     const mensaje = err instanceof ErrorIA || err instanceof ErrorNegocio ? err.message : 'Error inesperado al redactar la escritura.';
     if (!(err instanceof ErrorIA) && !(err instanceof ErrorNegocio)) console.error('[redaccion]', err);
     await db.analisisIA.update({ where: { id: analisis.id }, data: { estado: 'ERROR', error: mensaje } }).catch(() => undefined);
     await notificar(s.usuario.id, { titulo: `La escritura no se pudo redactar · ${e.numeroInterno}`, mensaje, enlace: `/expedientes/${expedienteId}/borrador` }).catch(() => undefined);
   });
-  return { tarea, modelos: modelos.length };
+  return { tarea };
 }
 
-async function redactar(
-  s: SesionActiva, expedienteId: string, analisisId: string,
-  { datos, actos, ctx, modelos, asistente }: {
-    datos: DatosExpediente; actos: string[]; ctx: ContextoEscritura;
-    modelos: { tipoId: string; nombre: string; version: number; id: string; archivo: Buffer }[];
-    asistente: Awaited<ReturnType<typeof estadoAsistente>>['resultado'];
-  },
-) {
-  const e = await obtenerExpediente(s, expedienteId);
-  const instr = await instruccionesAprobadas('REDACCION', actos);
-  const documentos = await db.documento.findMany({ where: { expedienteId, estadoAnalisis: 'COMPLETADO' }, orderBy: { creadoEn: 'asc' } });
-  const justificadas = await db.observacion.findMany({ where: { expedienteId, estado: 'JUSTIFICADA' }, select: { mensaje: true, justificacion: true } });
+/**
+ * Los documentos originales del negocio como bloques para la IA (un PDF separado en partes va
+ * completo, como se cargó). Lo que no cabe en la solicitud va como el texto que ya se leyó de él, si
+ * se analizó; si no, se reporta como no enviado.
+ */
+async function documentosParaIA(expedienteId: string) {
+  const docs = await db.documento.findMany({ where: { expedienteId, origenId: null }, orderBy: { creadoEn: 'asc' } });
+  const contenido: Anthropic.Beta.BetaContentBlockParam[] = [];
+  const liberar: (() => Promise<void>)[] = [];
+  const leidos: { documento: string; datos: unknown }[] = [];
+  const noEnviados: string[] = [];
+  let paginas = 0, enLinea = 0;
+  for (const [i, d] of docs.entries()) {
+    const titulo = `D${i + 1} · ${d.nombreOriginal}`;
+    const bytes = await leerCifrado(d.rutaCifrada);
+    const n = d.mime !== 'application/pdf' ? 1 : (await abrirPdf(bytes))?.getPageCount() ?? 1;
+    const pesaEnLinea = bytes.length <= 20 * 1024 * 1024 ? bytes.length : 0;
+    let enviado = false;
+    if (paginas + n <= MAX_PAGINAS && enLinea + pesaEnLinea <= MAX_BYTES_EN_LINEA) {
+      try {
+        const p = await prepararDocumento(bytes, d.mime, titulo);
+        liberar.push(p.liberar);
+        contenido.push({ type: 'text', text: `Documento ${titulo}:` }, p.bloque);
+        paginas += n;
+        enLinea += pesaEnLinea;
+        enviado = true;
+      } catch (err) {
+        if (!(err instanceof ErrorIA)) throw err;
+      }
+    }
+    if (enviado) continue;
+    // Lo que no cabe: el texto ya leído de él (o de sus partes, si se separó)
+    const partes = d.estadoAnalisis === 'DIVIDIDO' ? await db.documento.findMany({ where: { origenId: d.id, estadoAnalisis: 'COMPLETADO' } }) : d.estadoAnalisis === 'COMPLETADO' ? [d] : [];
+    if (partes.length) for (const x of partes) leidos.push({ documento: `${titulo}${x.id !== d.id ? ` (págs. ${x.paginaDesde}–${x.paginaHasta}, ${TIPOS_DOCUMENTALES[x.tipoDocumental as TipoDocumental] ?? x.tipoDocumental})` : ''}`, datos: compactarHechos(x.hechos) });
+    else noEnviados.push(d.nombreOriginal);
+  }
+  if (leidos.length) contenido.push({ type: 'text', text: `<documento_leido>\n${JSON.stringify(leidos)}\n</documento_leido>` });
+  return { contenido, liberar: () => Promise.all(liberar.map((f) => f())), noEnviados, total: docs.length };
+}
 
-  const entrada = {
-    actos: actos.map((id, i) => ({ orden: i + 1, id, nombre: ESQUEMAS[id]?.titulo ?? id, indicaciones: (datos.actos[id] as Record<string, unknown> | undefined)?.[CAMPO_INDICACIONES] ?? null })),
-    expediente: { escritura: datos.escritura, personas: datos.personas, inmuebles: datos.inmuebles, actos: datos.actos },
-    datos_calculados: { general: ctx.global, por_acto: ctx.actos.map((a) => ({ acto: a.id, ...a.contexto })) },
-    respuestas_del_funcionario: (asistente?.preguntas ?? []).filter((p) => p.estado === 'RESPONDIDA').map((p) => ({
-      pregunta: esAdicional(p.ruta) ? p.pregunta : p.etiqueta, respuesta: textoRespuesta(p.respuesta, datos),
-    })),
-    situaciones_aceptadas: justificadas.map((o) => ({ situacion: o.mensaje, decision: o.justificacion })),
-    documentos: documentos.map((d) => ({ nombre: d.nombreOriginal, tipo: TIPOS_DOCUMENTALES[d.tipoDocumental as TipoDocumental] ?? d.tipoDocumental, hechos: hechosParaAsistente(d.tipoDocumental, d.hechos) })),
+async function redactar(s: SesionActiva, expedienteId: string, analisisId: string, plantillas: Plantilla[], indicaciones: string | null) {
+  const e = await obtenerExpediente(s, expedienteId);
+  const datos = datosDe(e);
+  const actos = actosDe(e);
+  const notaria = await obtenerConfig('notaria');
+  const instr = await instruccionesAprobadas('REDACCION', actos);
+  const asistente = (await estadoAsistente(expedienteId)).resultado;
+  const justificadas = await db.observacion.findMany({ where: { expedienteId, estado: 'JUSTIFICADA' }, select: { mensaje: true, justificacion: true } });
+  // Si el funcionario ya diligenció el formulario, también van los datos que calcula el sistema
+  let calculados: ContextoEscritura | null = null;
+  if (tieneDatos(datos)) { try { calculados = prepararContexto(datos, actos, notaria); } catch { calculados = null; } }
+
+  const caso = {
+    tipo_de_escritura: actos.map((id, i) => ({ orden: i + 1, acto: ESQUEMAS[id]?.titulo ?? id })),
+    notaria: { ...notaria, ...valoresAutomaticos(datos.escritura ?? datosVacios().escritura, notaria) },
+    indicaciones_del_funcionario: [indicaciones, ...actos.map((a) => (datos.actos[a] as Record<string, unknown> | undefined)?.[CAMPO_INDICACIONES])].filter((x): x is string => typeof x === 'string' && !!x.trim()),
+    ...(tieneDatos(datos) ? { datos_diligenciados_por_el_funcionario: { escritura: datos.escritura, personas: datos.personas, inmuebles: datos.inmuebles, actos: datos.actos } } : {}),
+    ...(calculados ? { datos_calculados: { general: calculados.global, por_acto: calculados.actos.map((a) => ({ acto: a.id, ...a.contexto })) } } : {}),
+    respuestas_del_funcionario: (asistente?.preguntas ?? []).filter((p) => p.estado === 'RESPONDIDA').map((p) => ({ pregunta: esAdicional(p.ruta) ? p.pregunta : p.etiqueta, respuesta: textoRespuesta(p.respuesta, datos) })),
+    situaciones_aceptadas_por_el_funcionario: justificadas.map((o) => ({ situacion: o.mensaje, decision: o.justificacion })),
   };
-  const r = await llamarEstructurado<RespuestaRedaccion>({
-    proposito: 'REDACCION',
-    sistema: SISTEMA_REDACCION + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
-    contenido: [
-      ...modelos.map((m) => ({ type: 'text' as const, text: `<modelo tipo="${m.tipoId}" nombre="${m.nombre}" version="${m.version}">\n${textoDePlantilla(m.archivo).slice(0, LIMITE_MODELO)}\n</modelo>` })),
-      { type: 'text', text: `<datos_del_caso>\n${JSON.stringify(entrada)}\n</datos_del_caso>\nRedacta la escritura completa de este caso tomando como base los modelos.` },
-    ],
-    esquema: ESQUEMA_REDACCION as unknown as Record<string, unknown>,
-    maxTokens: 64000,
-  });
-  const parrafos = r.datos.parrafos.filter((p) => typeof p.texto === 'string');
+
+  const docs = await documentosParaIA(expedienteId);
+  let r: ResultadoLlamada<RespuestaRedaccion>;
+  try {
+    r = await llamarEstructurado<RespuestaRedaccion>({
+      proposito: 'REDACCION',
+      sistema: SISTEMA_REDACCION + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
+      contenido: [
+        ...plantillas.map((m) => ({ type: 'text' as const, text: `<modelo tipo="${m.tipoId}" nombre="${m.nombre}" version="${m.version}">\n${textoDePlantilla(m.archivo).slice(0, LIMITE_MODELO)}\n</modelo>` })),
+        ...docs.contenido,
+        { type: 'text', text: `<caso>\n${JSON.stringify(caso)}\n</caso>\nRedacta la escritura completa de este negocio tomando como referencia la plantilla y los documentos.` },
+      ],
+      esquema: ESQUEMA_REDACCION as unknown as Record<string, unknown>,
+      maxTokens: 64000,
+    });
+  } finally {
+    await docs.liberar();
+  }
+  const parrafos = (r.datos.parrafos ?? []).filter((p) => typeof p.texto === 'string');
   if (parrafos.filter((p) => p.texto.trim()).length < 5) throw new ErrorIA('La IA no devolvió el texto de la escritura. Intente de nuevo.', 'FORMATO');
 
-  // El paquete del primer modelo (estilos, encabezado «Hoja No.», página) es la base del Word
-  const resultado = armarEscritura(modelos[0].archivo, parrafos);
-  const faltantes = [...r.datos.faltantes];
-  for (const f of resultado.faltantes) if (!faltantes.some((x) => x.dato.toLowerCase() === f.toLowerCase())) faltantes.push({ dato: f, motivo: 'Marcado en el texto de la escritura.' });
-  const info: InfoRedaccion = { resumen: r.datos.resumen.slice(0, 2000), faltantes: faltantes.slice(0, 50).map((f) => ({ dato: f.dato.slice(0, 300), motivo: f.motivo.slice(0, 500) })), advertencias: r.datos.advertencias.slice(0, 30).map((a) => a.slice(0, 1000)), modelo: r.modelo };
+  // El paquete de la primera plantilla (estilos, encabezado «Hoja No.», página) es la base del Word
+  const resultado = armarEscritura(plantillas[0].archivo, parrafos);
+  const alertas = (r.datos.alertas ?? []).slice(0, 60).map((a) => ({ nivel: (['CRITICA', 'REVISAR', 'INFORMATIVA'].includes(a.nivel) ? a.nivel : 'REVISAR') as NivelAlerta, campo: a.campo.slice(0, 300), detalle: a.detalle.slice(0, 1500) }));
+  if (docs.noEnviados.length) alertas.push({ nivel: 'REVISAR', campo: 'Documentos', detalle: `No cupieron en la solicitud y no se habían analizado, así que la IA no los leyó: ${docs.noEnviados.join(', ')}. Analícelos en «Documentos» o cárguelos divididos y redacte de nuevo.` });
+  const info: InfoRedaccion = {
+    resumen: (r.datos.resumen ?? '').slice(0, 2000),
+    datosExtraidos: (r.datos.datos_extraidos ?? []).slice(0, 150).map((d) => ({ grupo: d.grupo.slice(0, 80), dato: d.dato.slice(0, 200), valor: d.valor.slice(0, 2000), fuente: d.fuente.slice(0, 300) })),
+    alertas,
+    documentosNoUtilizados: (r.datos.documentos_no_utilizados ?? []).slice(0, 30).map((d) => ({ documento: d.documento.slice(0, 300), motivo: d.motivo.slice(0, 500) })),
+    faltantes: resultado.faltantes,
+    indicaciones,
+    modelo: r.modelo,
+  };
 
   let pdf: Buffer | null = null;
   try { pdf = await convertirAPdf(resultado.docx, `${e.numeroInterno}.docx`); } catch (err) { console.error('[redaccion] PDF', err); }
   const ultima = await db.borrador.findFirst({ where: { expedienteId }, orderBy: { version: 'desc' } });
-  const usadas = modelos.map((m) => ({ tipoId: m.tipoId, version: m.version, id: m.id }));
+  const usadas = plantillas.map((m) => ({ tipoId: m.tipoId, version: m.version, id: m.id }));
   const borrador = await db.borrador.create({
     data: {
       expedienteId, version: (ultima?.version ?? 0) + 1, plantillasUsadas: usadas, generadoPorId: s.usuario.id,
@@ -200,17 +272,23 @@ async function redactar(
     },
   });
 
-  // Las reglas sobre el texto nuevo: las marcas «FALTA» quedan como observación CRÍTICA (R12) hasta
-  // que se completen los datos y se redacte de nuevo
+  // Las alertas de esta versión reemplazan las de la anterior que nadie resolvió
+  await db.observacion.updateMany({ where: { expedienteId, codigo: CODIGO_REDACCION, estado: 'ABIERTA' }, data: { estado: 'CORREGIDA', resueltaEn: new Date(), justificacion: 'Reemplazada por una redacción posterior.' } });
+  const NIVEL = { CRITICA: 'CRITICA', REVISAR: 'ADVERTENCIA', INFORMATIVA: 'INFORMATIVA' } as const;
+  for (const a of alertas) {
+    await db.observacion.create({ data: { expedienteId, origen: 'IA', codigo: CODIGO_REDACCION, nivel: NIVEL[a.nivel], mensaje: `${a.campo}: ${a.detalle}`.slice(0, 2000), evidencia: { detalle: `Redacción v${borrador.version}` } } });
+  }
+  // Las reglas sobre el texto nuevo (las marcas «FALTA» quedan como observación CRÍTICA, R12)
   await ejecutarRevision(s, expedienteId, false).catch((err) => console.error('[redaccion] reglas', err));
   await db.analisisIA.update({ where: { id: analisisId }, data: {
     estado: 'COMPLETADO', modelo: r.modelo, versionInstruccion: instr.version, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, tokensCacheLectura: r.tokensCacheLectura, duracionMs: r.duracionMs,
-    resultado: { borradorId: borrador.id, version: borrador.version, faltantes: info.faltantes.length, advertencias: info.advertencias.length },
+    resultado: { borradorId: borrador.id, version: borrador.version, alertas: alertas.length, faltantes: info.faltantes.length, documentos: docs.total },
   } });
-  await auditar({ ...datosAuditoria(s), accion: 'BORRADOR_GENERADO', entidad: 'borrador', entidadId: borrador.id, detalle: { expedienteId, version: borrador.version, plantillas: usadas.map((u) => `${u.tipoId}@v${u.version}`), redaccionIA: true, faltantes: info.faltantes.length, pdf: !!pdf } });
+  await auditar({ ...datosAuditoria(s), accion: 'BORRADOR_GENERADO', entidad: 'borrador', entidadId: borrador.id, detalle: { expedienteId, version: borrador.version, plantillas: usadas.map((u) => `${u.tipoId}@v${u.version}`), redaccionIA: true, alertas: alertas.length, indicaciones: !!indicaciones, pdf: !!pdf } });
+  const criticas = alertas.filter((a) => a.nivel === 'CRITICA').length;
   await notificar(s.usuario.id, {
     titulo: `Escritura redactada · ${e.numeroInterno}`,
-    mensaje: `La IA redactó la versión ${borrador.version} sobre ${usadas.length === 1 ? 'la plantilla aprobada' : `${usadas.length} plantillas aprobadas`}.${info.faltantes.length ? ` Faltan ${info.faltantes.length} dato(s), marcados «FALTA» en el texto.` : ''} Revísela antes de enviarla.`,
+    mensaje: `La IA redactó la versión ${borrador.version} sobre la plantilla aprobada.${criticas ? ` ${criticas} alerta(s) crítica(s).` : ''}${alertas.length - criticas ? ` ${alertas.length - criticas} punto(s) para revisar.` : ''} Revísela antes de enviarla.`,
     enlace: `/expedientes/${expedienteId}/borrador`,
   });
 }

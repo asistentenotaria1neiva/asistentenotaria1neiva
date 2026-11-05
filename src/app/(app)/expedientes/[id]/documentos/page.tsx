@@ -81,7 +81,8 @@ export default async function Documentos({ params }: { params: Promise<{ id: str
           <FormularioCarga expedienteId={id} completar={accionCompletarDocumento.bind(null, id)} tipos={[['AUTO', 'Detectar automáticamente (un documento o un PDF con varios: la IA los identifica y separa)'],...Object.entries(TIPOS_DOCUMENTALES)]} />
           {!iaDisponible && <div className="aviso alerta">El análisis con IA no está disponible: falta configurar la clave de la API en el servidor.</div>}
           {tarea && <ProgresoAnalisis tarea={tarea} />}
-          {iaDisponible && !tarea && pendientes > 0 && <BotonAccion accion={accionAnalizarPendientes.bind(null, id)} texto={`Analizar con IA los ${pendientes} documento(s) pendiente(s)`} textoPendiente="Iniciando…" />}
+          {iaDisponible && !tarea && pendientes > 0 && <BotonAccion accion={accionAnalizarPendientes.bind(null, id)} texto={`Extraer datos de los ${pendientes} documento(s) (opcional)`} clase="secundario" textoPendiente="Iniciando…" />}
+          <p className="ayuda">No hace falta analizar cada documento: al generar la escritura la IA los lee todos. La extracción por documento sirve para ver sus datos con fuente y para las reglas de verificación.</p>
         </section>
       )}
       {docs.map((d) => {
@@ -107,7 +108,7 @@ export default async function Documentos({ params }: { params: Promise<{ id: str
         );
       })}
       {!docs.length && <p className="suave vacio tarjeta">Aún no hay documentos cargados.</p>}
-      <div className="fila" style={{ justifyContent: 'flex-end' }}><Link className="boton" href={`/expedientes/${id}/asistente`}>Continuar con el asistente de IA →</Link></div>
+      {docs.length > 0 && <div className="fila" style={{ justifyContent: 'flex-end' }}><Link className="boton" href={`/expedientes/${id}/borrador`}>Generar la escritura →</Link></div>}
     </>
   );
 }

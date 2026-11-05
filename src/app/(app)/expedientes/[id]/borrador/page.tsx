@@ -1,96 +1,138 @@
+import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { expedienteDePagina, puedeEditar, bloqueos } from '@/lib/servicios/expedientes';
-import { redaccionEnCurso, ultimaRedaccion, type InfoRedaccion } from '@/lib/servicios/redaccion';
-import { accionGenerarBorrador } from '../../acciones';
-import { BotonAccion, RefrescoAutomatico } from '../../formularios';
+import { redaccionEnCurso, ultimaRedaccion, CODIGO_REDACCION, type InfoRedaccion } from '@/lib/servicios/redaccion';
+import { accionRedactar } from '../../acciones';
+import { RefrescoAutomatico } from '../../formularios';
+import { FormAdmin } from '../../../admin/formularios';
 import { Tabla, fecha } from '../../../componentes';
 import { VisorDocx } from '../../../plantillas/VisorDocx';
 
 // La IA redacta la escritura en segundo plano (after) tras responder la acción
 export const maxDuration = 300;
 
+const NIVEL: Record<string, [string, string]> = { CRITICA: ['critica', 'Crítica'], REVISAR: ['advertencia', 'Revisar'], INFORMATIVA: ['informativa', 'Informativa'] };
+
 export default async function Borrador({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const s = await requerirSesion();
   const e = await expedienteDePagina(s, id);
-  const [versiones, b, enCurso, ultimaIA] = await Promise.all([
+  const [versiones, b, enCurso, ultimaIA, nDocs] = await Promise.all([
     db.borrador.findMany({ where: { expedienteId: id }, orderBy: { version: 'desc' } }),
     bloqueos(id),
     redaccionEnCurso(id),
     ultimaRedaccion(id),
+    db.documento.count({ where: { expedienteId: id, origenId: null } }),
   ]);
   const ultimo = versiones[0];
   const desactualizado = ultimo && ultimo.creadoEn < e.actualizadoEn;
-  const info = ultimo?.redaccion as InfoRedaccion | null | undefined;
-  // Las marcas «FALTA» del borrador anterior no impiden redactar de nuevo
-  const criticas = b.criticas.filter((o) => o.codigo !== 'R12-BORRADOR-INCOMPLETO');
+  const info = ultimo?.redaccion as Partial<InfoRedaccion> | null | undefined;
+  // Las alertas y marcas «FALTA» de la versión anterior no impiden redactar de nuevo
+  const criticas = b.criticas.filter((o) => o.codigo !== 'R12-BORRADOR-INCOMPLETO' && o.codigo !== CODIGO_REDACCION);
+  const editable = puedeEditar(s, e);
+  const alertas = info?.alertas ?? [];
+  const orden = { CRITICA: 0, REVISAR: 1, INFORMATIVA: 2 } as Record<string, number>;
   return (
     <>
       <section className="tarjeta">
-        <h2>Borrador de la escritura</h2>
-        <p className="suave">La IA redacta la escritura tomando como base la plantilla APROBADA por el notario para este tipo de acto (su estructura, cláusulas y forma de redactar), con los datos del expediente, de los documentos y las respuestas del asistente. No copia los datos del modelo: lo que no encuentra lo deja marcado «FALTA». Revise siempre el texto completo antes de enviarlo.</p>
-        {criticas.length > 0 && <div className="aviso error">Hay {criticas.length} observación(es) crítica(s) abiertas: no se puede redactar la escritura hasta corregirlas.</div>}
+        <h2>Escritura</h2>
+        <p className="suave">La IA lee los documentos cargados y redacta la escritura completa tomando como referencia la plantilla aprobada para este tipo de escritura. No hace preguntas: lo dudoso queda marcado <strong>[VERIFICAR]</strong> y lo que no está en los documentos, <strong>«FALTA»</strong>; todo aparece abajo como alerta. Lea siempre el texto completo antes de enviarlo.</p>
+        {!nDocs && <div className="aviso alerta">Aún no hay documentos. <Link href={`/expedientes/${id}/documentos`}>Cárguelos</Link> (cédulas, certificado de tradición, paz y salvos, escritura anterior, hoja de radicación…).</div>}
+        {criticas.length > 0 && <div className="aviso error">Hay {criticas.length} observación(es) crítica(s) abiertas: <Link href={`/expedientes/${id}/observaciones`}>revíselas</Link> antes de redactar.</div>}
         {enCurso ? (
           <div className="aviso info" role="status">
             <RefrescoAutomatico segundos={8} />
-            <span className="girador pequeno" aria-hidden="true" /> La IA está redactando la escritura (iniciada {fecha(enCurso.creadoEn)}). Tarda unos minutos; puede salir de esta página: le avisaremos en «Notificaciones» al terminar.
+            <span className="girador pequeno" aria-hidden="true" /> La IA está leyendo los documentos y redactando la escritura (iniciada {fecha(enCurso.creadoEn)}). Tarda unos minutos; puede salir de esta página: le avisaremos en «Notificaciones» al terminar.
           </div>
         ) : (
           <>
             {ultimaIA?.estado === 'ERROR' && <div className="aviso error">La última redacción no se completó: {ultimaIA.error}</div>}
-            {desactualizado && <div className="aviso alerta">Los datos cambiaron después del último borrador. Redáctelo de nuevo antes de enviarlo a revisión.</div>}
-            {puedeEditar(s, e) && <BotonAccion accion={accionGenerarBorrador.bind(null, id)} texto={ultimo ? 'Redactar nueva versión con IA' : 'Redactar escritura con IA'} textoPendiente="Iniciando…" />}
+            {desactualizado && <div className="aviso alerta">Hubo cambios después de la última versión. Redáctela de nuevo antes de enviarla a revisión.</div>}
+            {editable && nDocs > 0 && (
+              <FormAdmin accion={accionRedactar.bind(null, id)}
+                campos={[{ nombre: 'indicaciones', etiqueta: ultimo ? 'Indicaciones para la nueva versión (opcional)' : 'Indicaciones (opcional)', tipo: 'area', valor: info?.indicaciones ?? '',
+                  ayuda: 'Lo que la IA debe tener en cuenta y no está en los documentos, o qué corregir de la versión anterior (p. ej. «el usufructuario vive en Palermo», «el lindero sur es 33B»).' }]}
+                botones={[{ texto: ultimo ? 'Generar nueva versión' : 'Generar escritura' }]} mensajePendiente="Iniciando la redacción…" />
+            )}
           </>
         )}
       </section>
+
       {ultimo && info && (
         <section className="tarjeta">
-          <h3 style={{ marginTop: 0 }}>Redacción de la versión {ultimo.version}</h3>
-          <p>{info.resumen}</p>
-          {info.faltantes.length > 0 && (
-            <div className="aviso error">
-              Faltan {info.faltantes.length} dato(s), marcados «FALTA» en el texto. Complételos (en el asistente o en las indicaciones del acto) y redacte de nuevo:
-              <ul>{info.faltantes.map((f, i) => <li key={i}><strong>{f.dato}</strong>{f.motivo ? ` — ${f.motivo}` : ''}</li>)}</ul>
-            </div>
+          <h3 style={{ marginTop: 0 }}>Versión {ultimo.version}</h3>
+          {info.resumen && <p>{info.resumen}</p>}
+          {!!info.faltantes?.length && <div className="aviso error">Faltan {info.faltantes.length} dato(s), marcados «FALTA» en el texto: {info.faltantes.join(', ')}. Cargue el documento o escríbalos en las indicaciones y genere de nuevo.</div>}
+          {alertas.length > 0 ? (
+            <Tabla>
+              <thead><tr><th>Alerta</th><th>Dato o parte</th><th>Detalle</th></tr></thead>
+              <tbody>{[...alertas].sort((x, y) => orden[x.nivel] - orden[y.nivel]).map((a, i) => (
+                <tr key={i}>
+                  <td><span className={`etiqueta ${NIVEL[a.nivel]?.[0] ?? ''}`}>{NIVEL[a.nivel]?.[1] ?? a.nivel}</span></td>
+                  <td data-etiqueta="Dato" className="principal-celda">{a.campo}</td>
+                  <td data-etiqueta="Detalle">{a.detalle}</td>
+                </tr>
+              ))}</tbody>
+            </Tabla>
+          ) : <p className="suave">La IA no dejó alertas.</p>}
+          <p className="suave">Las alertas también están en <Link href={`/expedientes/${id}/observaciones`}>Observaciones</Link>: las críticas impiden enviar a revisión y las de «Revisar» se corrigen (generando una nueva versión) o se justifican.</p>
+          {!!info.documentosNoUtilizados?.length && (
+            <details><summary>Documentos que no se usaron ({info.documentosNoUtilizados.length})</summary>
+              <ul>{info.documentosNoUtilizados.map((d, i) => <li key={i}><strong>{d.documento}</strong>: {d.motivo}</li>)}</ul>
+            </details>
           )}
-          {info.advertencias.length > 0 && (
-            <div className="aviso alerta">
-              Revise con cuidado:
-              <ul>{info.advertencias.map((a, i) => <li key={i}>{a}</li>)}</ul>
-            </div>
+          {!!info.datosExtraidos?.length && (
+            <details><summary>Datos que tomó de los documentos ({info.datosExtraidos.length})</summary>
+              <Tabla>
+                <thead><tr><th>Dato</th><th>Valor</th><th>Fuente</th></tr></thead>
+                <tbody>{info.datosExtraidos.map((d, i) => (
+                  <tr key={i}>
+                    <td className="principal-celda"><span className="suave">{d.grupo} · </span>{d.dato}</td>
+                    <td data-etiqueta="Valor" style={{ whiteSpace: 'pre-line' }}>{d.valor}</td>
+                    <td data-etiqueta="Fuente" className="suave">{d.fuente}</td>
+                  </tr>
+                ))}</tbody>
+              </Tabla>
+            </details>
           )}
-          <p className="suave">Redactada por {info.modelo}.</p>
+          {info.indicaciones && <p className="suave">Indicaciones usadas: {info.indicaciones}</p>}
+          {info.modelo && <p className="suave">Redactada por {info.modelo}.</p>}
         </section>
       )}
-      {versiones.length > 0 && (
+
+      {ultimo && (
         <section className="tarjeta">
-          <h3 style={{ marginTop: 0 }}>Versiones</h3>
+          <div className="fila entre">
+            <h3 style={{ margin: 0 }}>Vista previa (versión {ultimo.version})</h3>
+            <div className="fila" style={{ gap: '0.5rem' }}>
+              <a className="boton pequeno" href={`/api/borradores/${ultimo.id}?formato=docx`}>Descargar Word</a>
+              {ultimo.rutaPdfCifrada && <a className="boton secundario pequeno" href={`/api/borradores/${ultimo.id}?formato=pdf`} target="_blank" rel="noopener">PDF</a>}
+            </div>
+          </div>
+          <p className="suave">Así se ve en Word: páginas, márgenes, encabezados y guiones de relleno.</p>
+          {/* key: al generar una versión nueva, el visor se rehace con ella */}
+          <VisorDocx key={ultimo.id} url={`/api/borradores/${ultimo.id}?vista=1`} />
+        </section>
+      )}
+
+      {versiones.length > 1 && (
+        <section className="tarjeta">
+          <h3 style={{ marginTop: 0 }}>Versiones anteriores</h3>
           <Tabla>
-            <thead><tr><th>Versión</th><th>Fecha</th><th>Plantillas (modelos) usadas</th><th>Descargar</th></tr></thead>
-            <tbody>{versiones.map((v) => (
+            <thead><tr><th>Versión</th><th>Fecha</th><th>Plantilla usada</th><th>Descargar</th></tr></thead>
+            <tbody>{versiones.slice(1).map((v) => (
               <tr key={v.id}>
-                <td className="principal-celda"><strong>v{v.version}</strong>{v.id === ultimo?.id && <> <span className="etiqueta informativa">última</span></>}</td>
+                <td className="principal-celda"><strong>v{v.version}</strong></td>
                 <td data-etiqueta="Fecha">{fecha(v.creadoEn)}</td>
-                <td data-etiqueta="Plantillas" className="suave">{(v.plantillasUsadas as { tipoId: string; version: number }[]).map((p) => `${p.tipoId} v${p.version}`).join(', ')}</td>
+                <td data-etiqueta="Plantilla" className="suave">{(v.plantillasUsadas as { tipoId: string; version: number }[]).map((p) => `${p.tipoId} v${p.version}`).join(', ')}</td>
                 <td data-etiqueta="Descargar">
-                  <div className="fila" style={{ gap: '0.5rem' }}>
-                    <a className="boton secundario pequeno" href={`/api/borradores/${v.id}?formato=docx`}>Word</a>
-                    {v.rutaPdfCifrada && <a className="boton secundario pequeno" href={`/api/borradores/${v.id}?formato=pdf`} target="_blank" rel="noopener">PDF</a>}
-                  </div>
+                  <a className="boton secundario pequeno" href={`/api/borradores/${v.id}?formato=docx`}>Word</a>
                 </td>
               </tr>
             ))}</tbody>
           </Tabla>
           <p className="suave">Cada descarga queda registrada en la auditoría.</p>
-        </section>
-      )}
-      {ultimo && (
-        <section className="tarjeta">
-          <h3 style={{ marginTop: 0 }}>Vista previa (versión {ultimo.version})</h3>
-          <p className="suave">Así se ve en Word: páginas, márgenes, encabezados y guiones de relleno.</p>
-          {/* key: al generar una versión nueva, el visor se rehace con ella */}
-          <VisorDocx key={ultimo.id} url={`/api/borradores/${ultimo.id}?vista=1`} />
         </section>
       )}
     </>

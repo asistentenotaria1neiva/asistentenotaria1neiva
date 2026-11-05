@@ -9,13 +9,12 @@ export default async function ResumenExpediente({ params }: { params: Promise<{ 
   const { id } = await params;
   const s = await requerirSesion();
   const e = await expedienteDePagina(s, id);
-  const [b, ultimoBorrador, historial, usuarios, nDocs, nAnalizados, nRevisiones] = await Promise.all([
+  const [b, ultimoBorrador, historial, usuarios, nDocs, nRevisiones] = await Promise.all([
     bloqueos(id),
     db.borrador.findFirst({ where: { expedienteId: id }, orderBy: { version: 'desc' } }),
     db.auditoria.findMany({ where: { OR: [{ entidadId: id }, { detalle: { path: ['expedienteId'], equals: id } }] }, orderBy: { id: 'desc' }, take: 20 }),
     s.usuario.rol === 'ADMINISTRADOR' ? db.usuario.findMany({ where: { estado: 'ACTIVO' }, select: { id: true, nombreCompleto: true } }) : Promise.resolve([]),
     db.documento.count({ where: { expedienteId: id } }),
-    db.documento.count({ where: { expedienteId: id, estadoAnalisis: 'COMPLETADO' } }),
     db.analisisIA.count({ where: { expedienteId: id, proposito: 'REVISION', estado: 'COMPLETADO' } }),
   ]);
   const accion = accionFlujo.bind(null, id);
@@ -23,12 +22,11 @@ export default async function ResumenExpediente({ params }: { params: Promise<{ 
   const revisor = s.usuario.rol !== 'DIGITADOR';
   const cerrado = ['APROBADA', 'FIRMADA', 'ARCHIVADA'].includes(e.estado);
   const pasos = [
-    { t: 'Crear expediente y elegir actos', hecho: true },
-    { t: 'Cargar documentos soporte', hecho: nDocs > 0 },
-    { t: 'La IA analiza los documentos y prepara las preguntas', hecho: nAnalizados > 0 },
-    { t: 'Responder las preguntas del asistente y resolver inconsistencias', hecho: !!ultimoBorrador },
-    { t: 'Revisión (reglas + IA) y observaciones resueltas', hecho: nRevisiones > 0 && !b.criticas.length && !b.advertencias.length },
-    { t: 'Escritura en Word redactada por la IA sobre la plantilla aprobada (con espacios para la terminación)', hecho: !!ultimoBorrador },
+    { t: 'Crear expediente y elegir el tipo de escritura', hecho: true },
+    { t: 'Cargar los documentos del negocio', hecho: nDocs > 0 },
+    { t: 'La IA lee los documentos y redacta la escritura sobre la plantilla aprobada (con espacios para la terminación)', hecho: !!ultimoBorrador },
+    { t: 'Resolver las alertas y observaciones (generando una nueva versión con indicaciones, o justificándolas)', hecho: !!ultimoBorrador && !b.criticas.length && !b.advertencias.length },
+    { t: 'Revisión de la IA (opcional)', hecho: nRevisiones > 0 },
     { t: 'Aprobación del revisor', hecho: cerrado },
     { t: 'Lista para firma del notario', hecho: cerrado },
   ];

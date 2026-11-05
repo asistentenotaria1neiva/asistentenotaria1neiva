@@ -138,7 +138,7 @@ La plantilla es el **modelo de redacción** del tipo de escritura: una escritura
 
 1. Cargue la escritura modelo en Plantillas: queda **pendiente de aprobación del notario**. Puede pedir la revisión de la IA (tipo, partes del acto, redacción, cambios frente a la versión aprobada).
 2. Al aprobarla, el tipo queda disponible como acto. Su formulario solo pide quiénes comparecen, los inmuebles (si el acto recae sobre inmuebles) e indicaciones opcionales.
-3. El asistente lee el modelo y pregunta en texto libre lo que esa escritura necesita y no está en los documentos. Al pulsar **Redactar escritura con IA**, la IA escribe la escritura completa siguiendo el modelo (estructura, cláusulas, fórmulas, estilo) con los datos del caso; nunca copia los datos del modelo y lo que no encuentra lo deja «FALTA: …» (observación crítica R12 hasta redactar de nuevo con el dato).
+3. El funcionario solo elige el tipo de escritura y carga los documentos. Al pulsar **Generar escritura**, la IA lee los documentos originales (PDF e imágenes) con la plantilla del tipo como referencia y redacta la escritura completa, sin preguntas: lo dudoso queda «[VERIFICAR: …]» y lo ausente «FALTA: …», con alertas para el revisor (observaciones; las «FALTA» son críticas por la regla R12). Con **Indicaciones** se corrige y se genera una nueva versión. El asistente de preguntas queda como opción.
 4. La compraventa conserva su formulario propio (`src/lib/escritura/esquemas.ts` y `actos.ts`): sus datos calculados (comparecencias, valores en letras, afectación…) se entregan a la IA, que redacta sobre la carátula, la compraventa, el cierre y los oficios aprobados.
 
 ## Arquitectura

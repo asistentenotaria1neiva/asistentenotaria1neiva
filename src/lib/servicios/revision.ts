@@ -12,8 +12,6 @@ import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { evaluarReglas, type Hallazgo, type DocumentoAnalizado } from '../reglas/reglas';
-import { prepararContexto } from '../escritura/contexto';
-import { ErrorDatos } from '../escritura/personas';
 import { textoUltimoBorrador } from './borradores';
 import { obtenerConfig } from '../configuracion';
 import { llamarEstructurado, configuracionModelo, ErrorIA } from '../ia/cliente';
@@ -24,12 +22,10 @@ import { instruccionesAprobadas } from './documentos';
 import { registrarCorreccion } from './aprendizaje';
 import { notificar } from './notificaciones';
 
-/** Actos (y bloques comunes) sin plantilla aprobada: sin su modelo no se puede redactar la escritura */
-async function sinPlantillaAprobada(datos: ReturnType<typeof datosDe>, actos: string[]): Promise<string[]> {
-  const ctx = prepararContexto(datos, actos, await obtenerConfig('notaria'));
-  const ids = ctx.conCaratula ? ['caratula', ...ctx.actos.map((a) => a.plantilla), 'cierre', ...ctx.actos.flatMap((a) => (a.anexo ? [a.anexo] : []))] : ctx.actos.map((a) => a.plantilla);
-  const aprobadas = await db.plantilla.findMany({ where: { tipoId: { in: ids }, estado: 'APROBADA' }, select: { tipoId: true } });
-  return [...new Set(ids)].filter((id) => !aprobadas.some((p) => p.tipoId === id));
+/** Actos sin plantilla aprobada: sin su escritura de referencia no se puede redactar */
+async function sinPlantillaAprobada(actos: string[]): Promise<string[]> {
+  const aprobadas = await db.plantilla.findMany({ where: { tipoId: { in: actos }, estado: 'APROBADA' }, select: { tipoId: true } });
+  return [...new Set(actos)].filter((id) => !aprobadas.some((p) => p.tipoId === id));
 }
 
 export async function evaluarExpediente(expedienteId: string, s: SesionActiva) {
@@ -41,14 +37,9 @@ export async function evaluarExpediente(expedienteId: string, s: SesionActiva) {
   const pendientes = await db.datoExtraido.count({ where: { expedienteId, estado: 'PENDIENTE', revisionManual: true } });
   const hallazgos: Hallazgo[] = [];
   const borradorTexto = (await textoUltimoBorrador(expedienteId)) ?? undefined;
-  try {
-    const faltan = await sinPlantillaAprobada(datos, actos);
-    if (faltan.length) hallazgos.push({ codigo: 'R00-PLANTILLA', nivel: 'CRITICA', mensaje: `No hay plantilla APROBADA (modelo de redacción) para: ${faltan.join(', ')}. El administrador debe aprobarla en Plantillas.` });
-  } catch (err) {
-    if (err instanceof ErrorDatos) err.faltantes.forEach((f, i) => hallazgos.push({ codigo: 'R00-DATO-FALTANTE', nivel: 'CRITICA', mensaje: `Falta: ${f}.`, ...(err.campos[i] ? { campo: err.campos[i] } : {}) }));
-    else if (err instanceof ErrorNegocio) hallazgos.push({ codigo: 'R00-PLANTILLA', nivel: 'CRITICA', mensaje: err.message });
-    else throw err;
-  }
+  // Los datos los toma la IA de los documentos al redactar: lo que no encuentre queda «FALTA» (R12)
+  const faltan = await sinPlantillaAprobada(actos);
+  if (faltan.length) hallazgos.push({ codigo: 'R00-PLANTILLA', nivel: 'CRITICA', mensaje: `No hay plantilla APROBADA para: ${faltan.join(', ')}. El administrador debe aprobarla en Plantillas.` });
   hallazgos.push(...evaluarReglas({
     datos, actos, borradorTexto, pendientesConfianzaBaja: pendientes,
     documentos: documentos.map<DocumentoAnalizado>((d) => ({ id: d.id, nombre: d.nombreOriginal, tipo: d.tipoDocumental as TipoDocumental, hechos: d.hechos as unknown as ResultadoExtraccion | null })),

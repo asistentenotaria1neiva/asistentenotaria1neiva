@@ -22,11 +22,11 @@ Tenga en cuenta:
 
 | Paso | Dónde | Qué hacer |
 | --- | --- | --- |
-| 1 | **Nuevo expediente** | Marque los actos de la escritura y ordénelos como deben aparecer (p. ej. cancelación de patrimonio y luego compraventa). |
-| 2 | **Documentos** | Cargue los documentos soporte (PDF o fotos): cédulas, certificado de tradición, paz y salvo, poderes, etc. Si no sabe qué tipo es un documento, elija **"Detectar automáticamente"**. Un documento equivocado se puede **retirar** y cargar el correcto. |
-| 3 | **Asistente IA** | Pulse **"Analizar documentos y preparar preguntas"** (ver abajo). Revise el tipo de escritura, atienda las inconsistencias y responda las preguntas. |
-| 4 | **Observaciones** | Ejecute **"Reglas + revisión de la IA"** y atienda cada observación. |
-| 5 | **Asistente IA** o **Borrador** | Genere la escritura en Word; descárguela y léala completa. |
+| 1 | **Nuevo expediente** | Elija el tipo de escritura (si son varios actos, ordénelos como deben aparecer). La plantilla es la aprobada para ese tipo. |
+| 2 | **Documentos** | Cargue los documentos del negocio (PDF o fotos, en cualquier orden): hoja de radicación, cédulas, certificado de tradición, paz y salvos, escritura anterior, poderes, etc. Puede dejar **"Detectar automáticamente"**. Un documento equivocado se puede **retirar**. |
+| 3 | **Escritura** | Pulse **"Generar escritura"**. La IA lee todos los documentos y redacta la escritura completa sobre la plantilla, **sin hacer preguntas**: lo dudoso queda **[VERIFICAR: …]**, lo que no está en los documentos **«FALTA: …»**, y todo aparece como alerta. Si algo hay que corregir, escríbalo en **Indicaciones** y genere una nueva versión. |
+| 4 | **Observaciones** | Las alertas críticas impiden enviar; las de «Revisar» se corrigen (nueva versión) o se justifican. Opcional: **"Reglas + revisión de la IA"**. |
+| 5 | **Datos y preguntas** (opcional) | Solo si quiere diligenciar o confirmar datos a mano: la IA también los usa al redactar. |
 | 6 | **Resumen y flujo → Enviar a revisión** | El revisor lo aprueba o lo devuelve con comentarios. |
 | 7 | Lista para firma | El expediente queda listo para la firma del notario. |
 

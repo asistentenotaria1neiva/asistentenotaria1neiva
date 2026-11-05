@@ -25,9 +25,9 @@ export default async function ExpedienteLayout({ children, params }: { children:
   const pestanas = [
     { href: '', texto: <>Resumen y flujo</> },
     { href: '/documentos', texto: paso(1, 'Documentos', docs) },
-    { href: '/asistente', texto: paso(2, 'Asistente IA') },
+    { href: '/borrador', texto: paso(2, 'Escritura', borradores) },
     { href: '/observaciones', texto: paso(3, 'Observaciones', abiertas, abiertas === 1 ? 'abierta' : 'abiertas') },
-    { href: '/borrador', texto: paso(4, 'Borrador', borradores) },
+    { href: '/asistente', texto: <>Datos y preguntas <span className="suave">(opcional)</span></> },
   ];
   return (
     <>

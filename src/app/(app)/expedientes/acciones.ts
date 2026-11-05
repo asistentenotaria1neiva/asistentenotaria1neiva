@@ -119,14 +119,24 @@ export async function accionAplicarCorrecciones(expedienteId: string, analisisId
   }, `/expedientes/${expedienteId}`);
 }
 
-export async function accionGenerarBorrador(expedienteId: string): Promise<Resultado> {
+/** La IA redacta la escritura desde los documentos, sobre la plantilla del tipo (src/lib/servicios/redaccion.ts) */
+async function redactar(expedienteId: string, indicaciones?: string): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {
-    const r = await iniciarRedaccion(s, expedienteId);
+    const r = await iniciarRedaccion(s, expedienteId, indicaciones);
     // La IA redacta después de responder: la persona puede salir de la página
     after(r.tarea);
-    return 'La IA está redactando la escritura sobre la plantilla aprobada; tarda unos minutos. Puede salir de esta página: le avisaremos al terminar.';
+    return 'La IA está leyendo los documentos y redactando la escritura sobre la plantilla; tarda unos minutos. Puede salir de esta página: le avisaremos al terminar.';
   }, `/expedientes/${expedienteId}`);
+}
+
+export async function accionGenerarBorrador(expedienteId: string): Promise<Resultado> {
+  return redactar(expedienteId);
+}
+
+/** Con indicaciones del funcionario para esta versión (formulario) */
+export async function accionRedactar(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
+  return redactar(expedienteId, String(f.get('indicaciones') ?? ''));
 }
 
 export async function accionFlujo(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {

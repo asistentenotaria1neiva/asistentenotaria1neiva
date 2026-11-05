@@ -31,7 +31,7 @@ vi.mock('@/lib/ia/cliente', async (original) => ({
       resumen: 'Escritura de prueba.',
       parrafos: ['ESCRITURA PÚBLICA NÚMERO:', 'Compareció JOSE ANTONIO PRUEBA LUNA y manifestó:', 'PRIMERO: Que vende.', 'SEGUNDO: Que el precio es el acordado.', 'Leído el presente instrumento, lo firman.', '', '______________________________']
         .map((texto) => ({ texto, alineacion: 'JUSTIFICADO' })),
-      faltantes: [], advertencias: [],
+      datos_extraidos: [], alertas: [], documentos_no_utilizados: [],
     },
     modelo: 'simulado', tokensEntrada: 0, tokensSalida: 0, tokensCacheLectura: 0, duracionMs: 0,
   })),
@@ -99,6 +99,8 @@ describe('flujo completo de una escritura de tres actos', () => {
   });
 
   it('sin plantillas aprobadas no se redacta el borrador', async () => {
+    // La IA redacta desde los documentos del negocio
+    await subirDocumento(digitador, id, new File([Buffer.from('%PDF-1.4\nCEDULA DE PRUEBA\n%%EOF')], 'cedulas.pdf', { type: 'application/pdf' }), 'CEDULA');
     await expect(iniciarRedaccion(digitador, id)).rejects.toThrow(/CRÍTICA|APROBADA/);
   });
 
