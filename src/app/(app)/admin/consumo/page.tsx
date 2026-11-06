@@ -135,9 +135,7 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
       </div>
 
       <p className="suave">
-        El costo se calcula con la tarifa de Anthropic de cada modelo al momento de la llamada (entrada, salida, lectura y escritura de caché).
-        El costo real facturado está en <Link href="/admin/estadisticas">Estadísticas</Link>.
-        {datos.historicos > 0 && <> {n(datos.historicos)} registros son anteriores a este panel: se asignaron al responsable del expediente y no incluyen la escritura de caché.</>}
+        El costo se calcula con la tarifa de Anthropic de cada modelo al momento de la llamada (entrada, salida, lectura y escritura de caché).        {datos.historicos > 0 && <> {n(datos.historicos)} registros son anteriores a este panel: se asignaron al responsable del expediente y no incluyen la escritura de caché.</>}
       </p>
     </>
   );

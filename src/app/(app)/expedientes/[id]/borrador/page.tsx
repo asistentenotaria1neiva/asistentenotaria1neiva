@@ -87,7 +87,7 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
               ))}</tbody>
             </Tabla>
           ) : <p className="suave">La IA no dejó alertas.</p>}
-          <p className="suave">Las alertas también están en <Link href={`/expedientes/${id}/observaciones`}>Observaciones</Link>: las críticas impiden enviar a revisión y las de «Revisar» se corrigen (generando una nueva versión) o se justifican.</p>
+          <p className="suave">Las alertas también están en <Link href={`/expedientes/${id}/observaciones`}>Observaciones</Link>: las críticas deben resolverse y las de «Revisar» se corrigen (generando una nueva versión) o se justifican.</p>
           {!!info.documentosNoUtilizados?.length && (
             <details><summary>Documentos que no se usaron ({info.documentosNoUtilizados.length})</summary>
               <ul>{info.documentosNoUtilizados.map((d, i) => <li key={i}><strong>{d.documento}</strong>: {d.motivo}</li>)}</ul>

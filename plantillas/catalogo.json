@@ -253,6 +253,14 @@
     "descripcion": "Fuentes en la carpeta: F13, F44, F56, F61, F64."
   },
   {
+    "id": "cancelacion_fideicomiso",
+    "categoria": "A. Actos sobre inmuebles",
+    "nombre": "Cancelación de fideicomiso civil",
+    "prioridad": "Media",
+    "esBloque": false,
+    "descripcion": "Sin plantilla en la carpeta: la notaría debe entregarla."
+  },
+  {
     "id": "fiducia",
     "categoria": "A. Actos sobre inmuebles",
     "nombre": "Fiducia mercantil sobre inmuebles",

@@ -59,6 +59,8 @@ const NO_BLOQUEAN = new Set([CODIGO_BORRADOR_INCOMPLETO, CODIGO_REDACCION]);
 const LIMITE_REDACCION_MS = 15 * 60 * 1000;
 /** Veces que se repite una parte cortada antes de dar la redacción por fallida */
 const MAX_REANUDACIONES = 3;
+/** Veces que una parte cortada por longitud se continúa (cada vez en su propia invocación) */
+const MAX_CONTINUACIONES = 4;
 const LIMITE_MODELO = 120_000; // caracteres de cada plantilla enviados a la IA
 /** Límites de una solicitud con documentos (la API admite 100 páginas de PDF y 32 MB) */
 const MAX_PAGINAS = 100;
@@ -129,6 +131,8 @@ interface ProgresoRedaccion {
   noUtilizados: RespuestaRedaccion['documentos_no_utilizados'];
   /** Opcional: las redacciones iniciadas antes de este campo no lo traen */
   otorgantes?: Otorgante[];
+  /** Veces que la parte actual se cortó por longitud y se continúa donde quedó (0 al empezar cada parte) */
+  continuaciones?: number;
   noEnviados: string[];
   documentos: number;
   modelo: string;
@@ -328,10 +332,48 @@ async function encadenar(id: string, p: ProgresoRedaccion) {
 
 const ORDINALES = ['PRIMER', 'SEGUNDO', 'TERCER', 'CUARTO', 'QUINTO', 'SEXTO', 'SÉPTIMO', 'OCTAVO', 'NOVENO', 'DÉCIMO'];
 
-/** Qué se redacta en la parte `k` (0…n-1) de una escritura con estos actos */
-function instruccionDeParte(k: number, actos: string[], previos: ParrafoRedactado[]): string {
+/**
+ * Elementos completos del arreglo `clave` de un JSON cortado (la respuesta que se quedó sin espacio):
+ * se recorre respetando las cadenas y se descarta el último elemento si quedó a medias.
+ */
+export function rescatarArreglo<T>(texto: string, clave: string): T[] {
+  const m = new RegExp(`"${clave}"\\s*:\\s*\\[`).exec(texto);
+  if (!m) return [];
+  const lista: T[] = [];
+  let inicio = -1, nivel = 0, enCadena = false;
+  for (let i = m.index + m[0].length; i < texto.length; i++) {
+    const c = texto[i];
+    if (enCadena) {
+      if (c === '\\') i++;
+      else if (c === '"') enCadena = false;
+      continue;
+    }
+    if (c === '"') enCadena = true;
+    else if (c === '{' || c === '[') { if (nivel === 0) inicio = i; nivel++; }
+    else if (c === '}' || c === ']') {
+      if (nivel === 0) break; // fin del arreglo
+      nivel--;
+      if (nivel === 0 && inicio >= 0) {
+        try { lista.push(JSON.parse(texto.slice(inicio, i + 1)) as T); } catch { break; }
+        inicio = -1;
+      }
+    }
+  }
+  return lista;
+}
+
+/** Instrucción para continuar una parte que se cortó por longitud */
+const CONTINUACION = [
+  'CONTINUACIÓN: la respuesta anterior para esta parte se cortó por límite de longitud. Todo lo redactado hasta ahora, incluido lo que alcanzó a salir de esta parte, va en <ya_redactado>.',
+  'NO repitas nada de lo que ya está: continúa exactamente desde el párrafo siguiente al último de <ya_redactado>, con la misma numeración de cláusulas, términos y estilo, hasta terminar lo que corresponde a esta parte.',
+  'En "otorgantes" y "datos_extraidos" pon solo lo nuevo que no se haya reportado (pueden ir vacíos). Razona lo mínimo: los datos ya se analizaron.',
+].join('\n');
+
+/** Qué se redacta en la parte `k` (0…n-1) de una escritura con estos actos; `continua`: la parte se cortó y sigue donde quedó */
+function instruccionDeParte(k: number, actos: string[], previos: ParrafoRedactado[], continua = false): string {
   const n = actos.length;
-  if (n <= 1) return 'Redacta la escritura completa de este negocio tomando como referencia la plantilla y los documentos.';
+  const yaRedactado = `<ya_redactado>\n${previos.map((x) => x.texto).join('\n')}\n</ya_redactado>`;
+  if (n <= 1) return ['Redacta la escritura completa de este negocio tomando como referencia la plantilla y los documentos.', continua ? CONTINUACION : '', continua ? yaRedactado : ''].filter(Boolean).join('\n');
   const nombre = (i: number) => `${ORDINALES[i] ?? `${i + 1}.º`} ACTO («${ESQUEMAS[actos[i]]?.titulo ?? ACTOS[actos[i]]?.nombre ?? actos[i]}»)`;
   const que = k === 0
     ? `la carátula y el encabezado de la escritura (con todos los actos), la comparecencia y el ${nombre(0)} completo`
@@ -340,9 +382,10 @@ function instruccionDeParte(k: number, actos: string[], previos: ParrafoRedactad
     `REDACCIÓN POR PARTES: esta escritura tiene ${n} actos y se redacta en ${n} partes, una por solicitud, que luego se unen en un solo documento.`,
     `En esta solicitud redacta ÚNICAMENTE la parte ${k + 1} de ${n}: ${que}.`,
     k < n - 1 ? 'No redactes los actos siguientes ni el cierre de la escritura: van en las partes siguientes.' : '',
-    k > 0 ? 'Lo ya redactado en las partes anteriores va en <ya_redactado>: no lo repitas; continúa exactamente donde termina, con la misma numeración de cláusulas, los mismos términos y el mismo estilo.' : '',
+    k > 0 && !continua ? 'Lo ya redactado en las partes anteriores va en <ya_redactado>: no lo repitas; continúa exactamente donde termina, con la misma numeración de cláusulas, los mismos términos y el mismo estilo.' : '',
     'En "parrafos" van solo los párrafos de esta parte. En "datos_extraidos", "alertas" y "documentos_no_utilizados" reporta solo lo de esta parte, sin repetir lo de las anteriores. En "resumen", una frase sobre lo redactado en esta parte.',
-    k > 0 ? `<ya_redactado>\n${previos.map((x) => x.texto).join('\n')}\n</ya_redactado>` : '',
+    continua ? CONTINUACION : '',
+    k > 0 || continua ? yaRedactado : '',
   ].filter(Boolean).join('\n');
 }
 
@@ -361,8 +404,11 @@ export async function ejecutarParteRedaccion(id: string, turno: number): Promise
     if (usuario?.estado !== 'ACTIVO') throw new ErrorNegocio('El usuario que inició la redacción ya no está activo.');
     const plantillas = await cargarPlantillas(p.plantillas);
     if (p.hechas < p.partes) {
-      await redactarParte(a.expedienteId, p, plantillas);
-      p.hechas++;
+      // Si la parte se cortó por longitud, lo rescatado queda guardado y la siguiente invocación continúa la misma parte
+      if (await redactarParte(a.expedienteId, p, plantillas)) {
+        p.hechas++;
+        p.continuaciones = 0;
+      }
       if (!(await guardar(id, p))) return;
       return encadenar(id, p); // cada parte (y el Word) en su propia invocación
     }
@@ -374,8 +420,12 @@ export async function ejecutarParteRedaccion(id: string, turno: number): Promise
   }
 }
 
-/** Redacta la parte `p.hechas` y acumula su resultado en `p` */
-async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantillas: Plantilla[]) {
+/**
+ * Redacta la parte `p.hechas` y acumula su resultado en `p`. Devuelve false si la respuesta se cortó
+ * por longitud: lo completo que alcanzó a salir queda en `p` y la parte se continúa en otra invocación.
+ */
+async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantillas: Plantilla[]): Promise<boolean> {
+  const continua = (p.continuaciones ?? 0) > 0;
   const s = p.sesion;
   const e = await obtenerExpediente(s, expedienteId);
   const datos = datosDe(e);
@@ -400,6 +450,7 @@ async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantil
 
   const docs = await documentosParaIA(expedienteId);
   let r: ResultadoLlamada<RespuestaRedaccion>;
+  let completa = true;
   try {
     r = await llamarEstructurado<RespuestaRedaccion>({
       proposito: 'REDACCION',
@@ -410,16 +461,32 @@ async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantil
         ...docs.contenido,
         // Hasta aquí es igual en todas las partes: las siguientes lo leen de la caché
         { type: 'text', text: `<caso>\n${JSON.stringify(caso)}\n</caso>`, ...(p.partes > 1 ? { cache_control: { type: 'ephemeral' as const } } : {}) },
-        { type: 'text', text: instruccionDeParte(p.hechas, p.partes > 1 ? actos : [], p.parrafos) },
+        { type: 'text', text: instruccionDeParte(p.hechas, p.partes > 1 ? actos : [], p.parrafos, continua) },
       ],
       esquema: ESQUEMA_REDACCION as unknown as Record<string, unknown>,
-      maxTokens: p.partes > 1 ? 32000 : 64000,
+      // Cada invocación tiene 5 minutos: más salida no alcanza a terminar; lo que no quepa se continúa
+      maxTokens: 32000,
     });
+  } catch (err) {
+    // Cortada por longitud: se rescatan los párrafos completos y la parte sigue en otra invocación
+    if (!(err instanceof ErrorIA) || err.codigo !== 'TRUNCADO' || !err.parcial || (p.continuaciones ?? 0) >= MAX_CONTINUACIONES) throw err;
+    const parrafos = rescatarArreglo<ParrafoRedactado>(err.parcial, 'parrafos');
+    if (!parrafos.some((x) => typeof x?.texto === 'string' && x.texto.trim())) throw err;
+    r = {
+      datos: {
+        resumen: '', parrafos, alertas: [], documentos_no_utilizados: [],
+        datos_extraidos: rescatarArreglo(err.parcial, 'datos_extraidos'),
+        otorgantes: rescatarArreglo(err.parcial, 'otorgantes'),
+      },
+      ...(err.uso ?? { modelo: p.modelo, tokensEntrada: 0, tokensSalida: 0, tokensCacheLectura: 0, duracionMs: 0 }),
+    };
+    completa = false;
+    p.continuaciones = (p.continuaciones ?? 0) + 1;
   } finally {
     await docs.liberar();
   }
-  const parrafos = (r.datos.parrafos ?? []).filter((x) => typeof x.texto === 'string');
-  if (parrafos.filter((x) => x.texto.trim()).length < (p.partes > 1 ? 1 : 5)) throw new ErrorIA('La IA no devolvió el texto de la escritura. Intente de nuevo.', 'FORMATO');
+  const parrafos = (r.datos.parrafos ?? []).filter((x) => typeof x?.texto === 'string');
+  if (parrafos.filter((x) => x.texto.trim()).length < (p.partes > 1 || continua || !completa ? 1 : 5)) throw new ErrorIA('La IA no devolvió el texto de la escritura. Intente de nuevo.', 'FORMATO');
 
   p.parrafos.push(...parrafos);
   if (r.datos.resumen?.trim()) p.resumenes.push(r.datos.resumen.trim());
@@ -435,6 +502,7 @@ async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantil
   p.tokensSalida += r.tokensSalida;
   p.tokensCacheLectura += r.tokensCacheLectura;
   p.duracionMs += r.duracionMs;
+  return completa;
 }
 
 /** Última etapa: arma el Word con todas las partes, guarda la versión y registra las alertas */

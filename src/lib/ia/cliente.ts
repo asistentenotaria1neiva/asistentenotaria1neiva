@@ -48,7 +48,14 @@ function obtenerCliente(): Anthropic {
 }
 
 export class ErrorIA extends Error {
-  constructor(message: string, public codigo: 'CONFIGURACION' | 'RECHAZO' | 'TRUNCADO' | 'FORMATO' | 'API') {
+  constructor(
+    message: string,
+    public codigo: 'CONFIGURACION' | 'RECHAZO' | 'TRUNCADO' | 'FORMATO' | 'API',
+    /** TRUNCADO: el texto (JSON incompleto) que alcanzó a escribir la IA, para rescatar lo completo */
+    public parcial?: string,
+    /** TRUNCADO: consumo de la llamada cortada */
+    public uso?: { modelo: string; tokensEntrada: number; tokensSalida: number; tokensCacheLectura: number; duracionMs: number },
+  ) {
     super(message);
   }
 }
@@ -171,8 +178,13 @@ async function llamar<T>(opciones: OpcionesLlamada, modelo: string, esfuerzo: Es
   // Se cobra aunque la respuesta se rechace, quede truncada o no sirva: se registra siempre
   await registrarConsumo(opciones, mensaje);
   if (mensaje.stop_reason === 'refusal') throw new ErrorIA('El modelo declinó analizar este contenido. Revise el documento manualmente.', 'RECHAZO');
-  if (mensaje.stop_reason === 'max_tokens') throw new ErrorIA('La respuesta de la IA quedó incompleta (límite de longitud).', 'TRUNCADO');
   const textoRespuesta = mensaje.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('');
+  if (mensaje.stop_reason === 'max_tokens') {
+    throw new ErrorIA('La respuesta de la IA quedó incompleta (límite de longitud).', 'TRUNCADO', textoRespuesta, {
+      modelo: mensaje.model, tokensEntrada: mensaje.usage.input_tokens, tokensSalida: mensaje.usage.output_tokens,
+      tokensCacheLectura: mensaje.usage.cache_read_input_tokens ?? 0, duracionMs: Date.now() - inicio,
+    });
+  }
   let datos: T;
   try {
     datos = JSON.parse(textoRespuesta) as T;

@@ -20,15 +20,12 @@ export default async function ResumenExpediente({ params }: { params: Promise<{ 
   const accion = accionFlujo.bind(null, id);
   const editable = puedeEditar(s, e);
   const revisor = s.usuario.rol !== 'DIGITADOR';
-  const cerrado = ['APROBADA', 'FIRMADA', 'ARCHIVADA'].includes(e.estado);
   const pasos = [
     { t: 'Crear expediente y elegir el tipo de escritura', hecho: true },
     { t: 'Cargar los documentos del negocio', hecho: nDocs > 0 },
     { t: 'La IA lee los documentos y redacta la escritura sobre la plantilla aprobada (con espacios para la terminación)', hecho: !!ultimoBorrador },
     { t: 'Resolver las alertas y observaciones (generando una nueva versión con indicaciones, o justificándolas)', hecho: !!ultimoBorrador && !b.criticas.length && !b.advertencias.length },
     { t: 'Revisión de la IA (opcional)', hecho: nRevisiones > 0 },
-    { t: 'Aprobación del revisor', hecho: cerrado },
-    { t: 'Lista para firma del notario', hecho: cerrado },
   ];
   return (
     <div className="rejilla dos">
@@ -44,7 +41,6 @@ export default async function ResumenExpediente({ params }: { params: Promise<{ 
           <div className="aviso alerta">Observaciones abiertas: {b.criticas.length} crítica(s) y {b.advertencias.length} advertencia(s). Las críticas impiden avanzar.</div>
         )}
         <h3>Acciones</h3>
-        {editable && <FormularioFlujo accion={accion} botones={[{ valor: 'enviar', texto: 'Enviar a revisión' }]} />}
         {revisor && e.estado === 'EN_REVISION' && (
           <FormularioFlujo accion={accion} campos={[{ nombre: 'comentario', etiqueta: 'Comentario para el responsable (obligatorio si devuelve)', tipo: 'area' }]}
             botones={[{ valor: 'aprobar', texto: 'Aprobar (lista para firma)', clase: 'exito' }, { valor: 'devolver', texto: 'Devolver con comentarios', clase: 'secundario' }]} />

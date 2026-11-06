@@ -151,6 +151,14 @@ const ESP = {
     V('anotacion_certificado', 'texto', 'Número de anotación en el folio'),
     V('entidad_subsidio', 'texto', 'Caja de compensación / Fonvivienda / otra; acta u oficio de asignación', false),
   ],
+  cancelacion_fideicomiso: [
+    V('titulo_constitucion', 'texto', 'Escritura que constituyó el fideicomiso civil o propiedad fiduciaria (número, fecha, notaría)'),
+    V('constituyente', 'persona', 'Quien constituyó el fideicomiso'),
+    V('propietario_fiduciario', 'persona', 'Quien tiene la propiedad fiduciaria (arts. 794 y ss. Código Civil)'),
+    V('fideicomisario', 'lista', 'Beneficiario(s) de la restitución; si hay menores, alerta CRÍTICA'),
+    V('causal', 'enum', 'CUMPLIMIENTO DE LA CONDICIÓN (restitución) | FALTA DE LA CONDICIÓN | RENUNCIA / ACUERDO DE LAS PARTES'),
+    V('anotacion_certificado', 'texto', 'Número de anotación en el folio'),
+  ],
   compraventa_vis: [
     V('vendedor_fiduciaria', 'entidad', 'Fiduciaria como vocera del patrimonio autónomo (NIT del fideicomiso)', false),
     V('fideicomitente_desarrollador', 'entidad', 'Constructora', false),
@@ -291,6 +299,7 @@ const TIPOS = [
   T('constitucion_patrimonio', A, 'Constitución de patrimonio de familia inembargable', 'Media', { vars: ['constitucion_patrimonio'], soportes: ['Certificado de tradición', 'Registros civiles de los beneficiarios'], comparecientes: 'Constituyente(s)' }),
   T('cancelacion_patrimonio', A, 'Cancelación de patrimonio de familia inembargable', 'Alta', { vars: ['cancelacion_patrimonio'], soportes: ['Certificado de tradición', 'Registros civiles de nacimiento de los beneficiarios', 'Concepto del Defensor de Familia / ICBF si hay beneficiarios menores', 'Documentos de identidad'], comparecientes: 'Constituyente(s) y cónyuge/compañero cuando aplica' }),
   T('cancelacion_condicion', A, 'Cancelación de condición resolutoria', 'Alta', { vars: ['cancelacion_condicion'], soportes: ['Certificado de tradición (anotación de la condición)', 'Escritura donde se pactó la condición', 'Oficio/acta de asignación del subsidio (si aplica)'], comparecientes: 'Propietario(s) actual(es)' }),
+  T('cancelacion_fideicomiso', A, 'Cancelación de fideicomiso civil', 'Media', { vars: ['cancelacion_fideicomiso'], soportes: ['Certificado de tradición (anotación del fideicomiso)', 'Escritura de constitución del fideicomiso civil', 'Prueba del cumplimiento o falta de la condición (si aplica)', 'Registros civiles de los fideicomisarios', 'Documentos de identidad'], comparecientes: 'Propietario fiduciario, constituyente y fideicomisario(s) cuando aplica' }),
   T('fiducia', A, 'Fiducia mercantil sobre inmuebles', 'Baja'),
   T('leasing', A, 'Leasing habitacional (transferencia o restitución)', 'Media'),
   T('aclaracion', A, 'Aclaración o corrección de escritura', 'Media', { vars: ['aclaracion'], soportes: ['Escritura a aclarar', 'Documento que prueba el dato correcto'], comparecientes: 'Quienes otorgaron la escritura inicial (art. 35 Decreto 960 de 1970, citado en las minutas)' }),

@@ -8,7 +8,7 @@ import { redirect } from 'next/navigation';
 import { after } from 'next/server';
 import { requerirSesion } from '@/lib/sesion';
 import {
-  crearExpediente, enviarARevision, aprobarExpediente,
+  crearExpediente, aprobarExpediente,
   devolverExpediente, marcarFirmada, archivarExpediente, reabrirExpediente, reasignarExpediente, ErrorNegocio,
 } from '@/lib/servicios/expedientes';
 import { completarDocumento, analizarDocumento, eliminarDocumento } from '@/lib/servicios/documentos';
@@ -144,7 +144,6 @@ export async function accionFlujo(expedienteId: string, _: Resultado, f: FormDat
   const accion = String(f.get('accion'));
   return ejecutar(async () => {
     switch (accion) {
-      case 'enviar': await enviarARevision(s, expedienteId); return 'Enviado a revisión.';
       case 'aprobar': await aprobarExpediente(s, expedienteId); return 'Aprobado: queda listo para la firma del notario.';
       case 'devolver': await devolverExpediente(s, expedienteId, String(f.get('comentario') ?? '')); return 'Devuelto al responsable con comentarios.';
       case 'firmar': await marcarFirmada(s, expedienteId, Number(f.get('numeroEscritura'))); return 'Marcada como firmada.';
