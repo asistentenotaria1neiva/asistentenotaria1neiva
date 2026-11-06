@@ -379,6 +379,15 @@ const lineaGuiones = (anchoTwips: number) => {
 const textoDe = (p: string) => decodificar(p.replace(/<w:tab\/>/g, '\t').replace(/<w:br\/>/g, '\n').replace(/<[^>]+>/g, ''));
 const soloGuiones = (t: string) => /^\s*-{3,}\s*$/.test(t);
 
+/** Una tabulación (1,27 cm): sangría de «ESCRITURA PÚBLICA NÚMERO», «FECHA DE OTORGAMIENTO» y «ESPECIFICACION» */
+export const SANGRIA_CARATULA = 720;
+/** Renglones en blanco tras la carátula, donde va el notario que autoriza (se llena al otorgar) */
+export const RENGLONES_NOTARIO = 5;
+/** Datos de cada inmueble en la carátula (el espacio del notario va después del último) */
+const DATO_CARATULA = /^(?:MATR[IÍ]CULA|C[EÉ]DULA CATASTRAL|NOMBRE O DIRECCI[OÓ]N|DIRECCI[OÓ]N|OFICINA DE REGISTRO|INMUEBLE|UBICACI[OÓ]N)/i;
+/** Encabezado con el notario («En la ciudad de Neiva…, donde funciona la NOTARÍA…, cuyo notario…»): lo reemplaza el espacio en blanco */
+const ENCABEZADO_NOTARIO = (t: string) => /^En la ciudad de /i.test(t) && /NOTAR[IÍ]A/i.test(t) && !/compareci/i.test(t);
+
 /**
  * Formatea el cuerpo del documento. `anchoTexto`: ancho del renglón en twips (página menos márgenes).
  */
@@ -393,6 +402,8 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
   let zonaFirmas = false;
   // Los párrafos dentro de una tabla tienen el ancho de su celda: no se completan con guiones
   let enTabla = 0;
+  // Espacio del notario: solo en un documento con carátula, una vez, tras el último inmueble
+  let espacioNotario: 'sin_caratula' | 'antes' | 'pendiente' | 'hecho' = 'sin_caratula';
   const parrafos = cuerpo.split(/(?=<w:p[\s>])|(?<=<\/w:p>)/);
   const planos = parrafos.map((t) => (/^<w:p[\s>]/.test(t) ? textoDe(t).trim() : null));
   for (const [indice, trozo] of parrafos.entries()) {
@@ -410,6 +421,18 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     if (esLineaFirma(plano)) zonaFirmas = true;
     const centrado = /<w:jc w:val="center"\/>/.test(pPr);
 
+    // Terminada la carátula (después del último inmueble), el espacio del notario que autoriza
+    if (/^(?:ESCRITURA P[UÚ]BLICA N[UÚ]MERO|PERSONAS QUE INTERVIENEN EN EL ACTO|ESPECIFICACI[OÓ]N\s)/.test(plano) && espacioNotario === 'sin_caratula') espacioNotario = 'antes';
+    if (plano && !enTabla && (espacioNotario === 'antes' || espacioNotario === 'pendiente') && /^OFICINA DE REGISTRO/i.test(plano)) espacioNotario = 'pendiente';
+    else if (plano && !enTabla && espacioNotario === 'pendiente' && !DATO_CARATULA.test(plano)) {
+      const proximo = soloGuiones(plano) ? planos.slice(indice + 1).find((t) => t && !soloGuiones(t)) : null;
+      if (!proximo || !DATO_CARATULA.test(proximo)) {
+        for (let i = 0; i < RENGLONES_NOTARIO; i++) salida.push(normalizarParrafo('<w:p><w:pPr></w:pPr></w:p>'));
+        espacioNotario = 'hecho';
+        if (ENCABEZADO_NOTARIO(plano)) continue;
+      }
+    }
+
     // Las líneas de guiones existentes se rehacen al ancho exacto (en una plantilla de un caso real quedaron al de otros datos)
     if (soloGuiones(plano)) { salida.push(lineaGuiones(anchoTexto)); previo = '-'; continue; }
     if (!plano) {
@@ -421,11 +444,13 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     }
 
     // Carátula: nombre y documento, acto y valor, con el número a la derecha
-    // Número y fecha en blanco: el renglón se completa con guiones (sin renglón en blanco) para escribirlos en la terminación
+    // Número y fecha en blanco: el renglón se completa con guiones (sin renglón en blanco) para escribirlos en la terminación.
+    // Van con sangría de una tabulación, como en las minutas de la notaría.
     if (/^(ESCRITURA P[UÚ]BLICA N[UÚ]MERO|FECHA DE OTORGAMIENTO):$/.test(plano)) {
       const rPr = conNegrilla(rPrNeutro(runs.find((r) => r.texto)?.rPr ?? ''), true);
-      const n = guionesDeRelleno([{ texto: plano, negrilla: true }], renglonTexto);
-      parrafo(`<w:p${m[1] ?? ''}>${n > 0 ? tabRelleno('', anchoTexto) : '<w:pPr></w:pPr>'}${runTexto(rPr, plano)}${n > 0 ? runTexto(rPrNeutro(rPr), ` ${'-'.repeat(n)}${FIN_RELLENO}`) : ''}</w:p>`);
+      const sangria = `<w:pPr><w:ind w:left="${SANGRIA_CARATULA}"/></w:pPr>`;
+      const n = guionesDeRelleno([{ texto: plano, negrilla: true }], renglonTexto - SANGRIA_CARATULA / 20 * 1000 / 12);
+      parrafo(`<w:p${m[1] ?? ''}>${n > 0 ? tabRelleno(sangria, anchoTexto) : sangria}${runTexto(rPr, plano)}${n > 0 ? runTexto(rPrNeutro(rPr), ` ${'-'.repeat(n)}${FIN_RELLENO}`) : ''}</w:p>`);
       previo = plano;
       continue;
     }
@@ -442,7 +467,7 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     if (/^CODIGO DE LA NOTARIA/.test(plano)) enCaratula.personas = false;
     if (/^ESPECIFICACI[OÓ]N\s+VALOR DEL ACTO$/.test(plano)) {
       enCaratula.especificacion = true;
-      const tabs = `<w:pPr><w:tabs><w:tab w:val="right" w:pos="${anchoTexto}"/></w:tabs><w:spacing w:after="0" w:line="360" w:lineRule="auto"/><w:jc w:val="left"/></w:pPr>`;
+      const tabs = `<w:pPr><w:tabs><w:tab w:val="right" w:pos="${anchoTexto}"/></w:tabs><w:spacing w:after="0" w:line="360" w:lineRule="auto"/><w:ind w:firstLine="${SANGRIA_CARATULA}"/><w:jc w:val="left"/></w:pPr>`;
       const rPr = '<w:rPr><w:b/><w:bCs/><w:u w:val="single"/></w:rPr>';
       parrafo(`<w:p${m[1] ?? ''}>${tabs}${runTexto(rPr, 'ESPECIFICACION')}<w:r><w:tab/></w:r>${runTexto(rPr, 'VALOR DEL ACTO')}</w:p>`);
       previo = plano;

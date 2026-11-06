@@ -56,6 +56,8 @@ export const LIMITE_SIN_LATIDO_MS = 6 * 60_000;
 const MAX_REANUDACIONES = 3;
 
 const firma = (id: string, turno: number) => huellaToken(`tarea:${id}:${turno}`);
+/** Firma de una etapa encadenada (también la usa la redacción por partes, src/lib/servicios/redaccion.ts) */
+export const firmaEtapa = firma;
 export function firmaValida(id: string, turno: number, recibida: string): boolean {
   const a = Buffer.from(firma(id, turno));
   const b = Buffer.from(String(recibida));

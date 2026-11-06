@@ -21,6 +21,8 @@ export default async function Expedientes({ searchParams }: { searchParams: Prom
       ...(/^[\d.,\s]+$/.test(texto) ? [{ comparecientes: { some: { numeroDocumento: { contains: texto.replace(/\D/g, '') } } } }] : []),
       // Nombres leídos de los documentos que aún no se confirman (se guardan en mayúsculas)
       { datosExtraidos: { some: { campo: { startsWith: 'persona:', endsWith: '.nombre' }, estado: { not: 'DESCARTADO' }, AND: palabras.map((w) => ({ valor: { string_contains: w.toUpperCase() } })) } } },
+      // Otorgantes que identificó la IA al redactar (nombres en mayúsculas; documentos también sin puntos)
+      { borradores: { some: { AND: (/^[\d.,\s]+$/.test(texto) ? [texto.replace(/\D/g, '')] : palabras.map((w) => w.toUpperCase())).map((w) => ({ redaccion: { path: ['otorgantesTexto'], string_contains: w } })) } } },
       { inmuebles: { some: { matricula: { contains: texto } } } },
     ] } : {}),
   };

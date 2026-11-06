@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import PizZip from 'pizzip';
 import { prepararContexto } from '@/lib/escritura/contexto';
-import { armarEscritura, faltantesEn, parrafoXml, MARCA_FALTANTE } from '@/lib/escritura/generar';
+import { armarEscritura, faltantesEn, normalizarMarcas, parrafoXml, MARCA_FALTANTE } from '@/lib/escritura/generar';
 import { vistaPreviaDocx, textoDeParrafos } from '@/lib/escritura/vista-previa';
 import { ErrorDatos } from '@/lib/escritura/personas';
 import type { DatosExpediente } from '@/lib/escritura/tipos';
@@ -117,6 +117,18 @@ describe('armado del Word desde el texto redactado por la IA', () => {
     expect(resaltados.some((m) => /^-+\s*$/.test(m[2].trim()))).toBe(false);
     expect(r.verificar).toEqual(['se lee 33B o 338']);
     expect(r.faltantes).toEqual(['precio de la venta']);
+  });
+
+  it('lleva a la forma única las marcas escritas de otra manera, y también las resalta', () => {
+    expect(normalizarMarcas('Precio [FALTA: precio de la venta], cédula <<falta: cédula del comprador>> y (VERIFICAR:  lindero  sur).'))
+      .toBe('Precio «FALTA: precio de la venta», cédula «FALTA: cédula del comprador» y [VERIFICAR: lindero sur].');
+    expect(normalizarMarcas('Matrícula FALTA: matrícula inmobiliaria. Sigue el texto.')).toBe('Matrícula «FALTA: matrícula inmobiliaria». Sigue el texto.');
+    // El verbo «falta» en minúsculas no es una marca
+    expect(normalizarMarcas('Si le falta: algo, se dirá.')).toBe('Si le falta: algo, se dirá.');
+    const r = armarEscritura(base, [{ texto: 'El comprador [FALTA: estado civil del comprador] y el precio FALTA: precio de la venta.', alineacion: 'JUSTIFICADO' }]);
+    const xml = new PizZip(r.docx).file('word/document.xml')!.asText();
+    expect([...xml.matchAll(/<w:highlight w:val="yellow"\/>[\s\S]*?<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]).join('')).toBe('«FALTA: estado civil del comprador»«FALTA: precio de la venta»');
+    expect(r.faltantes).toEqual(['estado civil del comprador', 'precio de la venta']);
   });
 
   it('detecta las marcas FALTA del texto', () => {

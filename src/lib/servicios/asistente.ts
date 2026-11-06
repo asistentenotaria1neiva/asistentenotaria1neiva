@@ -235,6 +235,7 @@ export async function prepararPreguntas(s: SesionActiva, expedienteId: string, a
   };
   const r = await llamarEstructurado<RespuestaIA>({
     proposito: 'REVISION',
+    registro: { usuarioId: s.usuario.id, expedienteId, analisisId },
     sistema: SISTEMA_ASISTENTE + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
     contenido: [
       ...modelosDeRedaccion.map((m) => ({ type: 'text' as const, text: `<modelo_de_redaccion acto="${m.acto}">\n${m.texto}\n</modelo_de_redaccion>` })),

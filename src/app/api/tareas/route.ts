@@ -5,7 +5,9 @@
  * y una firma vieja o repetida no hace nada porque cada etapa toma su turno.
  */
 import { NextResponse, after, type NextRequest } from 'next/server';
+import { db } from '@/lib/db';
 import { ejecutarEtapa, firmaValida } from '@/lib/servicios/tareas';
+import { ejecutarParteRedaccion } from '@/lib/servicios/redaccion';
 
 export const maxDuration = 300;
 
@@ -17,6 +19,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
   // Se responde de inmediato: la etapa corre después, en esta misma invocación
-  after(() => ejecutarEtapa(id, turno).catch((e) => console.error('[api/tareas]', e)));
+  // La redacción por partes (src/lib/servicios/redaccion.ts) también se encadena por aquí
+  const a = await db.analisisIA.findUnique({ where: { id }, select: { proposito: true } });
+  const etapa = a?.proposito === 'REDACCION' ? ejecutarParteRedaccion : ejecutarEtapa;
+  after(() => etapa(id, turno).catch((e) => console.error('[api/tareas]', e)));
   return NextResponse.json({ ok: true }, { status: 202 });
 }

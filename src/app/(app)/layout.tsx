@@ -26,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       { href: '/admin/usuarios', texto: 'Usuarios' },
       { href: '/admin/auditoria', texto: 'Auditoría' },
       { href: '/admin/estadisticas', texto: 'Estadísticas' },
+      { href: '/admin/consumo', texto: 'Consumo de IA' },
       { href: '/admin/entrenamiento', texto: 'Entrenamiento IA' },
       { href: '/admin/alertas', texto: 'Alertas' },
       { href: '/admin/configuracion', texto: 'Configuración' },

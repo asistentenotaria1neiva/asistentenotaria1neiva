@@ -90,6 +90,33 @@ describe('formato de impresión de la notaría', () => {
     expect(xml).toContain(`<w:tab w:val="right" w:pos="${ANCHO}"/>`);
   });
 
+  it('carátula como la minuta de la notaría: sangría de una tabulación y cinco renglones para el notario', () => {
+    const xml = aplicarFormatoNotarial([
+      conGuia('ESCRITURA PÚBLICA NÚMERO:'), sinGuia(''), conGuia('FECHA DE OTORGAMIENTO:'), conGuia('ESPECIFICACION VALOR DEL ACTO'),
+      sinGuia('COMPRAVENTA $3.000.000'), conGuia('MATRICULA INMOBILIARIA: 200-1.'),
+      conGuia('OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.'), sinGuia('---------------'),
+      conGuia('MATRICULA INMOBILIARIA: 200-2.'), conGuia('OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.'),
+      sinGuia(''), sinGuia(''),
+      conGuia('En la ciudad de Neiva, Departamento del Huila, donde funciona la NOTARÍA PRIMERA DEL CÍRCULO DE NEIVA, cuyo notario titular es el doctor X.'),
+      conGuia('Compareció quien dijo ser, ANA PRUEBA, mayor de edad.'),
+      conGuia('OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.'), conGuia('PRIMERO: Que transfiere.'),
+    ].join(''), ANCHO);
+    const parrafos = xml.match(/<w:p[ >].*?<\/w:p>/gs) ?? [];
+    const t = textos(xml);
+    // Número y fecha con sangría izquierda de una tabulación; «ESPECIFICACION» con sangría de primera línea
+    expect(parrafos[0]).toContain('<w:ind w:left="720"/>');
+    expect(parrafos[1]).toContain('<w:ind w:left="720"/>');
+    expect(t[0]).toMatch(/^ESCRITURA PÚBLICA NÚMERO: -{30,}\t$/);
+    expect(parrafos[t.indexOf('ESPECIFICACION\tVALOR DEL ACTO')]).toContain('<w:ind w:firstLine="720"/>');
+    // Tras el último inmueble (no entre inmuebles): exactamente cinco renglones vacíos, en lugar del encabezado del notario
+    const ultima = t.findIndex((x, i) => i > t.findIndex((y) => y.startsWith('MATRICULA INMOBILIARIA: 200-2')) && x.startsWith('OFICINA DE REGISTRO'));
+    expect(t.slice(ultima + 1, ultima + 6)).toEqual(['', '', '', '', '']);
+    expect(t[ultima + 6]).toMatch(/^-{100,}$/);
+    expect(t[ultima + 7]).toMatch(/^Compareció/);
+    expect(t.filter((x) => x === '')).toHaveLength(5);
+    expect(t.join('\n')).not.toContain('En la ciudad de Neiva');
+  });
+
   it('carta y márgenes de la notaría (sup. 3 / inf. 0,9 / interior 3,1 / exterior 2,2 cm, encuadernación 0)', () => {
     expect(aplicarMargenes('<w:pgSz w:w="12240" w:h="20160"/><w:pgMar w:top="1871" w:right="1361" w:bottom="737" w:left="1985" w:header="709"/>'))
       .toBe('<w:pgSz w:w="12240" w:h="15840" w:code="1"/><w:pgMar w:top="1701" w:right="1247" w:bottom="510" w:left="1758" w:header="709" w:gutter="0"/>');

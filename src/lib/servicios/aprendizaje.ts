@@ -46,18 +46,7 @@ export async function registrarCorreccion(c: {
   });
 }
 
-/** Precios de referencia por millón de tokens (USD) para estimar el consumo; ajustables en el código de configuración */
-export const PRECIOS_MODELOS: Record<string, { entrada: number; salida: number; cache: number }> = {
-  'claude-opus-5-5': { entrada: 4, salida: 20, cache: 0.2 },
-  'claude-sonnet-5-5': { entrada: 2, salida: 10, cache: 0.2 },
-  'claude-haiku-5-5': { entrada: 0.1, salida: 0.5, cache: 0.01 },
-  'claude-fable-5-1': { entrada: 10, salida: 50, cache: 0.25 },
-};
-
-export function costoEstimadoUSD(modelo: string, entrada: number, salida: number, cache: number): number {
-  const p = PRECIOS_MODELOS[modelo] ?? PRECIOS_MODELOS['claude-opus-5-5'];
-  return (entrada * p.entrada + salida * p.salida + cache * p.cache) / 1_000_000;
-}
+export { PRECIOS_MODELOS, costoEstimadoUSD } from '../ia/precios';
 
 /** Indicadores mensuales del entrenamiento */
 export async function indicadoresMes(anio: number, mes: number) {
@@ -69,7 +58,7 @@ export async function indicadoresMes(anio: number, mes: number) {
     db.observacion.findMany({ where: { resueltaEn: rango }, select: { origen: true, estado: true, falsaAlarma: true, nivel: true, codigo: true } }),
     db.expediente.findMany({ where: { aprobadoEn: rango }, select: { creadoEn: true, aprobadoEn: true, tipoId: true } }),
     db.auditoria.count({ where: { accion: 'EXPEDIENTE_DEVUELTO', fecha: rango } }),
-    db.analisisIA.findMany({ where: { creadoEn: rango, estado: 'COMPLETADO' }, select: { modelo: true, tokensEntrada: true, tokensSalida: true, tokensCacheLectura: true, proposito: true } }),
+    db.consumoIA.aggregate({ where: { creadoEn: rango }, _count: true, _sum: { tokensEntrada: true, tokensSalida: true, costoUSD: true } }),
     db.correccion.groupBy({ by: ['tipoId', 'categoria', 'campo'], where: { creadoEn: rango }, _count: true, orderBy: { _count: { campo: 'desc' } }, take: 30 }),
   ]);
   const cuenta = (e: string) => datos.find((d) => d.estado === e)?._count ?? 0;
@@ -83,10 +72,10 @@ export async function indicadoresMes(anio: number, mes: number) {
     observaciones: { resueltas: resueltas.length, acertadas: resueltas.length - falsas, falsasAlarmas: falsas, porcentajeAcierto: resueltas.length ? Math.round(((resueltas.length - falsas) / resueltas.length) * 1000) / 10 : null },
     escrituras: { aprobadas: aprobados.length, horasPromedio: horas.length ? Math.round((horas.reduce((a, b) => a + b, 0) / horas.length) * 10) / 10 : null, devueltas: devoluciones },
     api: {
-      llamadas: analisis.length,
-      tokensEntrada: analisis.reduce((s, a) => s + a.tokensEntrada, 0),
-      tokensSalida: analisis.reduce((s, a) => s + a.tokensSalida, 0),
-      costoUSD: Math.round(analisis.reduce((s, a) => s + costoEstimadoUSD(a.modelo, a.tokensEntrada, a.tokensSalida, a.tokensCacheLectura), 0) * 100) / 100,
+      llamadas: analisis._count,
+      tokensEntrada: analisis._sum.tokensEntrada ?? 0,
+      tokensSalida: analisis._sum.tokensSalida ?? 0,
+      costoUSD: Math.round((analisis._sum.costoUSD ?? 0) * 100) / 100,
     },
     patrones: correccionesPorTipo.map((c) => ({ tipo: c.tipoId, categoria: c.categoria, campo: c.campo, veces: c._count })),
   };

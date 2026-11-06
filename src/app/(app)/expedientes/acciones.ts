@@ -123,10 +123,10 @@ export async function accionAplicarCorrecciones(expedienteId: string, analisisId
 async function redactar(expedienteId: string, indicaciones?: string): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {
-    const r = await iniciarRedaccion(s, expedienteId, indicaciones);
+    const r = await iniciarRedaccion(s, expedienteId, indicaciones, await urlAplicacion());
     // La IA redacta después de responder: la persona puede salir de la página
     after(r.tarea);
-    return 'La IA está leyendo los documentos y redactando la escritura sobre la plantilla; tarda unos minutos. Puede salir de esta página: le avisaremos al terminar.';
+    return `La IA está leyendo los documentos y redactando la escritura sobre la plantilla${r.partes > 1 ? `, un acto a la vez (${r.partes} partes)` : ''}; tarda unos minutos. Puede salir de esta página: le avisaremos al terminar.`;
   }, `/expedientes/${expedienteId}`);
 }
 

@@ -229,6 +229,7 @@ export async function buscarFaltantesEnDocumentos(s: SesionActiva, expedienteId:
     contenido.push({ type: 'text', text: `<faltantes>\n${JSON.stringify(lista)}\n</faltantes>\nBusca cada uno de estos datos en los documentos.` });
     const r = await llamarEstructurado<{ encontrados: Hallazgo[] }>({
       proposito: 'EXTRACCION',
+      registro: { usuarioId: s.usuario.id, expedienteId, analisisId: analisis.id },
       sistema: SISTEMA_BUSQUEDA,
       contenido,
       esquema: esquemaBusqueda(faltantes.map((f) => f.clave), enviados.map((x) => x.codigo)),

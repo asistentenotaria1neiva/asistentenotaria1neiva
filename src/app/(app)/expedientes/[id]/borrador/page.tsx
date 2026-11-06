@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { expedienteDePagina, puedeEditar, bloqueos } from '@/lib/servicios/expedientes';
-import { redaccionEnCurso, ultimaRedaccion, CODIGO_REDACCION, type InfoRedaccion } from '@/lib/servicios/redaccion';
+import { after } from 'next/server';
+import { redaccionEnCurso, redaccionPorReanudar, ultimaRedaccion, CODIGO_REDACCION, type InfoRedaccion } from '@/lib/servicios/redaccion';
 import { accionRedactar } from '../../acciones';
 import { RefrescoAutomatico } from '../../formularios';
 import { FormAdmin } from '../../../admin/formularios';
@@ -18,6 +19,9 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const s = await requerirSesion();
   const e = await expedienteDePagina(s, id);
+  // Una parte de la redacción que se cortó (la invocación superó su límite) se reanuda en segundo plano
+  const reanudar = puedeEditar(s, e) ? await redaccionPorReanudar(id) : null;
+  if (reanudar) after(reanudar);
   const [versiones, b, enCurso, ultimaIA, nDocs] = await Promise.all([
     db.borrador.findMany({ where: { expedienteId: id }, orderBy: { version: 'desc' } }),
     bloqueos(id),
@@ -43,7 +47,7 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
         {enCurso ? (
           <div className="aviso info" role="status">
             <RefrescoAutomatico segundos={8} />
-            <span className="girador pequeno" aria-hidden="true" /> La IA está leyendo los documentos y redactando la escritura (iniciada {fecha(enCurso.creadoEn)}). Tarda unos minutos; puede salir de esta página: le avisaremos en «Notificaciones» al terminar.
+            <span className="girador pequeno" aria-hidden="true" /> La IA está leyendo los documentos y redactando la escritura{enCurso.partes && enCurso.partes > 1 ? (enCurso.armando ? `, armando el Word con las ${enCurso.partes} partes` : `, un acto a la vez: parte ${enCurso.parte} de ${enCurso.partes}`) : ''} (iniciada {fecha(enCurso.creadoEn)}). Tarda unos minutos; puede salir de esta página: le avisaremos en «Notificaciones» al terminar.
           </div>
         ) : (
           <>

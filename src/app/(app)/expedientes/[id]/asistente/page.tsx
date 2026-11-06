@@ -5,7 +5,7 @@ import { expedienteDePagina, puedeEditar, datosDe, actosDe, bloqueos } from '@/l
 import { after } from 'next/server';
 import { estadoAsistente, esAdicional, CODIGO_INCONSISTENCIA } from '@/lib/servicios/asistente';
 import { tareaEnCurso, tareaPorReanudar } from '@/lib/servicios/tareas';
-import { redaccionEnCurso } from '@/lib/servicios/redaccion';
+import { redaccionEnCurso, redaccionPorReanudar } from '@/lib/servicios/redaccion';
 import { ProgresoAnalisis } from '../progreso';
 import { ESQUEMAS, PASOS_COMUNES, CAMPOS_PERSONA, CAMPOS_INMUEBLE, type Campo } from '@/lib/escritura/esquemas';
 import { resolverRuta, CAMPOS_TERMINACION } from '@/lib/escritura/rutas';
@@ -56,6 +56,8 @@ export default async function Asistente({ params }: { params: Promise<{ id: stri
   // Un análisis que dejó de avanzar (la etapa se cortó) se reanuda en segundo plano
   const reanudar = editable ? await tareaPorReanudar(id) : null;
   if (reanudar) after(reanudar);
+  const reanudarRedaccion = editable ? await redaccionPorReanudar(id) : null;
+  if (reanudarRedaccion) after(reanudarRedaccion);
   const tarea = await tareaEnCurso(id);
   const [estado, nDocs, inconsistencias, b, ultimoBorrador, nombresLeidos, redactando] = await Promise.all([
     estadoAsistente(id),

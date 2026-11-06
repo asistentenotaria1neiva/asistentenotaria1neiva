@@ -10,6 +10,8 @@
  */
 import 'server-only';
 import Anthropic, { toFile } from '@anthropic-ai/sdk';
+import { db } from '../db';
+import { costoEstimadoUSD } from './precios';
 
 type Esfuerzo = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type Proposito = 'EXTRACCION' | 'REVISION' | 'REDACCION' | 'PLANTILLA';
@@ -97,6 +99,56 @@ interface OpcionesLlamada {
   maxTokens?: number;
   /** Esfuerzo de razonamiento para esta llamada (p. ej. 'low' para identificar un documento); si no, el del propósito */
   esfuerzo?: Esfuerzo;
+  /**
+   * Cantidad de bloques iniciales de `contenido` que se repiten igual en llamadas seguidas (p. ej. los
+   * documentos del negocio en cada parte de una redacción): quedan en caché 5 minutos y la siguiente
+   * llamada los paga al 10 %. Escribir la caché cuesta un 25 % más, así que solo conviene si hay
+   * otra llamada con el mismo inicio antes de 5 minutos.
+   */
+  cachearBloques?: number;
+  /** A quién y a qué se carga el consumo de esta llamada (panel Consumo de IA) */
+  registro: RegistroConsumo;
+}
+
+export interface RegistroConsumo {
+  usuarioId?: string | null;
+  expedienteId?: string | null;
+  plantillaId?: string | null;
+  analisisId?: string | null;
+}
+
+/** Guarda los tokens y el costo de una llamada. Un fallo al registrar nunca interrumpe el trabajo. */
+async function registrarConsumo(opciones: OpcionesLlamada, mensaje: Anthropic.Beta.BetaMessage): Promise<void> {
+  const u = mensaje.usage;
+  const entrada = u.input_tokens ?? 0;
+  const salida = u.output_tokens ?? 0;
+  const cacheLectura = u.cache_read_input_tokens ?? 0;
+  const cacheEscritura = u.cache_creation_input_tokens ?? 0;
+  try {
+    await db.consumoIA.create({
+      data: {
+        usuarioId: opciones.registro.usuarioId ?? null,
+        expedienteId: opciones.registro.expedienteId ?? null,
+        plantillaId: opciones.registro.plantillaId ?? null,
+        analisisId: opciones.registro.analisisId ?? null,
+        proposito: opciones.proposito,
+        modelo: mensaje.model,
+        tokensEntrada: entrada,
+        tokensSalida: salida,
+        tokensCacheLectura: cacheLectura,
+        tokensCacheEscritura: cacheEscritura,
+        costoUSD: costoEstimadoUSD(mensaje.model, entrada, salida, cacheLectura, cacheEscritura),
+      },
+    });
+  } catch (e) {
+    console.error('[ia] no se pudo registrar el consumo', e);
+  }
+}
+
+/** Marca el último de los primeros `n` bloques como punto de caché (los bloques no se modifican) */
+function conCache(contenido: Anthropic.Beta.BetaContentBlockParam[], n?: number): Anthropic.Beta.BetaContentBlockParam[] {
+  if (!n || n < 1 || n > contenido.length) return contenido;
+  return contenido.map((b, i) => (i === n - 1 ? ({ ...b, cache_control: { type: 'ephemeral' } } as Anthropic.Beta.BetaContentBlockParam) : b));
 }
 
 async function llamar<T>(opciones: OpcionesLlamada, modelo: string, esfuerzo: Esfuerzo): Promise<ResultadoLlamada<T>> {
@@ -108,7 +160,7 @@ async function llamar<T>(opciones: OpcionesLlamada, modelo: string, esfuerzo: Es
       model: modelo,
       max_tokens: opciones.maxTokens ?? 32000,
       system: [{ type: 'text', text: opciones.sistema, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: opciones.contenido }],
+      messages: [{ role: 'user', content: conCache(opciones.contenido, opciones.cachearBloques) }],
       output_config: { effort: esfuerzo, format: { type: 'json_schema', schema: opciones.esquema } },
       ...(usarRespaldo ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
     });
@@ -116,6 +168,8 @@ async function llamar<T>(opciones: OpcionesLlamada, modelo: string, esfuerzo: Es
   } catch (e) {
     throw errorDeApi(e);
   }
+  // Se cobra aunque la respuesta se rechace, quede truncada o no sirva: se registra siempre
+  await registrarConsumo(opciones, mensaje);
   if (mensaje.stop_reason === 'refusal') throw new ErrorIA('El modelo declinó analizar este contenido. Revise el documento manualmente.', 'RECHAZO');
   if (mensaje.stop_reason === 'max_tokens') throw new ErrorIA('La respuesta de la IA quedó incompleta (límite de longitud).', 'TRUNCADO');
   const textoRespuesta = mensaje.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('');

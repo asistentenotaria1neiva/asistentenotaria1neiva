@@ -122,6 +122,7 @@ export async function ejecutarRevision(s: SesionActiva, expedienteId: string, co
       };
       const r = await llamarEstructurado<{ observaciones: { nivel: 'CRITICA' | 'ADVERTENCIA' | 'INFORMATIVA'; mensaje: string; campo: string | null; evidencia: string }[] }>({
         proposito: 'REVISION',
+        registro: { usuarioId: s.usuario.id, expedienteId, analisisId: analisis.id },
         sistema: SISTEMA_REVISION + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
         contenido: [{ type: 'text', text: `<expediente>\n${JSON.stringify(entrada)}\n</expediente>\nRevisa el expediente y devuelve las observaciones.` }],
         esquema: ESQUEMA_REVISION as unknown as Record<string, unknown>,

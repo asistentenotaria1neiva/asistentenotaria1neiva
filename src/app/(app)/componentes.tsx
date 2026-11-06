@@ -43,11 +43,22 @@ export const INCLUIR_OTORGANTES = {
   comparecientes: { select: { nombre: true, numeroDocumento: true, rol: true } },
   // Nombres leídos por la IA que aún no se confirman (la persona puede estar sin nombre en el formulario)
   datosExtraidos: { where: { campo: { startsWith: 'persona:', endsWith: '.nombre' }, estado: { not: 'DESCARTADO' } }, select: { campo: true, valor: true } },
+  // Los otorgantes que identificó la IA al redactar la última versión (cuando no se diligenció el formulario)
+  borradores: { orderBy: { version: 'desc' as const }, take: 1, select: { redaccion: true } },
 };
 
-type ConOtorgantes = { comparecientes?: { nombre: string; numeroDocumento: string; rol: string }[]; datosExtraidos?: { campo: string; valor: unknown }[] };
+type ConOtorgantes = { comparecientes?: { nombre: string; numeroDocumento: string; rol: string }[]; datosExtraidos?: { campo: string; valor: unknown }[]; borradores?: { redaccion: unknown }[] };
 
-/** Nombres de los otorgantes conocidos: los del formulario y, si falta el nombre, el leído de los documentos */
+/** Otorgantes que la IA identificó al redactar (los de la última versión) */
+function deLaRedaccion(e: ConOtorgantes): { nombre: string; documento: string }[] {
+  const lista = (e.borradores?.[0]?.redaccion as { otorgantes?: unknown } | null | undefined)?.otorgantes;
+  return Array.isArray(lista) ? lista.filter((o): o is { nombre: string; documento: string } => typeof o?.nombre === 'string' && !!o.nombre.trim()).map((o) => ({ nombre: o.nombre.trim().toUpperCase(), documento: String(o.documento ?? '') })) : [];
+}
+
+/**
+ * Nombres de los otorgantes conocidos: los del formulario (si falta el nombre, el leído de los
+ * documentos) y, si el expediente no tiene ninguno, los que identificó la IA al redactar.
+ */
 export function otorgantesDe(e: ConOtorgantes): string[] {
   const dig = (x: unknown) => String(x ?? '').replace(/\D/g, '');
   const leidos = new Map<string, string>();
@@ -66,6 +77,7 @@ export function otorgantesDe(e: ConOtorgantes): string[] {
     nombres.push(nombre || `Doc. ${c.numeroDocumento}`);
   }
   for (const [doc, nombre] of leidos) if (!vistos.has(doc)) nombres.push(nombre);
+  if (!nombres.length) for (const o of deLaRedaccion(e)) nombres.push(o.nombre);
   return [...new Set(nombres)];
 }
 

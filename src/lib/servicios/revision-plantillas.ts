@@ -145,6 +145,7 @@ export async function revisarPlantilla(id: string, s: SesionActiva, conIA = true
     try {
       const r = await llamarEstructurado<Omit<NonNullable<RevisionPlantilla['ia']>, 'modelo' | 'duracionMs'>>({
         proposito: 'PLANTILLA',
+        registro: { usuarioId: s.usuario.id, plantillaId: id },
         sistema: SISTEMA_REVISION_PLANTILLA,
         contenido: [{ type: 'text', text: solicitud(p, v) }],
         esquema: ESQUEMA_REVISION_PLANTILLA as unknown as Record<string, unknown>,

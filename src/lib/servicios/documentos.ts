@@ -141,6 +141,7 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string): P
     if (pdf && paginas >= 2) {
       const sep = await llamarEstructurado<{ documentos: unknown }>({
         proposito: 'EXTRACCION',
+        registro: { usuarioId: s.usuario.id, expedienteId: e.id, analisisId: analisis.id },
         sistema: SISTEMA_SEPARACION,
         contenido: [preparado.bloque, { type: 'text', text: `El archivo tiene ${paginas} páginas. Indica los documentos que contiene y de qué página a qué página va cada uno.` }],
         esquema: ESQUEMA_SEPARACION,
@@ -170,6 +171,7 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string): P
       try {
         const cls = await llamarEstructurado<{ documentos: unknown }>({
           proposito: 'EXTRACCION',
+          registro: { usuarioId: s.usuario.id, expedienteId: e.id, analisisId: analisis.id },
           sistema: SISTEMA_SEPARACION,
           contenido: [preparado.bloque, { type: 'text', text: 'El archivo es un solo documento de una página (o una imagen). Indica qué tipo de documento es, en un único elemento que cubra la página 1.' }],
           esquema: ESQUEMA_SEPARACION,
@@ -187,6 +189,7 @@ export async function analizarDocumento(s: SesionActiva, documentoId: string): P
 
     const extraer = (t: TipoDocumental) => llamarEstructurado<ResultadoExtraccion>({
       proposito: 'EXTRACCION',
+      registro: { usuarioId: s.usuario.id, expedienteId: e.id, analisisId: analisis.id },
       sistema: SISTEMA_EXTRACCION + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
       contenido: [
         bloque(t),

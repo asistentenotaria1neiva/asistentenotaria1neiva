@@ -314,6 +314,30 @@ model AnalisisIA {
   @@map("analisis_ia")
 }
 
+// Una fila por cada llamada a la API de Claude: tokens y costo, con quién la hizo y sobre qué.
+// Sin relaciones: el gasto se conserva aunque se borre el expediente, la plantilla o el usuario.
+model ConsumoIA {
+  id                   String   @id @default(cuid())
+  creadoEn             DateTime @default(now())
+  usuarioId            String? // quien disparó la llamada
+  expedienteId         String? // la escritura
+  plantillaId          String? // revisión o corrección de plantillas
+  analisisId           String?
+  proposito            String // EXTRACCION | REVISION | REDACCION | PLANTILLA
+  modelo               String
+  tokensEntrada        Int      @default(0)
+  tokensSalida         Int      @default(0)
+  tokensCacheLectura   Int      @default(0)
+  tokensCacheEscritura Int      @default(0)
+  costoUSD             Float    @default(0) // con el precio vigente al momento de la llamada (src/lib/ia/precios.ts)
+  historico            Boolean  @default(false) // cargado de analisis_ia: el usuario es el responsable del expediente
+
+  @@index([creadoEn])
+  @@index([usuarioId, creadoEn])
+  @@index([expedienteId])
+  @@map("consumo_ia")
+}
+
 model DatoExtraido {
   id                 String      @id @default(cuid())
   expediente         Expediente  @relation(fields: [expedienteId], references: [id], onDelete: Cascade)

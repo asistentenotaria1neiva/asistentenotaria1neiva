@@ -37,6 +37,29 @@ const limpiar = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001
 export const RESALTADO = 'yellow';
 const MARCAS = /(«FALTA:[^»]*»|\[VERIFICAR:[^\]]*\])/;
 
+/**
+ * La IA no siempre escribe las marcas igual: «FALTA: x», [FALTA: x], <<FALTA: x>>, (FALTA: x) o
+ * FALTA: x sin nada alrededor; lo mismo con VERIFICAR. Todas se llevan a la forma única
+ * («FALTA: x» y [VERIFICAR: x]) para resaltarlas y contarlas siempre.
+ */
+export function normalizarMarcas(s: string): string {
+  const forma = (m: string, nombre: 'FALTA' | 'VERIFICAR', dato: string) => {
+    const d = dato.trim().replace(/\s+/g, ' ');
+    if (!d) return m;
+    return nombre === 'FALTA' ? `«FALTA: ${d}»` : `[VERIFICAR: ${d}]`;
+  };
+  return s
+    .replace(/«\s*(FALTA|VERIFICAR)\s*:\s*([^»]*)»/gi, (m, n, d) => forma(m, n.toUpperCase(), d))
+    .replace(/\[\s*(FALTA|VERIFICAR)\s*:\s*([^\]]*)\]/gi, (m, n, d) => forma(m, n.toUpperCase(), d))
+    .replace(/<<\s*(FALTA|VERIFICAR)\s*:\s*([\s\S]*?)>>/gi, (m, n, d) => forma(m, n.toUpperCase(), d))
+    .replace(/\(\s*(FALTA|VERIFICAR)\s*:\s*([^)]*)\)/gi, (m, n, d) => forma(m, n.toUpperCase(), d))
+    // Sin nada alrededor (en mayúsculas, para no tomar el verbo «falta»): hasta el fin de la frase
+    .replace(/(^|[^«[(<A-ZÁÉÍÓÚÑ])(FALTA|VERIFICAR):\s*([^.;\n«»[\]]+)/g, (m, antes, n, d) => `${antes}${forma(m, n, d)}`);
+}
+
+/** El texto de un párrafo listo para el Word: sin caracteres inválidos y con las marcas en su forma única */
+const preparar = (s: string) => normalizarMarcas(limpiar(s));
+
 function run(texto: string, negrita: boolean, resaltar = false): string {
   const props = `${negrita ? '<w:b/><w:bCs/>' : ''}${resaltar ? `<w:highlight w:val="${RESALTADO}"/>` : ''}`;
   const rPr = props ? `<w:rPr>${props}</w:rPr>` : '';
@@ -46,7 +69,7 @@ function run(texto: string, negrita: boolean, resaltar = false): string {
 
 /** XML de un párrafo redactado */
 export function parrafoXml(p: ParrafoRedactado): string {
-  const texto = limpiar(p.texto ?? '');
+  const texto = preparar(p.texto ?? '');
   // Negrilla explícita (**…**) y, dentro, las marcas resaltadas en amarillo (lo que falta, además en negrilla)
   const runs = texto.split(/\*\*/).flatMap((t, i) => t.split(MARCAS).map((x) => {
     const falta = x.startsWith('«FALTA:');
@@ -74,7 +97,7 @@ function formatoPaquete(zip: PizZip): void {
   if (ajustes) zip.file('word/settings.xml', aplicarAjustesNotariales(ajustes.asText()));
 }
 
-export const textoPlano = (parrafos: ParrafoRedactado[]) => parrafos.map((p) => limpiar(p.texto ?? '').replace(/\*\*/g, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+export const textoPlano = (parrafos: ParrafoRedactado[]) => parrafos.map((p) => preparar(p.texto ?? '').replace(/\*\*/g, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
 /** Puntos marcados [VERIFICAR: …] en el texto */
 export const verificarEn = (texto: string) => [...new Set([...texto.matchAll(/\[VERIFICAR:\s*([^\]]*)\]/g)].map((m) => m[1].trim()).filter(Boolean))];

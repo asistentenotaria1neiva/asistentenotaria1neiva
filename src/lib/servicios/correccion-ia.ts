@@ -85,6 +85,7 @@ export async function proponerCorrecciones(s: SesionActiva, expedienteId: string
       };
       const r = await llamarEstructurado<{ correcciones: { observacion_id: string; ruta: string; valor_json: string; explicacion: string; fuente: string }[]; sin_correccion: { observacion_id: string; motivo: string }[] }>({
         proposito: 'REVISION',
+        registro: { usuarioId: s.usuario.id, expedienteId, analisisId: analisis.id },
         sistema: SISTEMA_CORRECCION + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
         contenido: [{ type: 'text', text: `<expediente>\n${JSON.stringify(entrada)}\n</expediente>\nPropón las correcciones de las observaciones recibidas.` }],
         esquema: ESQUEMA_CORRECCION as unknown as Record<string, unknown>,

@@ -83,6 +83,7 @@ export async function proponerCorreccionesPlantilla(s: SesionActiva, id: string,
       const lista = elegidos.map((i) => ({ hallazgo: i, ...revision.ia!.hallazgos[i] }));
       const r = await llamarEstructurado<{ correcciones: { hallazgo: number; original: string; corregido: string; explicacion: string }[]; sin_correccion: { hallazgo: number; motivo: string }[] }>({
         proposito: 'PLANTILLA',
+        registro: { usuarioId: s.usuario.id, plantillaId: id },
         sistema: SISTEMA_CORRECCION_PLANTILLA,
         contenido: [{ type: 'text', text: [
           `TIPO: ${p.tipo.nombre} (${p.tipoId}) · versión ${p.version}`,
