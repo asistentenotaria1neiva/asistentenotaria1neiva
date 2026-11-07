@@ -70,7 +70,8 @@ La primera vez, la aplicación abre **/instalacion** para crear el administrador
 | `ANTHROPIC_ADMIN_KEY` | Opcional. Clave de administrador (`sk-ant-admin...`) para mostrar el costo real y los créditos restantes en Estadísticas |
 | `CLAUDE_MODELO_DOCUMENTOS`, `CLAUDE_MODELO_EXPEDIENTE`, `CLAUDE_MODELO_REDACCION`, `CLAUDE_MODELO_PLANTILLAS` | Modelo por tarea (predeterminados: `claude-haiku-5-5` para leer documentos; `claude-sonnet-5-5` para el expediente, la redacción de la escritura y las plantillas) |
 | `CLAUDE_MODELO_RESPALDO` | Modelo que repite la lectura si Haiku declina el documento (predeterminado `claude-sonnet-5-5`) |
-| `CLAUDE_ESFUERZO_DOCUMENTOS`, `CLAUDE_ESFUERZO_EXPEDIENTE`, `CLAUDE_ESFUERZO_REDACCION`, `CLAUDE_ESFUERZO_PLANTILLAS` | `low` · `medium` · `high` · `xhigh` · `max` (predeterminados: `medium`, `high`, `medium`, `medium`) |
+| `CLAUDE_ESFUERZO_DOCUMENTOS`, `CLAUDE_ESFUERZO_EXPEDIENTE`, `CLAUDE_ESFUERZO_REDACCION`, `CLAUDE_ESFUERZO_PLANTILLAS` | `low` · `medium` · `high` · `xhigh` · `max` (predeterminados: `medium`, `medium`, `low`, `medium`) |
+| `CLAUDE_REDACCION_DOCUMENTOS` | `datos` (predeterminado: la redacción recibe lo ya extraído de cada documento; los pendientes se analizan antes) · `originales` (los PDF completos, más caro) |
 | `CLAUDE_FALLBACKS` | `default` activa el respaldo del servidor de Anthropic ante rechazos por política; vacío lo desactiva |
 | `IPS_OFICINA` | IP públicas de la oficina (valor inicial; luego se administra en el panel) |
 | `CONFIAR_EN_PROXY` | `true` en Vercel (toma la IP real de `X-Real-IP`) |

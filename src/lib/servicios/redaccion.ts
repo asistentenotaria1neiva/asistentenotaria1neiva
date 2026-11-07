@@ -3,7 +3,8 @@
  *   1. El funcionario elige el tipo de escritura (al crear el expediente) y carga los documentos.
  *   2. La plantilla es la APROBADA del tipo elegido: es la escritura de referencia (estructura,
  *      cláusulas, lenguaje y formato), no un formulario que se llena.
- *   3. La IA lee los documentos ORIGINALES (PDF e imágenes), extrae y cruza los datos y redacta la
+ *   3. La IA recibe los documentos (lo ya extraído de cada uno o, si no se pudo leer como datos, el PDF
+ *      o la imagen; ver CLAUDE_REDACCION_DOCUMENTOS), cruza los datos y redacta la
  *      escritura completa sobre la plantilla. No pregunta nada: lo dudoso queda «[VERIFICAR: …]», lo
  *      que no está en ningún documento queda «FALTA: …», y todo va como alerta para el revisor.
  * Si el funcionario ya diligenció datos, respondió el asistente o escribe indicaciones, la IA también
@@ -44,7 +45,7 @@ import { plantillaAprobada, ErrorPlantilla } from './plantillas';
 import { textoDePlantilla } from './revision-plantillas';
 import { obtenerExpediente, puedeEditar, datosDe, actosDe, bloqueos, ErrorNegocio } from './expedientes';
 import { estadoAsistente, esAdicional } from './asistente';
-import { instruccionesAprobadas } from './documentos';
+import { instruccionesAprobadas, analizarDocumento } from './documentos';
 import { ejecutarRevision } from './revision';
 import { notificar } from './notificaciones';
 import { firmaEtapa, LIMITE_SIN_LATIDO_MS } from './tareas';
@@ -133,6 +134,10 @@ interface ProgresoRedaccion {
   otorgantes?: Otorgante[];
   /** Veces que la parte actual se cortó por longitud y se continúa donde quedó (0 al empezar cada parte) */
   continuaciones?: number;
+  /** Los documentos pendientes ya se analizaron (etapa previa a la primera parte) */
+  preparados?: boolean;
+  /** Documentos que la etapa previa ya intentó analizar: no se repiten aunque hayan fallado */
+  intentados?: string[];
   noEnviados: string[];
   documentos: number;
   modelo: string;
@@ -276,12 +281,26 @@ async function cargarPlantillas(lista: ProgresoRedaccion['plantillas']): Promise
 }
 
 /**
- * Los documentos originales del negocio como bloques para la IA (un PDF separado en partes va
- * completo, como se cargó). Lo que no cabe en la solicitud va como el texto que ya se leyó de él, si
- * se analizó; si no, se reporta como no enviado.
+ * ¿Qué recibe la IA de cada documento al redactar? (CLAUDE_REDACCION_DOCUMENTOS)
+ *   - «datos» (predeterminado): lo que ya se extrajo de él (Haiku, con linderos literales, página y
+ *     fragmento de cada dato). Cuesta una fracción de enviar el PDF: cada página de PDF son miles de
+ *     tokens, y una escritura larga los pagaba en cada parte. Los documentos sin tipo («otro»), los
+ *     que no se pudieron analizar y los que siguen en curso van como PDF, para no perder su contenido.
+ *   - «originales»: los PDF e imágenes completos, como antes (más caro).
+ */
+const enviaOriginales = () => process.env.CLAUDE_REDACCION_DOCUMENTOS?.trim().toLowerCase() === 'originales';
+
+/** Se lee como datos si ya se analizó con el esquema de su tipo */
+const leidoComoDatos = (d: { estadoAnalisis: string; tipoDocumental: string }) => d.estadoAnalisis === 'COMPLETADO' && d.tipoDocumental !== 'OTRO';
+
+/**
+ * Los documentos del negocio para la IA: como datos extraídos o como el archivo original (ver
+ * enviaOriginales). Un PDF separado en partes va parte por parte. Lo que no cabe en la solicitud va
+ * como el texto que ya se leyó de él, si se analizó; si no, se reporta como no enviado.
  */
 async function documentosParaIA(expedienteId: string) {
   const docs = await db.documento.findMany({ where: { expedienteId, origenId: null }, orderBy: { creadoEn: 'asc' } });
+  const originales = enviaOriginales();
   const contenido: Anthropic.Beta.BetaContentBlockParam[] = [];
   const liberar: (() => Promise<void>)[] = [];
   const leidos: { documento: string; datos: unknown }[] = [];
@@ -289,30 +308,82 @@ async function documentosParaIA(expedienteId: string) {
   let paginas = 0, enLinea = 0;
   for (const [i, d] of docs.entries()) {
     const titulo = `D${i + 1} · ${d.nombreOriginal}`;
-    const bytes = await leerCifrado(d.rutaCifrada);
-    const n = d.mime !== 'application/pdf' ? 1 : (await abrirPdf(bytes))?.getPageCount() ?? 1;
-    const pesaEnLinea = bytes.length <= 20 * 1024 * 1024 ? bytes.length : 0;
-    let enviado = false;
-    if (paginas + n <= MAX_PAGINAS && enLinea + pesaEnLinea <= MAX_BYTES_EN_LINEA) {
-      try {
-        const p = await prepararDocumento(bytes, d.mime, titulo);
-        liberar.push(p.liberar);
-        contenido.push({ type: 'text', text: `Documento ${titulo}:` }, p.bloque);
-        paginas += n;
-        enLinea += pesaEnLinea;
-        enviado = true;
-      } catch (err) {
-        if (!(err instanceof ErrorIA)) throw err;
+    // En modo «originales» el archivo va completo; si no, cada parte por separado
+    const unidades = !originales && d.estadoAnalisis === 'DIVIDIDO'
+      ? await db.documento.findMany({ where: { origenId: d.id }, orderBy: { paginaDesde: 'asc' } })
+      : [d];
+    for (const u of unidades) {
+      const nombre = u.id === d.id ? titulo : `${titulo} (págs. ${u.paginaDesde}–${u.paginaHasta}, ${TIPOS_DOCUMENTALES[u.tipoDocumental as TipoDocumental] ?? u.tipoDocumental})`;
+      if (!originales && leidoComoDatos(u)) {
+        leidos.push({ documento: nombre, datos: compactarHechos(u.hechos) });
+        continue;
       }
+      const bytes = await leerCifrado(u.rutaCifrada);
+      const n = u.mime !== 'application/pdf' ? 1 : (await abrirPdf(bytes))?.getPageCount() ?? 1;
+      const pesaEnLinea = bytes.length <= 20 * 1024 * 1024 ? bytes.length : 0;
+      let enviado = false;
+      if (paginas + n <= MAX_PAGINAS && enLinea + pesaEnLinea <= MAX_BYTES_EN_LINEA) {
+        try {
+          const p = await prepararDocumento(bytes, u.mime, nombre);
+          liberar.push(p.liberar);
+          contenido.push({ type: 'text', text: `Documento ${nombre}:` }, p.bloque);
+          paginas += n;
+          enLinea += pesaEnLinea;
+          enviado = true;
+        } catch (err) {
+          if (!(err instanceof ErrorIA)) throw err;
+        }
+      }
+      if (enviado) continue;
+      // Lo que no cabe: el texto ya leído de él (o de sus partes, si se separó)
+      const partes = u.estadoAnalisis === 'DIVIDIDO' ? await db.documento.findMany({ where: { origenId: u.id, estadoAnalisis: 'COMPLETADO' } }) : u.estadoAnalisis === 'COMPLETADO' ? [u] : [];
+      if (partes.length) for (const x of partes) leidos.push({ documento: `${titulo}${x.id !== d.id ? ` (págs. ${x.paginaDesde}–${x.paginaHasta}, ${TIPOS_DOCUMENTALES[x.tipoDocumental as TipoDocumental] ?? x.tipoDocumental})` : ''}`, datos: compactarHechos(x.hechos) });
+      else noEnviados.push(u.id === d.id ? d.nombreOriginal : nombre);
     }
-    if (enviado) continue;
-    // Lo que no cabe: el texto ya leído de él (o de sus partes, si se separó)
-    const partes = d.estadoAnalisis === 'DIVIDIDO' ? await db.documento.findMany({ where: { origenId: d.id, estadoAnalisis: 'COMPLETADO' } }) : d.estadoAnalisis === 'COMPLETADO' ? [d] : [];
-    if (partes.length) for (const x of partes) leidos.push({ documento: `${titulo}${x.id !== d.id ? ` (págs. ${x.paginaDesde}–${x.paginaHasta}, ${TIPOS_DOCUMENTALES[x.tipoDocumental as TipoDocumental] ?? x.tipoDocumental})` : ''}`, datos: compactarHechos(x.hechos) });
-    else noEnviados.push(d.nombreOriginal);
   }
-  if (leidos.length) contenido.push({ type: 'text', text: `<documento_leido>\n${JSON.stringify(leidos)}\n</documento_leido>` });
+  if (leidos.length) {
+    contenido.push({ type: 'text', text: [
+      '<documento_leido>',
+      JSON.stringify(leidos),
+      '</documento_leido>',
+      'Los documentos de <documento_leido> ya se leyeron: cada dato trae su valor literal, la página y el fragmento del documento original. Úsalos como si leyeras el documento (los linderos van tal cual) y cita la fuente con el documento y la página. Lo que no aparezca ahí ni en los demás documentos queda «FALTA: …».',
+    ].join('\n') });
+  }
   return { contenido, liberar: () => Promise.all(liberar.map((f) => f())), noEnviados, total: docs.length };
+}
+
+/** Documentos que se analizan a la vez antes de redactar, y tiempo tras el cual no se empieza otro */
+const CONCURRENCIA_PREVIA = 5;
+const CORTE_PREVIO_MS = 90_000;
+
+/**
+ * Etapa previa a la primera parte: analiza (Haiku, centavos) los documentos que nadie analizó, para
+ * enviarlos a la redacción como datos y no como PDF. Un PDF que se separa en partes las analiza en
+ * la misma etapa. Devuelve true si quedaron documentos para otra invocación. Si un análisis falla,
+ * ese documento va como PDF: la redacción no se detiene por eso.
+ */
+async function analizarPendientes(expedienteId: string, p: ProgresoRedaccion, guardarAvance: () => Promise<boolean>): Promise<boolean> {
+  const inicio = Date.now();
+  p.intentados ??= [];
+  const cola = await db.documento.findMany({
+    where: { expedienteId, estadoAnalisis: { in: ['PENDIENTE', 'ERROR'] }, id: { notIn: p.intentados } },
+    orderBy: { creadoEn: 'asc' }, select: { id: true },
+  });
+  const trabajador = async () => {
+    while (cola.length && Date.now() - inicio < CORTE_PREVIO_MS) {
+      const d = cola.shift()!;
+      try {
+        const { partes } = await analizarDocumento(p.sesion, d.id);
+        cola.push(...partes.map((id) => ({ id })));
+      } catch (err) {
+        console.error('[redaccion] no se pudo analizar un documento antes de redactar; va como PDF', d.id, err instanceof Error ? err.message : err);
+      }
+      p.intentados!.push(d.id);
+      if (!(await guardarAvance())) return;
+    }
+  };
+  await Promise.all(Array.from({ length: CONCURRENCIA_PREVIA }, trabajador));
+  return cola.length > 0;
 }
 
 /** Pide a la aplicación que ejecute la siguiente etapa en una invocación nueva (con su propio límite de tiempo) */
@@ -402,6 +473,13 @@ export async function ejecutarParteRedaccion(id: string, turno: number): Promise
   try {
     const usuario = await db.usuario.findUnique({ where: { id: p.sesion.usuario.id }, select: { estado: true } });
     if (usuario?.estado !== 'ACTIVO') throw new ErrorNegocio('El usuario que inició la redacción ya no está activo.');
+    // Antes de la primera parte: los documentos sin analizar se analizan (para enviarlos como datos)
+    if (!p.preparados && p.hechas === 0 && !(p.continuaciones ?? 0) && !enviaOriginales()) {
+      const quedan = await analizarPendientes(a.expedienteId, p, () => guardar(id, p));
+      if (!quedan) p.preparados = true;
+      if (!(await guardar(id, p))) return;
+      return encadenar(id, p);
+    }
     const plantillas = await cargarPlantillas(p.plantillas);
     if (p.hechas < p.partes) {
       // Si la parte se cortó por longitud, lo rescatado queda guardado y la siguiente invocación continúa la misma parte
