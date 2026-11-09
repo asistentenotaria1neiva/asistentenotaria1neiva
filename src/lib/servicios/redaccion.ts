@@ -41,8 +41,9 @@ import { abrirPdf } from '../pdf';
 import { llamarEstructurado, configuracionModelo, prepararDocumento, ErrorIA, type ResultadoLlamada } from '../ia/cliente';
 import { SISTEMA_REDACCION, ESQUEMA_REDACCION } from '../ia/instrucciones';
 import { TIPOS_DOCUMENTALES, compactarHechos, type TipoDocumental } from '../ia/documentos';
-import { plantillaAprobada, ErrorPlantilla } from './plantillas';
+import { plantillasAprobadas, nombreVariante, ErrorPlantilla } from './plantillas';
 import { textoDePlantilla } from './revision-plantillas';
+import { elegirVariante, type EleccionPlantilla } from './eleccion-plantilla';
 import { obtenerExpediente, puedeEditar, datosDe, actosDe, bloqueos, ErrorNegocio } from './expedientes';
 import { estadoAsistente, esAdicional } from './asistente';
 import { instruccionesAprobadas, analizarDocumento } from './documentos';
@@ -110,6 +111,8 @@ export interface InfoRedaccion {
   verificar?: string[];
   indicaciones: string | null;
   modelo: string;
+  /** Variante de plantilla elegida en los tipos con varias aprobadas (por la IA o por el funcionario) */
+  elecciones?: EleccionPlantilla[];
 }
 
 /** Avance de una redacción por partes (analisis_ia.progreso) */
@@ -124,7 +127,11 @@ interface ProgresoRedaccion {
   /** Dirección de la aplicación para encadenar las etapas; sin ella (pruebas) todo corre seguido */
   base: string | null;
   indicaciones: string | null;
-  plantillas: { tipoId: string; nombre: string; version: number; id: string }[];
+  /** En un tipo con variantes, `id` queda vacío hasta que se elige la variante (etapa previa a la primera parte) */
+  plantillas: { tipoId: string; nombre: string; version: number; id: string; variante?: string }[];
+  /** Tipos con varias variantes aprobadas: entre cuáles se elige y, si la indicó el funcionario, cuál */
+  porElegir?: { tipoId: string; candidatas: string[]; forzada: string | null }[];
+  elecciones?: EleccionPlantilla[];
   parrafos: ParrafoRedactado[];
   resumenes: string[];
   datosExtraidos: RespuestaRedaccion['datos_extraidos'];
@@ -211,15 +218,29 @@ function textoRespuesta(v: unknown, datos: DatosExpediente): string {
   return String(v);
 }
 
-interface Plantilla { tipoId: string; nombre: string; version: number; id: string; archivo: Buffer }
+interface Plantilla { tipoId: string; nombre: string; version: number; id: string; archivo: Buffer; variante?: string }
+type PlantillaElegida = ProgresoRedaccion['plantillas'][number];
 
-/** La plantilla aprobada de cada acto y, si el acto tiene formulario propio, los bloques comunes aprobados */
-async function plantillasDe(actos: string[]): Promise<Plantilla[]> {
-  const lista: Plantilla[] = [];
+/**
+ * La plantilla aprobada de cada acto y, si el acto tiene formulario propio, los bloques comunes
+ * aprobados. En un tipo con varias variantes aprobadas, la plantilla queda por elegir (`porElegir`,
+ * id vacío) salvo que `forzadas` (tipo → id de plantilla, elegida por el funcionario) diga cuál.
+ */
+async function plantillasDe(actos: string[], forzadas: Record<string, string> = {}): Promise<{ lista: PlantillaElegida[]; porElegir: NonNullable<ProgresoRedaccion['porElegir']> }> {
+  const lista: PlantillaElegida[] = [];
+  const porElegir: NonNullable<ProgresoRedaccion['porElegir']> = [];
   const agregar = async (tipoId: string, obligatoria: boolean) => {
+    const nombre = ESQUEMAS[tipoId]?.titulo ?? ACTOS[tipoId]?.nombre ?? tipoId;
     try {
-      const p = await plantillaAprobada(tipoId);
-      lista.push({ tipoId, nombre: ESQUEMAS[tipoId]?.titulo ?? ACTOS[tipoId]?.nombre ?? tipoId, version: p.version, id: p.id, archivo: Buffer.from(p.archivo) });
+      const aprobadas = await plantillasAprobadas(tipoId);
+      if (aprobadas.length > 1) {
+        const forzada = aprobadas.find((x) => x.id === forzadas[tipoId]) ?? null;
+        lista.push({ tipoId, nombre, version: forzada?.version ?? 0, id: '', ...(forzada ? { variante: nombreVariante(forzada) } : {}) });
+        porElegir.push({ tipoId, candidatas: aprobadas.map((x) => x.id), forzada: forzada?.id ?? null });
+        return;
+      }
+      const p = aprobadas[0];
+      lista.push({ tipoId, nombre, version: p.version, id: p.id, ...(p.variante ? { variante: nombreVariante(p) } : {}) });
     } catch (e) {
       if (obligatoria || !(e instanceof ErrorPlantilla)) throw e;
     }
@@ -231,7 +252,44 @@ async function plantillasDe(actos: string[]): Promise<Plantilla[]> {
     await agregar('cierre', false);
     for (const anexo of new Set(actos.map((a) => ACTOS[a]?.anexo).filter((x): x is string => !!x))) await agregar(anexo, false);
   }
-  return lista;
+  return { lista, porElegir };
+}
+
+/**
+ * Tipos de los actos que tienen varias variantes aprobadas, con sus opciones (para que el
+ * funcionario elija una al generar o deje que la IA la elija).
+ */
+export async function variantesDeActos(actos: string[]) {
+  if (!actos.length) return [];
+  const filas = await db.plantilla.findMany({
+    where: { tipoId: { in: actos }, estado: 'APROBADA', tipo: { variantes: true } },
+    orderBy: { version: 'desc' }, select: { id: true, tipoId: true, version: true, variante: true, nombreArchivo: true, criterios: true },
+  });
+  return actos.flatMap((tipoId) => {
+    const opciones = filas.filter((f) => f.tipoId === tipoId);
+    return opciones.length > 1 ? [{ tipoId, nombre: ESQUEMAS[tipoId]?.titulo ?? ACTOS[tipoId]?.nombre ?? tipoId, opciones: opciones.map((o) => ({ id: o.id, version: o.version, variante: nombreVariante(o), criterios: o.criterios })).sort((a, b) => a.variante.localeCompare(b.variante)) }] : [];
+  });
+}
+
+/** Etapa previa a la primera parte: elige la variante de cada tipo que la tiene por elegir */
+async function elegirVariantes(expedienteId: string, p: ProgresoRedaccion) {
+  const e = await obtenerExpediente(p.sesion, expedienteId);
+  const datos = datosDe(e);
+  const indicaciones = [p.indicaciones, ...actosDe(e).map((a) => (datos.actos[a] as Record<string, unknown> | undefined)?.[CAMPO_INDICACIONES])].filter((x): x is string => typeof x === 'string' && !!x.trim());
+  p.elecciones ??= [];
+  for (const pe of p.porElegir ?? []) {
+    if (p.elecciones.some((x) => x.tipoId === pe.tipoId)) continue;
+    const candidatas = (await db.plantilla.findMany({ where: { id: { in: pe.candidatas } }, orderBy: { version: 'desc' }, select: { id: true, version: true, variante: true, nombreArchivo: true, criterios: true, archivo: true, estado: true } }))
+      .filter((c) => c.estado === 'APROBADA');
+    if (!candidatas.length) throw new ErrorNegocio('Las plantillas aprobadas de este tipo cambiaron mientras se redactaba. Genere la escritura de nuevo.');
+    const nombreTipo = p.plantillas.find((x) => x.tipoId === pe.tipoId)?.nombre ?? pe.tipoId;
+    const eleccion = await elegirVariante({ tipoId: pe.tipoId, nombreTipo, candidatas, expedienteId, usuarioId: p.sesion.usuario.id, indicaciones, forzada: pe.forzada });
+    p.elecciones.push(eleccion);
+    for (const x of p.plantillas) if (x.tipoId === pe.tipoId && !x.id) Object.assign(x, { id: eleccion.id, version: eleccion.version, variante: eleccion.variante });
+    if (eleccion.confianza === 'BAJA') {
+      p.alertas.push({ nivel: 'REVISAR', campo: `Plantilla de «${nombreTipo}»`, detalle: `Se redactó sobre la variante «${eleccion.variante}», pero la elección es dudosa: ${eleccion.motivo} Si no corresponde, elija la variante correcta al generar una nueva versión.` });
+    }
+  }
 }
 
 /**
@@ -241,7 +299,7 @@ async function plantillasDe(actos: string[]): Promise<Plantilla[]> {
  * `base`: dirección de la aplicación para encadenar las etapas (urlAplicacion()); sin ella, las
  * partes corren una tras otra en la misma invocación (pruebas).
  */
-export async function iniciarRedaccion(s: SesionActiva, expedienteId: string, indicaciones?: string, base?: string) {
+export async function iniciarRedaccion(s: SesionActiva, expedienteId: string, indicaciones?: string, base?: string, variantes: Record<string, string> = {}) {
   const e = await obtenerExpediente(s, expedienteId);
   if (!puedeEditar(s, e)) throw new ErrorNegocio('La escritura solo se redacta mientras el expediente está en elaboración.');
   if (!process.env.ANTHROPIC_API_KEY) throw new ErrorNegocio('La IA no está configurada: sin ella no se puede redactar la escritura.');
@@ -252,9 +310,9 @@ export async function iniciarRedaccion(s: SesionActiva, expedienteId: string, in
   const criticas = (await bloqueos(expedienteId)).criticas.filter((o) => !NO_BLOQUEAN.has(o.codigo));
   if (criticas.length) throw new ErrorNegocio(`No se puede redactar la escritura: hay ${criticas.length} observación(es) CRÍTICA(S) abiertas.`);
 
-  let plantillas: Plantilla[];
+  let plantillas: Awaited<ReturnType<typeof plantillasDe>>;
   try {
-    plantillas = await plantillasDe(actosDe(e));
+    plantillas = await plantillasDe(actosDe(e), variantes);
   } catch (err) {
     if (err instanceof ErrorPlantilla) throw new ErrorNegocio(err.message);
     throw err;
@@ -262,7 +320,8 @@ export async function iniciarRedaccion(s: SesionActiva, expedienteId: string, in
   const progreso: ProgresoRedaccion = {
     clase: 'REDACCION', hechas: 0, partes: Math.max(actosDe(e).length, 1), turno: 0, reanudaciones: 0, sesion: s, base: base ?? null,
     indicaciones: indicaciones?.trim().slice(0, 4000) || null,
-    plantillas: plantillas.map(({ tipoId, nombre, version, id }) => ({ tipoId, nombre, version, id })),
+    plantillas: plantillas.lista,
+    ...(plantillas.porElegir.length ? { porElegir: plantillas.porElegir } : {}),
     parrafos: [], resumenes: [], datosExtraidos: [], alertas: [], noUtilizados: [], noEnviados: [], documentos: 0,
     modelo: configuracionModelo('REDACCION').modelo, versionInstruccion: null, tokensEntrada: 0, tokensSalida: 0, tokensCacheLectura: 0, duracionMs: 0,
   };
@@ -272,6 +331,7 @@ export async function iniciarRedaccion(s: SesionActiva, expedienteId: string, in
 
 /** Las plantillas de la redacción, tal como se eligieron al iniciarla */
 async function cargarPlantillas(lista: ProgresoRedaccion['plantillas']): Promise<Plantilla[]> {
+  if (lista.some((p) => !p.id)) throw new ErrorNegocio('Falta elegir la variante de la plantilla. Genere la escritura de nuevo.');
   const filas = await db.plantilla.findMany({ where: { id: { in: lista.map((p) => p.id) } }, select: { id: true, archivo: true } });
   return lista.map((p) => {
     const f = filas.find((x) => x.id === p.id);
@@ -444,7 +504,7 @@ const CONTINUACION = [
 function instruccionDeParte(k: number, actos: string[], previos: ParrafoRedactado[], continua = false): string {
   const n = actos.length;
   const yaRedactado = `<ya_redactado>\n${previos.map((x) => x.texto).join('\n')}\n</ya_redactado>`;
-  if (n <= 1) return ['Redacta la escritura completa de este negocio tomando como referencia la plantilla y los documentos.', continua ? CONTINUACION : '', continua ? yaRedactado : ''].filter(Boolean).join('\n');
+  if (n <= 1) return ['Redacta la escritura completa de este negocio tomando como referencia la plantilla y los documentos: de principio a fin, empezando por la carátula (escritura número, fecha, personas que intervienen, especificación y valor del acto, inmueble), siguiendo con la comparecencia y el acto, y terminando con el cierre.', continua ? CONTINUACION : '', continua ? yaRedactado : ''].filter(Boolean).join('\n');
   const nombre = (i: number) => `${ORDINALES[i] ?? `${i + 1}.º`} ACTO («${ESQUEMAS[actos[i]]?.titulo ?? ACTOS[actos[i]]?.nombre ?? actos[i]}»)`;
   const que = k === 0
     ? `la carátula y el encabezado de la escritura (con todos los actos), la comparecencia y el ${nombre(0)} completo`
@@ -477,6 +537,12 @@ export async function ejecutarParteRedaccion(id: string, turno: number): Promise
     if (!p.preparados && p.hechas === 0 && !(p.continuaciones ?? 0) && !enviaOriginales()) {
       const quedan = await analizarPendientes(a.expedienteId, p, () => guardar(id, p));
       if (!quedan) p.preparados = true;
+      if (!(await guardar(id, p))) return;
+      return encadenar(id, p);
+    }
+    // Ya leídos los documentos: en los tipos con variantes, la IA elige la plantilla (su propia etapa)
+    if (p.plantillas.some((x) => !x.id)) {
+      await elegirVariantes(a.expedienteId, p);
       if (!(await guardar(id, p))) return;
       return encadenar(id, p);
     }
@@ -535,7 +601,7 @@ async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantil
       registro: { usuarioId: s.usuario.id, expedienteId },
       sistema: SISTEMA_REDACCION + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
       contenido: [
-        ...plantillas.map((m) => ({ type: 'text' as const, text: `<modelo tipo="${m.tipoId}" nombre="${m.nombre}" version="${m.version}">\n${textoDePlantilla(m.archivo).slice(0, LIMITE_MODELO)}\n</modelo>` })),
+        ...plantillas.map((m) => ({ type: 'text' as const, text: `<modelo tipo="${m.tipoId}" nombre="${m.nombre}" version="${m.version}"${m.variante ? ` variante="${m.variante.replace(/"/g, "'")}"` : ''}>\n${textoDePlantilla(m.archivo).slice(0, LIMITE_MODELO)}\n</modelo>` })),
         ...docs.contenido,
         // Hasta aquí es igual en todas las partes: las siguientes lo leen de la caché
         { type: 'text', text: `<caso>\n${JSON.stringify(caso)}\n</caso>`, ...(p.partes > 1 ? { cache_control: { type: 'ephemeral' as const } } : {}) },
@@ -583,6 +649,17 @@ async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantil
   return completa;
 }
 
+// Rótulos de la carátula: al comienzo de un párrafo y en mayúsculas (no «…escritura pública número 123» de la tradición)
+const INICIO_CARATULA = /^[\s*]*(?:ESCRITURA\s+P[UÚ]BLICA\s+N[UÚ]MERO|PERSONAS\s+QUE\s+INTERVIENEN)/m;
+
+/** ¿Algún modelo trae carátula y lo redactado no la tiene al comienzo? */
+export function sinCaratula(plantillas: { archivo: Buffer }[], parrafos: ParrafoRedactado[]): boolean {
+  const conCaratula = plantillas.some((m) => { try { return INICIO_CARATULA.test(textoDePlantilla(m.archivo).slice(0, 3000)); } catch { return false; } });
+  if (!conCaratula) return false;
+  const inicio = parrafos.filter((x) => x.texto.trim()).slice(0, 15).map((x) => x.texto.replace(/\*\*/g, '')).join('\n');
+  return !INICIO_CARATULA.test(inicio);
+}
+
 /** Última etapa: arma el Word con todas las partes, guarda la versión y registra las alertas */
 async function armarBorrador(expedienteId: string, analisisId: string, p: ProgresoRedaccion, plantillas: Plantilla[]) {
   const s = p.sesion;
@@ -594,6 +671,8 @@ async function armarBorrador(expedienteId: string, analisisId: string, p: Progre
   // El paquete de la primera plantilla (estilos, encabezado «Hoja No.», página) es la base del Word
   const resultado = armarEscritura(plantillas[0].archivo, parrafos);
   const alertas = p.alertas.slice(0, 60).map((a) => ({ nivel: (['CRITICA', 'REVISAR', 'INFORMATIVA'].includes(a.nivel) ? a.nivel : 'REVISAR') as NivelAlerta, campo: a.campo.slice(0, 300), detalle: a.detalle.slice(0, 1500) }));
+  // La IA a veces se salta la carátula y empieza en la comparecencia: que no pase sin verse
+  if (sinCaratula(plantillas, parrafos)) alertas.unshift({ nivel: 'CRITICA', campo: 'Carátula', detalle: 'La escritura redactada no trae la carátula (escritura número, fecha, personas que intervienen, especificación y valor del acto): empieza más adelante. Genérela de nuevo.' });
   if (p.noEnviados.length) alertas.push({ nivel: 'REVISAR', campo: 'Documentos', detalle: `No cupieron en la solicitud y no se habían analizado, así que la IA no los leyó: ${p.noEnviados.join(', ')}. Analícelos en «Documentos» o cárguelos divididos y redacte de nuevo.` });
   const info: InfoRedaccion = {
     resumen: p.resumenes.join(' ').slice(0, 2000),
@@ -606,12 +685,13 @@ async function armarBorrador(expedienteId: string, analisisId: string, p: Progre
     verificar: resultado.verificar,
     indicaciones,
     modelo: p.modelo,
+    ...(p.elecciones?.length ? { elecciones: p.elecciones } : {}),
   };
 
   let pdf: Buffer | null = null;
   try { pdf = await convertirAPdf(resultado.docx, `${e.numeroInterno}.docx`); } catch (err) { console.error('[redaccion] PDF', err); }
   const ultima = await db.borrador.findFirst({ where: { expedienteId }, orderBy: { version: 'desc' } });
-  const usadas = plantillas.map((m) => ({ tipoId: m.tipoId, version: m.version, id: m.id }));
+  const usadas = plantillas.map((m) => ({ tipoId: m.tipoId, version: m.version, id: m.id, ...(m.variante ? { variante: m.variante } : {}) }));
   const borrador = await db.borrador.create({
     data: {
       expedienteId, version: (ultima?.version ?? 0) + 1, plantillasUsadas: usadas, generadoPorId: s.usuario.id,

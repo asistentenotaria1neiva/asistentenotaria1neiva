@@ -1,10 +1,9 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { expedienteDePagina, puedeEditar, bloqueos } from '@/lib/servicios/expedientes';
+import { expedienteDePagina, puedeEditar, bloqueos, actosDe } from '@/lib/servicios/expedientes';
 import { after } from 'next/server';
-import { redaccionEnCurso, redaccionPorReanudar, ultimaRedaccion, CODIGO_REDACCION, type InfoRedaccion } from '@/lib/servicios/redaccion';
-import { accionRedactar } from '../../acciones';
+import { redaccionEnCurso, redaccionPorReanudar, ultimaRedaccion, variantesDeActos, CODIGO_REDACCION, type InfoRedaccion } from '@/lib/servicios/redaccion';import { accionRedactar } from '../../acciones';
 import { RefrescoAutomatico } from '../../formularios';
 import { FormAdmin } from '../../../admin/formularios';
 import { Tabla, fecha } from '../../../componentes';
@@ -22,16 +21,27 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
   // Una parte de la redacción que se cortó (la invocación superó su límite) se reanuda en segundo plano
   const reanudar = puedeEditar(s, e) ? await redaccionPorReanudar(id) : null;
   if (reanudar) after(reanudar);
-  const [versiones, b, enCurso, ultimaIA, nDocs] = await Promise.all([
+  const [versiones, b, enCurso, ultimaIA, nDocs, conVariantes] = await Promise.all([
     db.borrador.findMany({ where: { expedienteId: id }, orderBy: { version: 'desc' } }),
     bloqueos(id),
     redaccionEnCurso(id),
     ultimaRedaccion(id),
     db.documento.count({ where: { expedienteId: id, origenId: null } }),
+    variantesDeActos(actosDe(e)),
   ]);
   const ultimo = versiones[0];
   const desactualizado = ultimo && ultimo.creadoEn < e.actualizadoEn;
   const info = ultimo?.redaccion as Partial<InfoRedaccion> | null | undefined;
+  // Tipos con varias plantillas aprobadas: la IA elige la variante, o el funcionario la fija (se recuerda la que fijó)
+  const camposVariante = conVariantes.map((t) => {
+    const fijada = info?.elecciones?.find((x) => x.tipoId === t.tipoId && !x.automatica);
+    return {
+      nombre: `plantilla:${t.tipoId}`, etiqueta: `Plantilla de «${t.nombre}»`, tipo: 'select' as const,
+      valor: fijada && t.opciones.some((o) => o.id === fijada.id) ? fijada.id : '',
+      opciones: [['', `Automática: la IA elige entre las ${t.opciones.length} variantes según los documentos`], ...t.opciones.map((o) => [o.id, `${o.variante} · v${o.version}`])] as [string, string][],
+      ayuda: 'La estructura cambia según el banco, la obra o la constructora. Déjela en automática salvo que la IA haya elegido mal.',
+    };
+  });
   // Las alertas y marcas «FALTA» de la versión anterior no impiden redactar de nuevo
   const criticas = b.criticas.filter((o) => o.codigo !== 'R12-BORRADOR-INCOMPLETO' && o.codigo !== CODIGO_REDACCION);
   const editable = puedeEditar(s, e);
@@ -55,7 +65,7 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
             {desactualizado && <div className="aviso alerta">Hubo cambios después de la última versión. Redáctela de nuevo antes de enviarla a revisión.</div>}
             {editable && nDocs > 0 && (
               <FormAdmin accion={accionRedactar.bind(null, id)}
-                campos={[{ nombre: 'indicaciones', etiqueta: ultimo ? 'Indicaciones para la nueva versión (opcional)' : 'Indicaciones (opcional)', tipo: 'area', valor: info?.indicaciones ?? '',
+                campos={[...camposVariante, { nombre: 'indicaciones', etiqueta: ultimo ? 'Indicaciones para la nueva versión (opcional)' : 'Indicaciones (opcional)', tipo: 'area', valor: info?.indicaciones ?? '',
                   ayuda: 'Lo que la IA debe tener en cuenta y no está en los documentos, o qué corregir de la versión anterior (p. ej. «el usufructuario vive en Palermo», «el lindero sur es 33B»).' }]}
                 botones={[{ texto: ultimo ? 'Generar nueva versión' : 'Generar escritura' }]} mensajePendiente="Iniciando la redacción…" />
             )}
@@ -67,6 +77,12 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
         <section className="tarjeta">
           <h3 style={{ marginTop: 0 }}>Versión {ultimo.version}</h3>
           {info.resumen && <p>{info.resumen}</p>}
+          {info.elecciones?.map((x) => (
+            <div key={x.tipoId} className={`aviso ${x.confianza === 'BAJA' ? 'alerta' : 'info'}`}>
+              Plantilla usada: variante <strong>«{x.variante}»</strong> (v{x.version}){x.automatica ? `, elegida por la IA entre ${x.opciones} variantes · confianza ${x.confianza.toLowerCase()}` : ', indicada por el funcionario'}. {x.automatica && x.motivo}
+              {x.automatica && x.confianza !== 'ALTA' && ' Si no corresponde, elija la variante correcta arriba y genere una nueva versión.'}
+            </div>
+          ))}
           {(!!info.faltantes?.length || !!info.verificar?.length) && <p className="suave">En el Word, lo que falta y lo que toca verificar va <mark>resaltado en amarillo</mark> (lo que falta, además en negrilla). Búsquelos en Word con Ctrl+B por «FALTA» o «VERIFICAR».</p>}
           {!!info.faltantes?.length && <div className="aviso error">Faltan {info.faltantes.length} dato(s), marcados <mark><strong>«FALTA»</strong></mark> en el texto: {info.faltantes.join(', ')}. Cargue el documento o escríbalos en las indicaciones y genere de nuevo.</div>}
           {!!info.verificar?.length && (
@@ -136,7 +152,7 @@ export default async function Borrador({ params }: { params: Promise<{ id: strin
               <tr key={v.id}>
                 <td className="principal-celda"><strong>v{v.version}</strong></td>
                 <td data-etiqueta="Fecha">{fecha(v.creadoEn)}</td>
-                <td data-etiqueta="Plantilla" className="suave">{(v.plantillasUsadas as { tipoId: string; version: number }[]).map((p) => `${p.tipoId} v${p.version}`).join(', ')}</td>
+                <td data-etiqueta="Plantilla" className="suave">{(v.plantillasUsadas as { tipoId: string; version: number; variante?: string }[]).map((p) => `${p.tipoId} v${p.version}${p.variante ? ` («${p.variante}»)` : ''}`).join(', ')}</td>
                 <td data-etiqueta="Descargar">
                   <a className="boton secundario pequeno" href={`/api/borradores/${v.id}?formato=docx`}>Word</a>
                 </td>

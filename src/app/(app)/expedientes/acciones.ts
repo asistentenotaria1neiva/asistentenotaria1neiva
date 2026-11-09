@@ -120,10 +120,10 @@ export async function accionAplicarCorrecciones(expedienteId: string, analisisId
 }
 
 /** La IA redacta la escritura desde los documentos, sobre la plantilla del tipo (src/lib/servicios/redaccion.ts) */
-async function redactar(expedienteId: string, indicaciones?: string): Promise<Resultado> {
+async function redactar(expedienteId: string, indicaciones?: string, variantes?: Record<string, string>): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {
-    const r = await iniciarRedaccion(s, expedienteId, indicaciones, await urlAplicacion());
+    const r = await iniciarRedaccion(s, expedienteId, indicaciones, await urlAplicacion(), variantes);
     // La IA redacta después de responder: la persona puede salir de la página
     after(r.tarea);
     return `La IA está leyendo los documentos y redactando la escritura sobre la plantilla${r.partes > 1 ? `, un acto a la vez (${r.partes} partes)` : ''}; tarda unos minutos. Puede salir de esta página: le avisaremos al terminar.`;
@@ -134,9 +134,14 @@ export async function accionGenerarBorrador(expedienteId: string): Promise<Resul
   return redactar(expedienteId);
 }
 
-/** Con indicaciones del funcionario para esta versión (formulario) */
+/**
+ * Con indicaciones del funcionario para esta versión (formulario). Los campos «plantilla:<tipo>»
+ * fijan la variante de plantilla de ese tipo; vacíos, la IA la elige según los documentos.
+ */
 export async function accionRedactar(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
-  return redactar(expedienteId, String(f.get('indicaciones') ?? ''));
+  const variantes: Record<string, string> = {};
+  for (const [k, v] of f.entries()) if (k.startsWith('plantilla:') && typeof v === 'string' && v) variantes[k.slice('plantilla:'.length)] = v;
+  return redactar(expedienteId, String(f.get('indicaciones') ?? ''), variantes);
 }
 
 export async function accionFlujo(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {

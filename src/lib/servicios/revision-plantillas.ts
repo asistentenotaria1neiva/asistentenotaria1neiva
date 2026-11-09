@@ -16,6 +16,7 @@ import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
 import { vistaPreviaDocx, textoDeParrafos } from '../escritura/vista-previa';
 import { llamarEstructurado, ErrorIA } from '../ia/cliente';
 import { SISTEMA_REVISION_PLANTILLA, ESQUEMA_REVISION_PLANTILLA } from '../ia/instrucciones';
+import { nombreVariante } from './plantillas';
 
 export type NivelHallazgo = 'CRITICA' | 'ADVERTENCIA' | 'INFORMATIVA';
 export type Veredicto = 'APTA' | 'APTA_CON_OBSERVACIONES' | 'NO_APTA';
@@ -71,9 +72,12 @@ const LIMITE_TEXTO = 80_000; // caracteres por texto enviado a la IA
 /** Texto del modelo (un párrafo por línea), para la IA */
 export const textoDePlantilla = (archivo: Buffer | Uint8Array) => textoDeParrafos(vistaPreviaDocx(Buffer.from(archivo)));
 
-async function verificar(p: Pick<Plantilla, 'id' | 'tipoId' | 'archivo'>) {
+async function verificar(p: Pick<Plantilla, 'id' | 'tipoId' | 'archivo' | 'variante' | 'nombreArchivo'>) {
   const texto = textoDePlantilla(p.archivo);
-  const aprobada = await db.plantilla.findFirst({ where: { tipoId: p.tipoId, estado: 'APROBADA', id: { not: p.id } }, orderBy: { version: 'desc' } });
+  // En un tipo con variantes se compara con la aprobada de la misma variante
+  const tipo = await db.tipoEscritura.findUnique({ where: { id: p.tipoId }, select: { variantes: true } });
+  const candidatas = await db.plantilla.findMany({ where: { tipoId: p.tipoId, estado: 'APROBADA', id: { not: p.id } }, orderBy: { version: 'desc' } });
+  const aprobada = candidatas.find((c) => !tipo?.variantes || nombreVariante(c).toLowerCase() === nombreVariante(p).toLowerCase());
   const textoAprobada = aprobada ? textoDePlantilla(aprobada.archivo) : null;
   const lineas = texto.split('\n').map((l) => l.trim()).filter(Boolean);
   let parrafosCambiados: number | undefined;
@@ -88,9 +92,10 @@ async function verificar(p: Pick<Plantilla, 'id' | 'tipoId' | 'archivo'>) {
   return { automatica, texto, textoAprobada };
 }
 
-function solicitud(p: Pick<Plantilla, 'version' | 'nombreArchivo' | 'notas'> & { tipo: { id: string; nombre: string; categoria: string; esBloque: boolean; descripcion: string | null; normas: string | null } }, v: Awaited<ReturnType<typeof verificar>>): string {
+function solicitud(p: Pick<Plantilla, 'version' | 'nombreArchivo' | 'notas' | 'variante' | 'criterios'> & { tipo: { id: string; nombre: string; categoria: string; esBloque: boolean; descripcion: string | null; normas: string | null; variantes: boolean } }, v: Awaited<ReturnType<typeof verificar>>): string {
   return [
     `TIPO: ${p.tipo.nombre} (${p.tipo.id}) · ${p.tipo.esBloque ? 'bloque común de las escrituras de compraventa (carátula, cierre u oficios)' : p.tipo.categoria}`,
+    p.tipo.variantes && `Este tipo tiene varias plantillas aprobadas (una por variante: banco, obra, constructora…). Esta es la variante «${nombreVariante(p)}»${p.criterios ? `, que se usa cuando: ${p.criterios}` : ''}. Revísela como modelo de ESA variante; la comparación es con la versión aprobada de la misma variante.`,
     p.tipo.descripcion && `Descripción: ${p.tipo.descripcion}`,
     p.tipo.normas && `Referencia normativa registrada (pendiente de validar por el notario): ${p.tipo.normas}`,
     `VERSIÓN EN REVISIÓN: ${p.version} (archivo ${p.nombreArchivo})`,

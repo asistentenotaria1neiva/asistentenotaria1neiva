@@ -118,6 +118,8 @@ model TipoEscritura {
   prioridad   String // Alta | Media | Baja
   esBloque    Boolean @default(false) // bloque común (carátula, cierre…) y no un acto
   activo      Boolean @default(true)
+  // Admite varias plantillas aprobadas a la vez (variantes por banco, obra…); la IA elige una por caso
+  variantes   Boolean @default(false)
   descripcion String?
   normas      String? // referencia normativa – pendiente de validar por el notario
 
@@ -139,6 +141,9 @@ model Plantilla {
   archivo       Bytes // .docx: modelo de redacción del tipo de escritura (la IA redacta sobre él; sin variables)
   hashSha256    String
   notas         String?
+  // Tipos con variantes: nombre de la variante (sus versiones comparten el nombre) y cuándo usarla
+  variante      String?
+  criterios     String?
   cargadaPor    Usuario?         @relation("cargadaPor", fields: [cargadaPorId], references: [id])
   cargadaPorId  String?
   aprobadaPor   Usuario?         @relation("aprobadaPor", fields: [aprobadaPorId], references: [id])

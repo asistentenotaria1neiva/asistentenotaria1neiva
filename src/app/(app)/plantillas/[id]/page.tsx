@@ -6,10 +6,10 @@ import { ESQUEMAS } from '@/lib/escritura/esquemas';
 import { vistaPreviaDocx } from '@/lib/escritura/vista-previa';
 import { enRevision, type RevisionPlantilla } from '@/lib/servicios/revision-plantillas';
 import { estadoCorreccionPlantilla } from '@/lib/servicios/correccion-plantillas';
-import { accionCargarPlantilla, accionPlantilla, accionEliminarPlantilla, accionRevisarPlantilla, accionProponerCorreccionesPlantilla, accionAplicarCorreccionesPlantilla } from '../acciones';
-import { FormAdmin } from '../../admin/formularios';
+import { nombreVariante } from '@/lib/servicios/plantillas';
+import { accionCargarPlantilla, accionPlantilla, accionEliminarPlantilla, accionRevisarPlantilla, accionProponerCorreccionesPlantilla, accionAplicarCorreccionesPlantilla, accionVariante, accionAprobarVariantes, accionCambiarVariantes } from '../acciones';import { FormAdmin } from '../../admin/formularios';
 import { PanelCorreccionIA, RefrescoAutomatico } from '../../expedientes/formularios';
-import { fecha } from '../../componentes';
+import { Tabla, fecha } from '../../componentes';
 import { CATEGORIA, ESTADO_PLANTILLA, PanelRevision, VistaDocumento, hallazgosOrdenados } from '../componentes';
 
 const TEXTOS_CORRECCION = {
@@ -32,7 +32,7 @@ export default async function VersionPlantilla({ params, searchParams }: { param
   const p = await db.plantilla.findUnique({
     where: { id },
     include: {
-      tipo: { include: { plantillas: { select: { id: true, version: true, estado: true }, orderBy: { version: 'desc' } } } },
+      tipo: { include: { plantillas: { select: { id: true, version: true, estado: true, variante: true, nombreArchivo: true, criterios: true }, orderBy: { version: 'desc' } } } },
       cargadaPor: { select: { nombreCompleto: true } },
       aprobadaPor: { select: { nombreCompleto: true } },
     },
@@ -53,6 +53,21 @@ export default async function VersionPlantilla({ params, searchParams }: { param
   const mensajeHallazgo = (i: number) => revision?.ia?.hallazgos[i]?.mensaje ?? 'Hallazgo';
   const nuevaVersion = correccion?.nuevaVersionId ? p.tipo.plantillas.find((v) => v.id === correccion.nuevaVersionId) : undefined;
 
+  // Variantes: varias plantillas aprobadas del mismo tipo (por banco, obra…); cada una con sus versiones
+  const conVariantes = p.tipo.variantes;
+  const variante = nombreVariante(p);
+  const clave = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+  const versiones = conVariantes ? p.tipo.plantillas.filter((v) => clave(nombreVariante(v)) === clave(variante)) : p.tipo.plantillas;
+  const variantes = conVariantes
+    ? [...new Map(p.tipo.plantillas.map((v) => [clave(nombreVariante(v)), v])).values()].map((ultima) => {
+      const suyas = p.tipo.plantillas.filter((v) => clave(nombreVariante(v)) === clave(nombreVariante(ultima)));
+      const vigente = suyas.find((v) => v.estado === 'APROBADA');
+      const pendiente = suyas.find((v) => v.estado === 'PENDIENTE_APROBACION');
+      return { nombre: nombreVariante(ultima), principal: pendiente ?? vigente ?? suyas[0], vigente, pendiente, criterios: (vigente ?? suyas[0]).criterios };
+    }).sort((a, b) => a.nombre.localeCompare(b.nombre))
+    : [];
+  const pendientesVariantes = variantes.filter((v) => v.pendiente).length;
+
   return (
     <>
       <p><Link href="/plantillas">← Plantillas</Link></p>
@@ -60,12 +75,41 @@ export default async function VersionPlantilla({ params, searchParams }: { param
         <h1 style={{ marginBottom: 0 }}>{p.tipo.nombre}</h1>
         <span className={`etiqueta ${ESTADO_PLANTILLA[p.estado][0]}`}>v{p.version} {ESTADO_PLANTILLA[p.estado][1]}</span>
       </div>
+      {conVariantes && <p style={{ marginBottom: 0 }}>Variante <strong>«{variante}»</strong>{p.criterios ? <span className="suave"> · se usa cuando: {p.criterios}</span> : <span className="suave"> · sin criterios escritos (la IA se guía por la carátula del modelo)</span>}</p>}
       <p className="suave">{p.tipo.esBloque ? 'Bloque común de las escrituras con formulario propio' : p.tipo.categoria}{p.tipo.descripcion ? ` · ${p.tipo.descripcion}` : ''}</p>
       <p className="suave">Modelo de redacción: la IA lo toma como base (estructura, cláusulas y forma de redactar) y escribe cada escritura con los datos del caso. Los datos que trae este modelo no se copian.</p>
 
-      {p.tipo.plantillas.length > 1 && (
+      {conVariantes && (
+        <details className="tarjeta" open={variantes.length <= 12}>
+          <summary><strong>Variantes de «{p.tipo.nombre}»</strong> <span className="suave">({variantes.length} · {variantes.filter((v) => v.vigente).length} aprobadas{pendientesVariantes ? ` · ${pendientesVariantes} pendientes` : ''})</span></summary>
+          <p className="suave">La estructura de esta escritura cambia según el banco, la obra o la constructora. Al generar cada escritura, la IA lee los documentos y elige la variante aprobada que corresponde (el funcionario también puede indicarla). Cada variante tiene sus propias versiones.</p>
+          <Tabla>
+            <thead><tr><th>Variante</th><th>Estado</th><th>Cuándo usarla</th></tr></thead>
+            <tbody>{variantes.map((v) => (
+              <tr key={v.nombre}>
+                <td className="principal-celda">{v.principal.id === p.id ? <strong>{v.nombre}</strong> : <Link href={`/plantillas/${v.principal.id}`}>{v.nombre}</Link>}</td>
+                <td data-etiqueta="Estado">
+                  <div className="fila" style={{ gap: '0.25rem' }}>
+                    {v.vigente && <span className="etiqueta ok">Aprobada v{v.vigente.version}</span>}
+                    {v.pendiente && <span className="etiqueta advertencia">Pendiente v{v.pendiente.version}</span>}
+                    {!v.vigente && !v.pendiente && <span className="etiqueta">No aprobada</span>}
+                  </div>
+                </td>
+                <td data-etiqueta="Cuándo usarla" className="suave">{v.criterios ?? '—'}</td>
+              </tr>
+            ))}</tbody>
+          </Tabla>
+          {admin && pendientesVariantes > 0 && (
+            <FormAdmin accion={accionAprobarVariantes} ocultos={{ tipoId: p.tipoId }}
+              campos={[{ nombre: 'confirmacion', etiqueta: `Para aprobar las ${pendientesVariantes} variantes pendientes escriba: APROBADA POR EL NOTARIO`, ayuda: 'Apruebe en bloque solo si el notario revisó todas. Si una variante tiene una versión aprobada, esta queda retirada y la reemplaza la pendiente.' }]}
+              botones={[{ texto: `Aprobar las ${pendientesVariantes} pendientes`, clase: 'exito' }]} />
+          )}
+        </details>
+      )}
+
+      {versiones.length > 1 && (
         <nav className="pestanas" aria-label="Versiones">
-          {p.tipo.plantillas.map((v) => (
+          {versiones.map((v) => (
             <Link key={v.id} href={`/plantillas/${v.id}${vista !== 'diseno' ? `?vista=${vista}` : ''}`} aria-current={v.id === p.id ? 'page' : undefined}>
               v{v.version} · {ESTADO_PLANTILLA[v.estado][1]}
             </Link>
@@ -152,21 +196,46 @@ export default async function VersionPlantilla({ params, searchParams }: { param
             {p.tipo.normas && <p className="suave">{p.tipo.normas}</p>}
           </section>
 
+          {conVariantes && (
+            <section className="tarjeta">
+              <h2 style={{ marginTop: 0 }}>Variante</h2>
+              <p className="suave">El nombre identifica la variante (todas sus versiones lo comparten). Los criterios le dicen a la IA cuándo usarla: banco o entidad, obra o constructora, actos que van juntos, subsidio. No cambian el texto del modelo.</p>
+              <FormAdmin accion={accionVariante} ocultos={{ id: p.id }} campos={[
+                { nombre: 'variante', etiqueta: 'Nombre de la variante', valor: variante },
+                { nombre: 'criterios', etiqueta: 'Cuándo usarla', tipo: 'area', valor: p.criterios ?? '', ayuda: 'P. ej.: «Hipoteca a favor de BANCOLOMBIA; vende CONSTRUESPACIOS S.A.S. (fideicomiso Valle de Génova, Acción Fiduciaria); compraventa con constitución de patrimonio de familia; subsidio de Comfamiliar».' },
+              ]} botones={[{ texto: 'Guardar', clase: 'secundario' }]} />
+            </section>
+          )}
+
           <section className="tarjeta">
-            <h2 style={{ marginTop: 0 }}>Cargar nueva versión</h2>
-            <p className="suave">Será la v{Math.max(...p.tipo.plantillas.map((v) => v.version)) + 1} de esta plantilla y quedará pendiente de aprobación. Cargue la escritura modelo tal como está en Word; después puede pedir la revisión de la IA.</p>
-            <FormAdmin accion={accionCargarPlantilla} ocultos={{ tipoId: p.tipoId }} campos={[
+            <h2 style={{ marginTop: 0 }}>Cargar nueva versión{conVariantes ? ' de esta variante' : ''}</h2>
+            <p className="suave">Será la v{Math.max(...p.tipo.plantillas.map((v) => v.version)) + 1}{conVariantes ? ` y reemplazará a la variante «${variante}» al aprobarse` : ' de esta plantilla'}; quedará pendiente de aprobación. Cargue la escritura modelo tal como está en Word; después puede pedir la revisión de la IA.</p>
+            <FormAdmin accion={accionCargarPlantilla} ocultos={{ tipoId: p.tipoId, ...(conVariantes ? { variante } : {}) }} campos={[
               { nombre: 'archivo', etiqueta: 'Escritura modelo (.docx)', tipo: 'archivo' },
               { nombre: 'notas', etiqueta: 'Notas de la versión', tipo: 'area', ayuda: 'Qué cambió y por qué (la IA también lo lee).' },
             ]} botones={[{ texto: 'Cargar versión' }]}
             mensajePendiente="Cargando la versión…" />
           </section>
 
+          {conVariantes && (
+            <section className="tarjeta">
+              <h2 style={{ marginTop: 0 }}>Agregar otra variante</h2>
+              <p className="suave">Para un banco, una obra o una combinación de actos que aún no tiene modelo. Queda pendiente de aprobación; las variantes aprobadas siguen vigentes.</p>
+              <FormAdmin accion={accionCargarPlantilla} ocultos={{ tipoId: p.tipoId, nuevaVariante: '1' }} campos={[
+                { nombre: 'archivo', etiqueta: 'Escritura modelo (.docx)', tipo: 'archivo' },
+                { nombre: 'variante', etiqueta: 'Nombre de la variante', ayuda: 'P. ej. «Davivienda · RDG Construcciones Villa Santa». Sin nombre se usa el del archivo.' },
+                { nombre: 'criterios', etiqueta: 'Cuándo usarla', tipo: 'area', ayuda: 'Banco o entidad, obra o constructora, actos que van juntos, subsidio. Si lo deja vacío, la IA se guía por la carátula del modelo.' },
+                { nombre: 'notas', etiqueta: 'Notas', tipo: 'area' },
+              ]} botones={[{ texto: 'Agregar variante' }]}
+              mensajePendiente="Cargando la variante…" />
+            </section>
+          )}
+
           {p.estado !== 'RETIRADA' && (
             <section className="tarjeta">
               <h2 style={{ marginTop: 0 }}>Aprobación</h2>
               {!admin ? (
-                <p className="suave">{p.estado === 'APROBADA' ? 'Es la versión vigente.' : 'La aprueba el administrador por indicación del notario, después de revisar el texto y los hallazgos.'}</p>
+                <p className="suave">{p.estado === 'APROBADA' ? (conVariantes ? 'Es la versión vigente de esta variante.' : 'Es la versión vigente.') : 'La aprueba el administrador por indicación del notario, después de revisar el texto y los hallazgos.'}</p>
               ) : p.estado === 'PENDIENTE_APROBACION' ? (
                 <>
                   {revision?.ia?.veredicto === 'NO_APTA' && <div className="aviso error">La IA la marcó como <strong>no apta</strong>. Revise los hallazgos con el notario antes de aprobar.</div>}
@@ -175,7 +244,26 @@ export default async function VersionPlantilla({ params, searchParams }: { param
                     botones={[{ operacion: 'aprobar', texto: 'Aprobar', clase: 'exito' }, { operacion: 'retirar', texto: 'Retirar', clase: 'secundario' }]} />
                 </>
               ) : (
-                <FormAdmin accion={accionPlantilla} ocultos={{ id: p.id }} botones={[{ operacion: 'retirar', texto: 'Retirar', clase: 'peligro' }]} confirmar={{ retirar: 'Sin una versión aprobada no se podrán redactar escrituras de este tipo. ¿Retirar?' }} />
+                <FormAdmin accion={accionPlantilla} ocultos={{ id: p.id }} botones={[{ operacion: 'retirar', texto: 'Retirar', clase: 'peligro' }]}
+                  confirmar={{ retirar: conVariantes && variantes.filter((v) => v.vigente).length > 1 ? `La IA dejará de elegir la variante «${variante}»; las demás siguen vigentes. ¿Retirar?` : 'Sin una versión aprobada no se podrán redactar escrituras de este tipo. ¿Retirar?' }} />
+              )}
+            </section>
+          )}
+
+          {admin && !p.tipo.esBloque && (
+            <section className="tarjeta">
+              <h2 style={{ marginTop: 0 }}>Varias plantillas</h2>
+              {conVariantes ? (
+                <>
+                  <p className="suave">Este tipo admite varias plantillas aprobadas a la vez (variantes) y la IA elige la que corresponde a cada caso.</p>
+                  <FormAdmin accion={accionCambiarVariantes} ocultos={{ tipoId: p.tipoId }} botones={[{ operacion: 'desactivar', texto: 'Usar una sola plantilla', clase: 'secundario' }]}
+                    confirmar={{ desactivar: 'Debe quedar una sola versión aprobada. ¿Continuar?' }} />
+                </>
+              ) : (
+                <>
+                  <p className="suave">Active esta opción si la estructura de este tipo de escritura cambia según el banco, la obra u otra circunstancia: podrá tener varias plantillas aprobadas y la IA elegirá la que corresponde a cada caso.</p>
+                  <FormAdmin accion={accionCambiarVariantes} ocultos={{ tipoId: p.tipoId }} botones={[{ operacion: 'activar', texto: 'Admitir varias plantillas', clase: 'secundario' }]} />
+                </>
               )}
             </section>
           )}

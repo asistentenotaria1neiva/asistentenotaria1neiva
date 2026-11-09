@@ -45,6 +45,17 @@ Cada plantilla es el **modelo de redacción** de su tipo de escritura: una escri
 - **Aprobar** (solo el administrador): solo después de que el notario haya leído el texto y los hallazgos; para confirmar debe escribir `APROBADA POR EL NOTARIO`. La IA solo advierte: no aprueba. La versión aprobada anterior queda retirada automáticamente. Todo queda en la auditoría.
 - **Descargar .docx** permite abrir la plantilla en Word (márgenes, encabezados y tablas se revisan allí).
 
+### Varias plantillas para un mismo tipo (variantes)
+
+Algunas escrituras cambian de estructura según el banco, la obra o la constructora (p. ej. la **compraventa con hipoteca**: la minuta de Bancolombia no es la del Banco de Bogotá, y una venta de Construespacios con fiduciaria no es la de un vendedor persona natural). Para esos tipos se aprueban **varias plantillas a la vez**, una por variante, y la IA elige la que corresponde a cada caso.
+
+- **Activar**: en la página de cualquier plantilla del tipo, sección **Varias plantillas** → *Admitir varias plantillas* (solo el administrador). La compraventa con hipoteca ya viene activada.
+- **Cada variante** tiene un **nombre** (p. ej. «Bancolombia · Construespacios Valle de Génova · subsidio Comfamiliar») y **cuándo usarla**: el banco o entidad, la obra o constructora, los actos que van juntos (cancelación de patrimonio, declaración de construcción…) y el subsidio. Mientras más claro, mejor elige la IA; si queda vacío, la IA se guía por la carátula del modelo. Se editan en la sección **Variante** de su página (no cambian el texto del modelo).
+- **Agregar una variante nueva**: sección **Agregar otra variante** en la página de cualquier variante del tipo, o desde **Cargar plantillas** (varios archivos del mismo tipo a la vez, cada uno con su nombre). **Nueva versión de una variante**: desde su propia página; al aprobarla reemplaza solo a la versión anterior de esa variante.
+- **Aprobar**: una por una o, en la tabla **Variantes**, *Aprobar las pendientes* en bloque (con la misma confirmación `APROBADA POR EL NOTARIO`). Retirar una variante solo la saca de las opciones de la IA.
+- **Al generar la escritura**: después de leer los documentos, la IA compara el caso con las variantes aprobadas y elige una; el borrador muestra cuál usó, por qué y con qué confianza. Si la confianza es baja queda una alerta «Revisar». El funcionario puede fijar la variante en **Plantilla de «…»** antes de generar.
+- **Carga por script** (una carpeta completa): `npx tsx --tsconfig tsconfig.scripts.json --env-file=.env scripts/cargar-variantes.ts <tipo> <carpeta> [--criterios archivo.json] [--prueba]`. Todo queda pendiente de aprobación.
+
 ### Cómo preparar una plantilla
 
 - Use la mejor escritura de la notaría para ese tipo de acto, completa (encabezado, comparecencia, cláusulas, constancias, otorgamiento, firmas).

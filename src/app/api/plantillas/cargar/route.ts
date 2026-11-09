@@ -3,7 +3,8 @@
  * Es un Route Handler y no una acción del servidor porque Next.js ejecuta las acciones de un
  * cliente una por una: así cada archivo va en su propia petición y los análisis corren en paralelo
  * (cada uno con su propio límite de tiempo y de tamaño).
- * Recibe: archivo (.docx: el modelo de redacción del tipo de escritura), tipoId y notas.
+ * Recibe: archivo (.docx: el modelo de redacción del tipo de escritura), tipoId y notas; en los tipos
+ * con variantes, también variante y criterios.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
@@ -31,6 +32,9 @@ export async function POST(request: NextRequest) {
       nombreArchivo: archivo.name.slice(0, 120),
       archivo: Buffer.from(await archivo.arrayBuffer()),
       notas: String(f.get('notas') ?? '').trim().slice(0, 4000) || undefined,
+      // Tipos con variantes: nombre de la variante (vacío: el del archivo) y cuándo usarla
+      variante: String(f.get('variante') ?? '').trim().slice(0, 120) || undefined,
+      criterios: String(f.get('criterios') ?? '').trim().slice(0, 2000) || undefined,
     });
     revalidatePath('/plantillas', 'layout');
     return NextResponse.json(r);

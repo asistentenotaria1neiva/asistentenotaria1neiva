@@ -13,10 +13,11 @@ import type { ResultadoCarga } from '@/lib/servicios/carga-plantillas';
 const MAXIMO = 6;
 const LIMITE_MB = 4; // Vercel limita cada petición a 4,5 MB
 
-export interface TipoCargable { id: string; nombre: string; grupo: 'nueva' | 'version'; detalle: string }
+/** `variantes`: el tipo admite varias plantillas aprobadas; cada archivo es una variante (con su nombre y cuándo usarla) */
+export interface TipoCargable { id: string; nombre: string; grupo: 'nueva' | 'version'; detalle: string; variantes?: boolean }
 
 type Estado = { fase: 'lista' } | { fase: 'cargando' } | { fase: 'hecha'; r: ResultadoCarga } | { fase: 'error'; error: string };
-interface Fila { clave: string; archivo: File; tipoId: string; notas: string; estado: Estado }
+interface Fila { clave: string; archivo: File; tipoId: string; notas: string; variante: string; criterios: string; estado: Estado }
 
 const sinTildes = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
@@ -27,11 +28,13 @@ function adivinarTipo(nombre: string, tipos: TipoCargable[]): string {
 }
 
 /** Sube un archivo a api/plantillas/cargar */
-async function enviar(f: Pick<Fila, 'archivo' | 'tipoId' | 'notas'>): Promise<Estado> {
+async function enviar(f: Pick<Fila, 'archivo' | 'tipoId' | 'notas'> & Partial<Pick<Fila, 'variante' | 'criterios'>>): Promise<Estado> {
   const datos = new FormData();
   datos.set('archivo', f.archivo);
   datos.set('tipoId', f.tipoId);
   datos.set('notas', f.notas);
+  if (f.variante) datos.set('variante', f.variante);
+  if (f.criterios) datos.set('criterios', f.criterios);
   try {
     const respuesta = await fetch('/api/plantillas/cargar', { method: 'POST', body: datos });
     const cuerpo = await respuesta.json().catch(() => ({ error: respuesta.status === 413 ? 'El archivo es demasiado grande.' : 'El servidor no respondió a tiempo. Revise la lista: la plantilla pudo haber quedado cargada.' }));
@@ -42,7 +45,7 @@ async function enviar(f: Pick<Fila, 'archivo' | 'tipoId' | 'notas'>): Promise<Es
 }
 
 function Resultado({ r }: { r: ResultadoCarga }) {
-  return <span className="etiqueta ok">Cargada v{r.version}: pendiente de aprobación</span>;
+  return <span className="etiqueta ok">Cargada v{r.version}{r.variante ? ` (variante «${r.variante}»)` : ''}: pendiente de aprobación</span>;
 }
 
 export function CargaPlantillas({ tipos, inicial }: { tipos: TipoCargable[]; inicial?: string }) {
@@ -62,7 +65,7 @@ export function CargaPlantillas({ tipos, inicial }: { tipos: TipoCargable[]; ini
     setFilas((fs) => [
       ...fs.filter((f) => f.estado.fase !== 'hecha'),
       ...nuevos.slice(0, Math.max(espacio, 0)).map((archivo, i) => ({
-        clave: `${Date.now()}-${i}-${archivo.name}`, archivo, notas: '', estado: { fase: 'lista' } as Estado,
+        clave: `${Date.now()}-${i}-${archivo.name}`, archivo, notas: '', variante: '', criterios: '', estado: { fase: 'lista' } as Estado,
         tipoId: adivinarTipo(archivo.name, tipos) || (lista?.length === 1 && !fs.length ? inicial ?? '' : ''),
       })),
     ]);
@@ -76,7 +79,9 @@ export function CargaPlantillas({ tipos, inicial }: { tipos: TipoCargable[]; ini
   async function cargarTodas() {
     setAviso(undefined);
     if (pendientes.some((f) => !f.tipoId)) return setAviso('Elija el tipo de escritura de cada archivo.');
-    const repetido = pendientes.find((f, i) => pendientes.findIndex((g) => g.tipoId === f.tipoId) !== i);
+    // Varios archivos del mismo tipo solo si el tipo admite variantes (cada uno es una variante)
+    const conVariantes = (id: string) => !!tipos.find((t) => t.id === id)?.variantes;
+    const repetido = pendientes.find((f, i) => !conVariantes(f.tipoId) && pendientes.findIndex((g) => g.tipoId === f.tipoId) !== i);
     if (repetido) return setAviso(`Hay dos archivos para «${tipos.find((t) => t.id === repetido.tipoId)?.nombre}»: cárguelos en tandas distintas (cada uno será una versión).`);
     const grande = pendientes.find((f) => f.archivo.size > LIMITE_MB * 1024 * 1024);
     if (grande) return setAviso(`«${grande.archivo.name}» supera ${LIMITE_MB} MB.`);
@@ -111,9 +116,17 @@ export function CargaPlantillas({ tipos, inicial }: { tipos: TipoCargable[]; ini
                         <optgroup label="Sin plantilla (nueva)">{opciones('nueva')}</optgroup>
                         <optgroup label="Nueva versión de una plantilla existente">{opciones('version')}</optgroup>
                       </select>
+                      {tipos.find((t) => t.id === f.tipoId)?.variantes && (
+                        <input type="text" aria-label={`Nombre de la variante de ${f.archivo.name}`} value={f.variante} disabled={!editable} style={{ marginTop: '0.25rem' }}
+                          placeholder="Nombre de la variante (p. ej. Davivienda · Villa Santa)" onChange={(e) => cambiar(f.clave, { variante: e.target.value })} />
+                      )}
                     </td>
                     <td data-etiqueta="Notas">
                       <input type="text" aria-label={`Notas de ${f.archivo.name}`} value={f.notas} disabled={!editable} placeholder="Origen u observaciones" onChange={(e) => cambiar(f.clave, { notas: e.target.value })} />
+                      {tipos.find((t) => t.id === f.tipoId)?.variantes && (
+                        <input type="text" aria-label={`Cuándo usar la variante de ${f.archivo.name}`} value={f.criterios} disabled={!editable} style={{ marginTop: '0.25rem' }}
+                          placeholder="Cuándo usarla: banco, obra, actos, subsidio" onChange={(e) => cambiar(f.clave, { criterios: e.target.value })} />
+                      )}
                     </td>
                     <td data-etiqueta="Resultado">
                       {f.estado.fase === 'lista' && <span className="suave">Lista para cargar</span>}

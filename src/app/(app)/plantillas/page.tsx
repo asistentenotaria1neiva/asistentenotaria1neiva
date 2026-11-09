@@ -67,8 +67,8 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
   const cargables: TipoCargable[] = [...tipos]
     .sort((a, b) => Number(b.esBloque) - Number(a.esBloque) || PRIORIDAD[a.prioridad] - PRIORIDAD[b.prioridad] || a.nombre.localeCompare(b.nombre))
     .map((t) => ({
-      id: t.id, nombre: t.esBloque ? `[Parte común] ${t.nombre}` : t.nombre, grupo: t.plantillas.length ? 'version' : 'nueva',
-      detalle: t.plantillas.length ? `será la v${Math.max(...t.plantillas.map((p) => p.version)) + 1}` : `prioridad ${t.prioridad.toLowerCase()}`,
+      id: t.id, nombre: t.esBloque ? `[Parte común] ${t.nombre}` : t.nombre, grupo: t.plantillas.length ? 'version' : 'nueva', variantes: t.variantes,
+      detalle: t.variantes ? 'agrega una variante' : t.plantillas.length ? `será la v${Math.max(...t.plantillas.map((p) => p.version)) + 1}` : `prioridad ${t.prioridad.toLowerCase()}`,
     }));
   const enlace = (f: Filtro) => `/plantillas?${new URLSearchParams(Object.entries({ estado: f, q, categoria, prioridad, ia, orden }).filter(([, v]) => v))}`;
 
@@ -129,13 +129,22 @@ export default async function Plantillas({ searchParams }: { searchParams: Promi
                   <tr key={t.id}>
                     <td className="principal-celda">
                       {principal ? <Link href={`/plantillas/${principal.id}`}><strong>{t.nombre}</strong></Link> : <strong>{t.nombre}</strong>}
-                      <div className="suave">{t.esBloque ? 'Parte común' : t.categoria} · prioridad {t.prioridad.toLowerCase()}</div>
+                      <div className="suave">{t.esBloque ? 'Parte común' : t.categoria} · prioridad {t.prioridad.toLowerCase()}{t.variantes ? ' · varias plantillas (la IA elige según el banco o la obra)' : ''}</div>
                     </td>
                     <td data-etiqueta="Estado">
                       <div className="fila" style={{ gap: '0.25rem' }}>
                         {!principal && <span className={`etiqueta ${clasePrioridad(t.prioridad)}`}>Sin plantilla · prioridad {t.prioridad.toLowerCase()}</span>}
-                        {vigente && <span className="etiqueta ok">Aprobada v{vigente.version}</span>}
-                        {pendiente && <span className="etiqueta advertencia">Pendiente v{pendiente.version}</span>}
+                        {t.variantes ? (
+                          <>
+                            {vigente && <span className="etiqueta ok">{t.plantillas.filter((p) => p.estado === 'APROBADA').length} variante(s) aprobada(s)</span>}
+                            {pendiente && <span className="etiqueta advertencia">{t.plantillas.filter((p) => p.estado === 'PENDIENTE_APROBACION').length} pendiente(s)</span>}
+                          </>
+                        ) : (
+                          <>
+                            {vigente && <span className="etiqueta ok">Aprobada v{vigente.version}</span>}
+                            {pendiente && <span className="etiqueta advertencia">Pendiente v{pendiente.version}</span>}
+                          </>
+                        )}
                         {principal && !vigente && !pendiente && <span className="etiqueta">No aprobada</span>}
                       </div>
                     </td>
