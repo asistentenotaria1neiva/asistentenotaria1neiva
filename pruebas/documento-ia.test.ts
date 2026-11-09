@@ -45,7 +45,7 @@ describe('documento para la IA', () => {
     for (const v of ['DOCUMENTOS', 'EXPEDIENTE', 'PLANTILLAS']) { delete process.env[`CLAUDE_MODELO_${v}`]; delete process.env[`CLAUDE_ESFUERZO_${v}`]; }
     expect(configuracionModelo('EXTRACCION')).toEqual({ modelo: 'claude-haiku-5-5', esfuerzo: 'medium' });
     expect(configuracionModelo('REVISION')).toEqual({ modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' });
-    expect(configuracionModelo('REDACCION')).toEqual({ modelo: 'claude-sonnet-5-5', esfuerzo: 'low' });
+    expect(configuracionModelo('REDACCION')).toEqual({ modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' });
     expect(configuracionModelo('PLANTILLA')).toEqual({ modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' });
     process.env.CLAUDE_ESFUERZO_DOCUMENTOS = 'high';
     process.env.CLAUDE_MODELO_DOCUMENTOS = 'claude-sonnet-5-5';

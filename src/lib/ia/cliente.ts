@@ -19,7 +19,7 @@ export type Proposito = 'EXTRACCION' | 'REVISION' | 'REDACCION' | 'PLANTILLA';
 const PREDETERMINADOS: Record<Proposito, { variable: string; modelo: string; esfuerzo: Esfuerzo }> = {
   EXTRACCION: { variable: 'DOCUMENTOS', modelo: 'claude-haiku-5-5', esfuerzo: 'medium' },
   REVISION: { variable: 'EXPEDIENTE', modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' },
-  REDACCION: { variable: 'REDACCION', modelo: 'claude-sonnet-5-5', esfuerzo: 'low' },
+  REDACCION: { variable: 'REDACCION', modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' },
   PLANTILLA: { variable: 'PLANTILLAS', modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' },
 };
 const RESPALDO = 'claude-sonnet-5-5';

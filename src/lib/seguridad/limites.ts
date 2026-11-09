@@ -14,6 +14,7 @@ export async function consumirLimite(clave: string, maximo: number, ventanaSegun
       return tx.limitePeticiones.upsert({ where: { clave }, create: { clave, conteo: 1, ventanaFin: fin }, update: { conteo: 1, ventanaFin: fin } });
     }
     return tx.limitePeticiones.update({ where: { clave }, data: { conteo: { increment: 1 } } });
-  });
+    // Con una sola conexión (pooler) y varios análisis a la vez, esperar 2 s (lo predeterminado) no alcanza
+  }, { maxWait: 20_000, timeout: 10_000 });
   return { permitido: r.conteo <= maximo, restantes: Math.max(0, maximo - r.conteo) };
 }
