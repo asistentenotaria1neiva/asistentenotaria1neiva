@@ -6,6 +6,7 @@ import { obtenerRevision, resultadoDe, avanceDe, revisionPorReanudar, ErrorRevis
 import { BotonAccion, RefrescoAutomatico } from '../../expedientes/formularios';
 import { EtiquetaNivel, fecha } from '../../componentes';
 import { VisorDocx } from '../../plantillas/VisorDocx';
+import { consumoDeRevision } from '@/lib/servicios/consumo-ia';
 import { accionAplicarCambios, accionEliminarRevision, accionReanalizar } from '../acciones';
 import { SeleccionCambios } from './SeleccionCambios';
 
@@ -26,6 +27,8 @@ export default async function DetalleRevision({ params, searchParams }: { params
     if (e instanceof ErrorRevisionEscritura) notFound();
     throw e;
   }
+  // Lo que lleva gastado en IA: solo lo ve el administrador, como el panel Consumo de IA
+  const costo = s.usuario.rol === 'ADMINISTRADOR' ? await consumoDeRevision(id) : null;
   const reanudar = await revisionPorReanudar(id);
   if (reanudar) after(reanudar);
   const res = resultadoDe(r);
@@ -133,6 +136,12 @@ export default async function DetalleRevision({ params, searchParams }: { params
                 </p>
               </>
             ) : <p className="suave">{enCurso ? 'Revisando…' : 'Sin resultado.'}</p>}
+            {costo && costo.llamadas > 0 && (
+              <p className="suave">
+                Costo de IA de esta revisión: <strong>US$ {costo.costoUSD.toFixed(costo.costoUSD < 1 ? 3 : 2)}</strong> en {costo.llamadas} llamadas{enCurso ? ' (hasta ahora)' : ''}
+                {r.paginas ? ` · US$ ${(costo.costoUSD / r.paginas).toFixed(3)} por página` : ''}. <Link href="/admin/consumo?mes=todo">Ver en Consumo de IA</Link>
+              </p>
+            )}
             {!enCurso && <BotonAccion accion={accionReanalizar.bind(null, r.id)} texto="Revisar de nuevo con IA" textoPendiente="Iniciando…" clase="secundario pequeno"
               confirmar="La IA transcribirá y revisará la escritura otra vez desde el PDF; la escritura corregida actual se descarta. ¿Continuar?" />}
           </section>

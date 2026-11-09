@@ -29,7 +29,9 @@ vi.mock('@/lib/almacenamiento', () => ({
 vi.mock('@/lib/ia/cliente', () => ({
   ErrorIA: class extends Error {},
   prepararDocumento: async (_b: Buffer, _m: string, titulo: string) => ({ bloque: { type: 'text', text: titulo }, liberar: async () => {} }),
-  llamarEstructurado: async (o: { sistema: string; contenido: { text?: string }[] }) => {
+  llamarEstructurado: async (o: { sistema: string; contenido: { text?: string }[]; registro: { revisionId?: string } }) => {
+    // Cada llamada queda en Consumo de IA a nombre de su revisión
+    expect(o.registro.revisionId).toBe('r1');
     const uso = { modelo: 'claude-sonnet-5-5', tokensEntrada: 1, tokensSalida: 1, tokensCacheLectura: 0, duracionMs: 1 };
     if (o.sistema.startsWith('Recibes un PDF')) {
       llamadas.push('identificar');

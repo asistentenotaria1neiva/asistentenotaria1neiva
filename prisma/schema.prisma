@@ -329,7 +329,8 @@ model ConsumoIA {
   expedienteId         String? // la escritura
   plantillaId          String? // revisión o corrección de plantillas
   analisisId           String?
-  proposito            String // EXTRACCION | REVISION | REDACCION | PLANTILLA
+  revisionId           String? // revisión de una escritura ya hecha (revisiones_escritura)
+  proposito            String // EXTRACCION | REVISION | REDACCION | PLANTILLA | ESCRITURA
   modelo               String
   tokensEntrada        Int      @default(0)
   tokensSalida         Int      @default(0)
@@ -341,6 +342,7 @@ model ConsumoIA {
   @@index([creadoEn])
   @@index([usuarioId, creadoEn])
   @@index([expedienteId])
+  @@index([revisionId])
   @@map("consumo_ia")
 }
 

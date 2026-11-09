@@ -351,7 +351,7 @@ async function identificar(r: RevisionEscritura, p: ProgresoRevision, pdf: Buffe
     try {
       const ia = await llamarEstructurado<{ escritura: Tramo[]; tipo_escritura: string; soportes: Soporte[] }>({
         proposito: 'ESCRITURA', esfuerzo: 'low', maxTokens: 8000,
-        registro: { usuarioId: p.sesion.usuario.id },
+        registro: { usuarioId: p.sesion.usuario.id, revisionId: r.id },
         sistema: SISTEMA_IDENTIFICAR_REVISION,
         contenido: [d.bloque, { type: 'text', text: fragmentos.length > 1 ? `Este fragmento tiene ${f.hasta - f.desde + 1} páginas (numera desde 1).` : 'Ubica la escritura y los documentos soporte.' }],
         esquema: ESQUEMA_IDENTIFICAR_REVISION as unknown as Record<string, unknown>,
@@ -390,7 +390,7 @@ async function transcribir(r: RevisionEscritura, p: ProgresoRevision, doc: PDFDo
         try {
           const ia = await llamarEstructurado<{ parrafos: { texto: string; alineacion: Alineacion; continua_anterior: boolean }[] }>({
             proposito: 'ESCRITURA', esfuerzo: 'low', maxTokens: 20000,
-            registro: { usuarioId: p.sesion.usuario.id },
+            registro: { usuarioId: p.sesion.usuario.id, revisionId: r.id },
             sistema: SISTEMA_TRANSCRIBIR_REVISION,
             contenido: [d.bloque, { type: 'text', text: `Transcribe estas páginas (${b.desde} a ${b.hasta} del PDF). ${k === 0 ? 'Son las primeras páginas de la escritura.' : 'La escritura empezó en páginas anteriores.'}` }],
             esquema: ESQUEMA_TRANSCRIBIR_REVISION as unknown as Record<string, unknown>,
@@ -468,7 +468,7 @@ async function revisar(r: RevisionEscritura, p: ProgresoRevision, doc: PDFDocume
   try {
     ia = await llamarEstructurado<RespuestaRevision>({
       proposito: 'ESCRITURA', maxTokens: 32000,
-      registro: { usuarioId: p.sesion.usuario.id },
+      registro: { usuarioId: p.sesion.usuario.id, revisionId: r.id },
       sistema: SISTEMA_REVISION_SUCESION,
       contenido,
       esquema: ESQUEMA_REVISION_SUCESION as unknown as Record<string, unknown>,

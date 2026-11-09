@@ -124,6 +124,8 @@ export interface RegistroConsumo {
   expedienteId?: string | null;
   plantillaId?: string | null;
   analisisId?: string | null;
+  /** Revisión de una escritura ya hecha (src/lib/servicios/revision-escrituras.ts) */
+  revisionId?: string | null;
 }
 
 /** Guarda los tokens y el costo de una llamada. Un fallo al registrar nunca interrumpe el trabajo. */
@@ -140,6 +142,7 @@ async function registrarConsumo(opciones: OpcionesLlamada, mensaje: Anthropic.Be
         expedienteId: opciones.registro.expedienteId ?? null,
         plantillaId: opciones.registro.plantillaId ?? null,
         analisisId: opciones.registro.analisisId ?? null,
+        revisionId: opciones.registro.revisionId ?? null,
         proposito: opciones.proposito,
         modelo: mensaje.model,
         tokensEntrada: entrada,

@@ -178,7 +178,7 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
       <div className="rejilla cuatro">
         <div className="tarjeta"><div className="cifra">{usd(datos.total.costoUSD)}</div><div className="suave">costo estimado</div></div>
         <div className="tarjeta"><div className="cifra">{n(datos.total.tokensEntrada + datos.total.tokensCache + datos.total.tokensSalida)}</div><div className="suave">tokens ({n(datos.total.tokensSalida)} de salida)</div></div>
-        <div className="tarjeta"><div className="cifra">{n(datos.total.llamadas)}</div><div className="suave">llamadas a la IA · {datos.escrituras.length} escrituras</div></div>
+        <div className="tarjeta"><div className="cifra">{n(datos.total.llamadas)}</div><div className="suave">llamadas a la IA · {datos.escrituras.length} escrituras{datos.revisiones.length ? ` · ${datos.revisiones.length} revisiones` : ''}</div></div>
         <div className="tarjeta"><div className="cifra">{datos.promedioPorEscrituraUSD === null ? '—' : usd(datos.promedioPorEscrituraUSD)}</div><div className="suave">promedio por escritura</div></div>
       </div>
 
@@ -248,6 +248,39 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
           </Tabla>
         )}
         {filtroUsuario && <p className="suave">Solo lo que {filtroUsuario} consumió en cada escritura.</p>}
+      </section>
+
+      <section className="tarjeta">
+        <h2>Por revisión de escritura</h2>
+        {!datos.revisiones.length ? <p className="suave">Sin revisiones de escrituras en este periodo.</p> : (
+          <>
+            <p className="suave">
+              {datos.revisiones.length} revisión(es) · {usd(datos.revisiones.reduce((s, r) => s + r.costoUSD, 0))} en total
+              {datos.promedioPorRevisionUSD !== null && <> · promedio {usd(datos.promedioPorRevisionUSD)} por revisión</>}.
+              Cada revisión suma sus llamadas: ubicar la escritura y los soportes en el PDF, transcribirla y revisarla (y las veces que se revisó de nuevo).
+            </p>
+            <Tabla>
+              <thead><tr>
+                <th>Revisión</th><th>Estado</th><th className="numero">Páginas</th><th className="numero">Cambios</th><th>Cargada por</th>
+                <th className="numero">Llamadas</th><th className="numero">Tokens entrada</th><th className="numero">Tokens caché</th><th className="numero">Tokens salida</th><th className="numero">US$</th>
+                <th className="numero">US$ por página</th><th>Último uso</th>
+              </tr></thead>
+              <tbody>{datos.revisiones.map((r) => (
+                <tr key={r.revisionId}>
+                  <td className="principal-celda">{r.existe ? <Link href={`/revisiones/${r.revisionId}`}>{r.nombre}</Link> : <span className="suave">{r.nombre}</span>}{r.tipo && <div className="suave">{r.tipo}</div>}</td>
+                  <td data-etiqueta="Estado">{r.estado ? <span className={`etiqueta ${r.estado === 'COMPLETADA' ? 'ok' : r.estado === 'ERROR' ? 'critica' : 'informativa'}`}>{r.estado === 'COMPLETADA' ? 'Revisada' : r.estado === 'ERROR' ? 'Error' : 'En curso'}</span> : '—'}</td>
+                  <td data-etiqueta="Páginas" className="numero">{r.paginas ?? '—'}</td>
+                  <td data-etiqueta="Cambios" className="numero">{r.cambios ?? '—'}</td>
+                  <td data-etiqueta="Cargada por">{r.cargadaPor}</td>
+                  <Columnas t={r} />
+                  <td data-etiqueta="US$ por página" className="numero">{r.paginas ? usd(r.costoUSD / r.paginas) : '—'}</td>
+                  <td data-etiqueta="Último uso" className="suave">{fecha(r.ultima)}</td>
+                </tr>
+              ))}</tbody>
+            </Tabla>
+          </>
+        )}
+        {filtroUsuario && datos.revisiones.length > 0 && <p className="suave">Solo lo que {filtroUsuario} consumió en cada revisión.</p>}
       </section>
 
       <div className="rejilla dos">
