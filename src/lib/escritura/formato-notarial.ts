@@ -375,6 +375,20 @@ const lineaGuiones = (anchoTwips: number) => {
   return normalizarParrafo(`<w:p><w:pPr></w:pPr><w:r><w:t>${'-'.repeat(n)}</w:t></w:r></w:p>`);
 };
 
+/** Línea de guiones con la sangría de la carátula (la que sigue a «FECHA DE OTORGAMIENTO») */
+const lineaGuionesSangria = (anchoTwips: number) => {
+  const n = Math.floor(((anchoTwips - SANGRIA_CARATULA) / 20) * 1000 / 12 / GUION);
+  return normalizarParrafo(`<w:p><w:pPr><w:ind w:left="${SANGRIA_CARATULA}"/></w:pPr><w:r><w:t>${'-'.repeat(n)}</w:t></w:r></w:p>`);
+};
+
+/**
+ * Rótulos de la carátula como los escriba la IA o los traiga el modelo: con o sin dos puntos, con
+ * rayas o guiones para llenar a mano, o con el dato. Grupo 1: rótulo; grupo 2: lo que sigue.
+ */
+const ROTULO_NUMERO_FECHA = /^(ESCRITURA P[UÚ]BLICA N[UÚ]MERO|FECHA DE OTORGAMIENTO)\s*:?\s*(.*)$/;
+/** «ESPECIFICACION … VALOR DEL ACTO», con o sin dos puntos y con la columna «CODIGO» de algunas minutas */
+const ROTULO_ESPECIFICACION = /^(C[OÓ]DIGO\s*)?ESPECIFICACI[OÓ]N\s*:?\s+VALOR DEL ACTO\s*:?$/;
+
 /** Texto plano de un párrafo, para decidir */
 const textoDe = (p: string) => decodificar(p.replace(/<w:tab\/>/g, '\t').replace(/<w:br\/>/g, '\n').replace(/<[^>]+>/g, ''));
 const soloGuiones = (t: string) => /^\s*-{3,}\s*$/.test(t);
@@ -433,8 +447,9 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
       }
     }
 
-    // Las líneas de guiones existentes se rehacen al ancho exacto (en una plantilla de un caso real quedaron al de otros datos)
-    if (soloGuiones(plano)) { salida.push(lineaGuiones(anchoTexto)); previo = '-'; continue; }
+    // Las líneas de guiones existentes se rehacen al ancho exacto (en una plantilla de un caso real quedaron al de otros datos);
+    // la que sigue a «FECHA DE OTORGAMIENTO» va tabulada, como el número y la fecha
+    if (soloGuiones(plano)) { salida.push(/^FECHA DE OTORGAMIENTO/.test(previo) ? lineaGuionesSangria(anchoTexto) : lineaGuiones(anchoTexto)); previo = '-'; continue; }
     if (!plano) {
       // Sin renglones en blanco entre los párrafos; sí el espacio sobre el renglón de firma
       const siguiente = planos.slice(indice + 1).find((t) => t);
@@ -446,17 +461,22 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     // Carátula: nombre y documento, acto y valor, con el número a la derecha
     // Número y fecha en blanco: el renglón se completa con guiones (sin renglón en blanco) para escribirlos en la terminación.
     // Van con sangría de una tabulación, como en las minutas de la notaría.
-    if (/^(ESCRITURA P[UÚ]BLICA N[UÚ]MERO|FECHA DE OTORGAMIENTO):$/.test(plano)) {
+    // Se reconoce aunque la IA lo escriba sin dos puntos o con rayas o guiones para llenar a mano.
+    const rotulo = !enTabla && espacioNotario !== 'hecho' ? ROTULO_NUMERO_FECHA.exec(plano.replace(/\t/g, ' ')) : null;
+    if (rotulo) {
       const rPr = conNegrilla(rPrNeutro(runs.find((r) => r.texto)?.rPr ?? ''), true);
       const sangria = `<w:pPr><w:ind w:left="${SANGRIA_CARATULA}"/></w:pPr>`;
-      const n = guionesDeRelleno([{ texto: plano, negrilla: true }], renglonTexto - SANGRIA_CARATULA / 20 * 1000 / 12);
-      parrafo(`<w:p${m[1] ?? ''}>${n > 0 ? tabRelleno(sangria, anchoTexto) : sangria}${runTexto(rPr, plano)}${n > 0 ? runTexto(rPrNeutro(rPr), ` ${'-'.repeat(n)}${FIN_RELLENO}`) : ''}</w:p>`);
-      previo = plano;
+      // Las rayas o guiones de la IA se cambian por el relleno al ancho exacto; si trae el dato, se conserva
+      const dato = rotulo[2].replace(/[_\-\s.]+$/, '').replace(/^[_\-\s]+/, '').trim();
+      const linea = `${rotulo[1]}:${dato ? ` ${dato}` : ''}`;
+      const n = guionesDeRelleno([{ texto: linea, negrilla: true }], renglonTexto - SANGRIA_CARATULA / 20 * 1000 / 12);
+      parrafo(`<w:p${m[1] ?? ''}>${n > 0 ? tabRelleno(sangria, anchoTexto) : sangria}${runTexto(rPr, linea)}${n > 0 ? runTexto(rPrNeutro(rPr), ` ${'-'.repeat(n)}${FIN_RELLENO}`) : ''}</w:p>`);
+      previo = linea;
       continue;
     }
     if (/^PERSONAS QUE INTERVIENEN EN EL ACTO$/.test(plano)) {
       enCaratula.personas = true;
-      if (previo !== '-') salida.push(lineaGuiones(anchoTexto));
+      if (previo !== '-') salida.push(/^FECHA DE OTORGAMIENTO/.test(previo) ? lineaGuionesSangria(anchoTexto) : lineaGuiones(anchoTexto));
       // Título centrado con guiones a ambos lados: el renglón queda justificado y completo
       const g = guionesCentrado([{ texto: plano, negrilla: true }], renglonTexto);
       const titulo = runTexto('<w:rPr><w:b/><w:bCs/><w:u w:val="single"/></w:rPr>', plano);
@@ -465,11 +485,13 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
       continue;
     }
     if (/^CODIGO DE LA NOTARIA/.test(plano)) enCaratula.personas = false;
-    if (/^ESPECIFICACI[OÓ]N\s+VALOR DEL ACTO$/.test(plano)) {
+    const especificacion = !enTabla && espacioNotario !== 'hecho' ? ROTULO_ESPECIFICACION.exec(plano.replace(/\t/g, ' ')) : null;
+    if (especificacion) {
       enCaratula.especificacion = true;
       const tabs = `<w:pPr><w:tabs><w:tab w:val="right" w:pos="${anchoTexto}"/></w:tabs><w:spacing w:after="0" w:line="360" w:lineRule="auto"/><w:ind w:firstLine="${SANGRIA_CARATULA}"/><w:jc w:val="left"/></w:pPr>`;
       const rPr = '<w:rPr><w:b/><w:bCs/><w:u w:val="single"/></w:rPr>';
-      parrafo(`<w:p${m[1] ?? ''}>${tabs}${runTexto(rPr, 'ESPECIFICACION')}<w:r><w:tab/></w:r>${runTexto(rPr, 'VALOR DEL ACTO')}</w:p>`);
+      // Las minutas con columna de código (Bancolombia) la conservan
+      parrafo(`<w:p${m[1] ?? ''}>${tabs}${runTexto(rPr, especificacion[1] ? 'CODIGO     ESPECIFICACION' : 'ESPECIFICACION')}<w:r><w:tab/></w:r>${runTexto(rPr, 'VALOR DEL ACTO')}</w:p>`);
       previo = plano;
       continue;
     }

@@ -90,6 +90,24 @@ describe('formato de impresión de la notaría', () => {
     expect(xml).toContain(`<w:tab w:val="right" w:pos="${ANCHO}"/>`);
   });
 
+  it('carátula: la sangría se aplica aunque la IA escriba los rótulos con rayas, sin dos puntos o con columna de código', () => {
+    const conTab = (texto: string) => `<w:p><w:pPr><w:jc w:val="both"/></w:pPr><w:r><w:t xml:space="preserve">${texto.replace(/\t/g, '</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t xml:space="preserve">')}</w:t></w:r></w:p>`;
+    for (const c of ['ESCRITURA PÚBLICA NÚMERO: ____________', 'ESCRITURA PÚBLICA NÚMERO: ----------------', 'ESCRITURA PÚBLICA NÚMERO', 'FECHA DE OTORGAMIENTO: _______']) {
+      const xml = aplicarFormatoNotarial(conTab(c), ANCHO);
+      expect(xml).toContain('<w:ind w:left="720"/>');
+      expect(textos(xml)[0]).toMatch(/^(ESCRITURA PÚBLICA NÚMERO|FECHA DE OTORGAMIENTO): -{30,}\t$/);
+    }
+    for (const c of ['ESPECIFICACIÓN:\tVALOR DEL ACTO:', 'CÓDIGO\tESPECIFICACIÓN\tVALOR DEL ACTO', 'CODIGO ESPECIFICACION VALOR DEL ACTO']) {
+      expect(aplicarFormatoNotarial(conTab(c), ANCHO)).toContain('<w:ind w:firstLine="720"/>');
+    }
+    // La línea de guiones bajo la fecha también va tabulada (la de antes de «PERSONAS…», si no la trae)
+    for (const bloque of [[conTab('FECHA DE OTORGAMIENTO:'), conTab('------------------'), conTab('PERSONAS QUE INTERVIENEN EN EL ACTO')], [conTab('FECHA DE OTORGAMIENTO:'), conTab('PERSONAS QUE INTERVIENEN EN EL ACTO')]]) {
+      const parrafos = aplicarFormatoNotarial(bloque.join(''), ANCHO).match(/<w:p[ >].*?<\/w:p>/gs) ?? [];
+      expect(parrafos[1]).toContain('<w:ind w:left="720"/>');
+      expect(textos(parrafos[1])[0]).toMatch(/^-{90,}$/);
+    }
+  });
+
   it('carátula como la minuta de la notaría: sangría de una tabulación y cinco renglones para el notario', () => {
     const xml = aplicarFormatoNotarial([
       conGuia('ESCRITURA PÚBLICA NÚMERO:'), sinGuia(''), conGuia('FECHA DE OTORGAMIENTO:'), conGuia('ESPECIFICACION VALOR DEL ACTO'),

@@ -19,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: '/', texto: 'Inicio' },
     { href: '/expedientes', texto: 'Expedientes' },
     { href: '/expedientes/nuevo', texto: 'Nuevo expediente' },
+    { href: '/revisiones', texto: 'Revisar escritura' },
     ...(admin || s.usuario.rol === 'REVISOR' ? [{ href: '/plantillas', texto: 'Plantillas' }] : []),
     ...(admin ? [
       { href: '/admin', texto: 'Panel', seccion: 'Administración' },

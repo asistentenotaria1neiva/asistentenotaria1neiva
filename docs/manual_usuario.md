@@ -76,6 +76,17 @@ Todo se resuelve en el asistente; no hay formulario aparte.
 - No se redacta si hay otras observaciones críticas abiertas. Si cambia un dato después de redactar, redacte de nuevo antes de enviar a revisión.
 - Cada descarga queda registrada.
 
+### Revisar una escritura ya hecha
+
+En el menú lateral, **Revisar escritura** sirve para escrituras redactadas por fuera del flujo (o ya terminadas):
+
+1. Cargue la escritura en Word (**.docx**). Opcionalmente indique el tipo (se compara con su modelo aprobado) y qué quiere que se revise en especial.
+2. La IA la analiza en uno a tres minutos (puede salir de la página). Recomienda **cambios puntuales de texto** —datos que no coinciden entre partes de la escritura, valores en letras distintos de los números, ortografía, concordancia, citas de normas— **sin tocar la estructura**: no reordena ni reescribe cláusulas. Lo que no se puede arreglar con un cambio seguro (p. ej. una cláusula que falta) aparece en *Para revisar a mano*. La aplicación también verifica el formato de la notaría (márgenes, Arial 12, interlineado 1,5, renglones en blanco), solo para informar.
+3. Marque los cambios que quiere y pulse **Aplicar**. Se crea una **copia corregida** conservando el formato de Word; el original no cambia. Puede cambiar la selección y aplicar de nuevo, o descartar la copia.
+4. Descargue la escritura corregida y **revísela completa en Word** antes de usarla.
+
+El digitador ve sus propias revisiones; el revisor y el administrador ven todas.
+
 ## 5. Para el revisor
 
 - Usted también puede crear y elaborar expedientes, igual que un digitador.

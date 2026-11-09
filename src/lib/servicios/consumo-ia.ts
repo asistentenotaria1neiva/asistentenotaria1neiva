@@ -28,16 +28,17 @@ function totales(g: Suma): Totales {
   };
 }
 
-export async function consumoIA(filtro: { desde?: Date; hasta?: Date; usuarioId?: string }) {
+export async function consumoIA(filtro: { desde?: Date; hasta?: Date; usuarioId?: string; proposito?: string }) {
   const where: Prisma.ConsumoIAWhereInput = {
     ...(filtro.desde || filtro.hasta ? { creadoEn: { ...(filtro.desde ? { gte: filtro.desde } : {}), ...(filtro.hasta ? { lt: filtro.hasta } : {}) } } : {}),
     ...(filtro.usuarioId ? { usuarioId: filtro.usuarioId } : {}),
+    ...(filtro.proposito ? { proposito: filtro.proposito } : {}),
   };
   const [total, porUsuario, porUsuarioExpediente, porExpediente, porProposito, porModelo, plantillas, historicos] = await Promise.all([
     db.consumoIA.aggregate({ where, ...SUMA }),
-    db.consumoIA.groupBy({ by: ['usuarioId'], where, ...SUMA }),
+    db.consumoIA.groupBy({ by: ['usuarioId'], where, ...SUMA, _max: { creadoEn: true } }),
     db.consumoIA.groupBy({ by: ['usuarioId', 'expedienteId'], where: { ...where, expedienteId: { not: null } }, _count: true }),
-    db.consumoIA.groupBy({ by: ['expedienteId'], where: { ...where, expedienteId: { not: null } }, ...SUMA }),
+    db.consumoIA.groupBy({ by: ['expedienteId'], where: { ...where, expedienteId: { not: null } }, ...SUMA, _max: { creadoEn: true } }),
     db.consumoIA.groupBy({ by: ['proposito'], where, ...SUMA }),
     db.consumoIA.groupBy({ by: ['modelo'], where, ...SUMA }),
     db.consumoIA.aggregate({ where: { ...where, plantillaId: { not: null } }, ...SUMA }),
@@ -60,7 +61,7 @@ export async function consumoIA(filtro: { desde?: Date; hasta?: Date; usuarioId?
     .map((u) => {
       const t = totales(u);
       const escrituras = porUsuarioExpediente.filter((x) => x.usuarioId === u.usuarioId).length;
-      return { usuarioId: u.usuarioId, nombre: u.usuarioId ? nombre.get(u.usuarioId)?.nombreCompleto ?? 'Usuario eliminado' : 'Sin usuario', rol: u.usuarioId ? nombre.get(u.usuarioId)?.rol ?? null : null, escrituras, promedioUSD: escrituras ? t.costoUSD / escrituras : null, ...t };
+      return { usuarioId: u.usuarioId, nombre: u.usuarioId ? nombre.get(u.usuarioId)?.nombreCompleto ?? 'Usuario eliminado' : 'Sin usuario', rol: u.usuarioId ? nombre.get(u.usuarioId)?.rol ?? null : null, escrituras, promedioUSD: escrituras ? t.costoUSD / escrituras : null, ultima: u._max.creadoEn, ...t };
     })
     .sort((a, b) => b.costoUSD - a.costoUSD);
 
@@ -75,6 +76,7 @@ export async function consumoIA(filtro: { desde?: Date; hasta?: Date; usuarioId?
         estado: e?.estado ?? null,
         actos: Array.isArray(e?.actos) ? (e.actos as string[]).map((a) => a.replace(/_/g, ' ')).join(' + ') : e?.tipo.nombre ?? '—',
         responsable: e?.responsable.nombreCompleto ?? '—',
+        ultima: g._max.creadoEn,
         ...totales(g),
       };
     })

@@ -51,6 +51,7 @@ model Usuario {
   plantillasCargadas      Plantilla[]   @relation("cargadaPor")
   plantillasAprobadas     Plantilla[]   @relation("aprobadaPor")
   notificaciones          Notificacion[]
+  revisionesEscritura     RevisionEscritura[]
 
   @@map("usuarios")
 }
@@ -504,4 +505,30 @@ model Notificacion {
 
   @@index([usuarioId, creadaEn])
   @@map("notificaciones")
+}
+
+// Revisión de escrituras ya hechas (src/lib/servicios/revision-escrituras.ts): se carga el .docx, la IA
+// recomienda cambios de texto sin tocar la estructura y el usuario elige cuáles aplicar en una copia.
+// Los archivos (original y corregido) van cifrados en el almacenamiento, como los documentos soporte.
+model RevisionEscritura {
+  id            String    @id @default(cuid())
+  nombreArchivo String
+  tamano        Int
+  hashSha256    String // del archivo original (integridad)
+  rutaOriginal  String // ruta relativa en el almacenamiento cifrado
+  rutaCorregida String? // copia con los cambios elegidos aplicados
+  tipoId        String? // tipo de escritura indicado por el usuario (se compara con su plantilla aprobada)
+  notas         String? // qué quiere el usuario que se revise
+  estado        String    @default("EN_CURSO") // EN_CURSO | COMPLETADA | ERROR
+  error         String?
+  resultado     Json? // resumen, verificación de formato y recomendaciones con su estado
+  modelo        String?
+  cargadaPor    Usuario   @relation(fields: [cargadaPorId], references: [id])
+  cargadaPorId  String
+  creadaEn      DateTime  @default(now())
+  analizadaEn   DateTime?
+  aplicadaEn    DateTime?
+
+  @@index([cargadaPorId, creadaEn])
+  @@map("revisiones_escritura")
 }

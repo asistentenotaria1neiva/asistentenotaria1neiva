@@ -26,7 +26,7 @@ function rutaSegura(relativa: string): string {
 }
 
 function urlObjeto(relativa: string): string {
-  if (!/^(documentos|borradores)\/[0-9a-f]{2}\/[0-9a-f-]{36}\.bin$/.test(relativa) && !/^partes\/[0-9a-f]{32}\/\d{1,5}\.bin$/.test(relativa)) throw new Error('Ruta de almacenamiento no válida.');
+  if (!/^(documentos|borradores|revisiones)\/[0-9a-f]{2}\/[0-9a-f-]{36}\.bin$/.test(relativa) && !/^partes\/[0-9a-f]{32}\/\d{1,5}\.bin$/.test(relativa)) throw new Error('Ruta de almacenamiento no válida.');
   return `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${relativa}`;
 }
 
@@ -43,7 +43,7 @@ async function supabase(relativa: string, init: RequestInit): Promise<Response> 
 }
 
 /** Guarda cifrado y devuelve la ruta relativa */
-export async function guardarCifrado(datos: Buffer, prefijo: 'documentos' | 'borradores'): Promise<string> {
+export async function guardarCifrado(datos: Buffer, prefijo: 'documentos' | 'borradores' | 'revisiones'): Promise<string> {
   const id = crypto.randomUUID();
   const relativa = `${prefijo}/${id.slice(0, 2)}/${id}.bin`;
   if (enSupabase) {
