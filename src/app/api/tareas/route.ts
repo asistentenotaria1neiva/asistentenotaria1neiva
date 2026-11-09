@@ -8,6 +8,7 @@ import { NextResponse, after, type NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { ejecutarEtapa, firmaValida } from '@/lib/servicios/tareas';
 import { ejecutarParteRedaccion } from '@/lib/servicios/redaccion';
+import { ejecutarEtapaRevision } from '@/lib/servicios/revision-escrituras';
 
 export const maxDuration = 300;
 
@@ -20,8 +21,10 @@ export async function POST(request: NextRequest) {
   }
   // Se responde de inmediato: la etapa corre después, en esta misma invocación
   // La redacción por partes (src/lib/servicios/redaccion.ts) también se encadena por aquí
+  // y la revisión de escrituras de sucesión (src/lib/servicios/revision-escrituras.ts), que no es un análisis
   const a = await db.analisisIA.findUnique({ where: { id }, select: { proposito: true } });
-  const etapa = a?.proposito === 'REDACCION' ? ejecutarParteRedaccion : ejecutarEtapa;
+  const revision = !a && (await db.revisionEscritura.findUnique({ where: { id }, select: { id: true } }));
+  const etapa = revision ? ejecutarEtapaRevision : a?.proposito === 'REDACCION' ? ejecutarParteRedaccion : ejecutarEtapa;
   after(() => etapa(id, turno).catch((e) => console.error('[api/tareas]', e)));
   return NextResponse.json({ ok: true }, { status: 202 });
 }

@@ -76,14 +76,14 @@ Todo se resuelve en el asistente; no hay formulario aparte.
 - No se redacta si hay otras observaciones críticas abiertas. Si cambia un dato después de redactar, redacte de nuevo antes de enviar a revisión.
 - Cada descarga queda registrada.
 
-### Revisar una escritura ya hecha
+### Revisar una escritura de sucesión ya hecha
 
-En el menú lateral, **Revisar escritura** sirve para escrituras redactadas por fuera del flujo (o ya terminadas):
+En el menú lateral, **Revisar escritura** sirve para escrituras de sucesión ya redactadas:
 
-1. Cargue la escritura en Word (**.docx**). Opcionalmente indique el tipo (se compara con su modelo aprobado) y qué quiere que se revise en especial.
-2. La IA la analiza en uno a tres minutos (puede salir de la página). Recomienda **cambios puntuales de texto** —datos que no coinciden entre partes de la escritura, valores en letras distintos de los números, ortografía, concordancia, citas de normas— **sin tocar la estructura**: no reordena ni reescribe cláusulas. Lo que no se puede arreglar con un cambio seguro (p. ej. una cláusula que falta) aparece en *Para revisar a mano*. La aplicación también verifica el formato de la notaría (márgenes, Arial 12, interlineado 1,5, renglones en blanco), solo para informar.
-3. Marque los cambios que quiere y pulse **Aplicar**. Se crea una **copia corregida** conservando el formato de Word; el original no cambia. Puede cambiar la selección y aplicar de nuevo, o descartar la copia.
-4. Descargue la escritura corregida y **revísela completa en Word** antes de usarla.
+1. Cargue **un solo PDF** con la escritura y todos sus documentos soporte (registros civiles, cédulas, poder, certificados de tradición, paz y salvos, edicto y publicaciones, respuestas de la DIAN y la UGPP…). Elija el tipo (p. ej. *Sucesión intestada*): su plantilla aprobada es la referencia y da el formato de la escritura generada. Opcionalmente escriba qué quiere que se revise en especial.
+2. La IA trabaja por etapas (entre 5 y 15 minutos; puede salir de la página y le llega un aviso al terminar): ubica la escritura y cada soporte en el PDF, transcribe la escritura y la **compara con los soportes y con la plantilla**. Recomienda **cambios puntuales de texto** —nombres, cédulas, fechas, matrículas, linderos, avalúos, sumas de las hijuelas, redacción— cada uno con **dónde**, **por qué** y la **fuente** (documento y página). **No toca la estructura**: no reordena ni reescribe cláusulas. Lo que no tiene un cambio seguro (p. ej. una parte que falta) queda en *Para revisar a mano*.
+3. Marque los cambios que quiere y pulse **Generar la escritura**. Se genera en Word, con el formato de la notaría, con los cambios a la vista: **lo agregado resaltado en amarillo** y **lo eliminado tachado en rojo**, cada uno con su número; al final va la **relación de cambios** (qué se cambió, dónde, por qué y con qué soporte) y lo pendiente de revisar a mano. Puede cambiar la selección y generarla de nuevo.
+4. Descargue la versión **con los cambios marcados** para revisarla, o la versión **sin marcas** (los mismos cambios, lista para usar). Compare la escritura con el PDF y **revísela completa en Word** antes de firmar.
 
 El digitador ve sus propias revisiones; el revisor y el administrador ven todas.
 

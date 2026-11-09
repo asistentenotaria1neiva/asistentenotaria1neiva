@@ -478,3 +478,7 @@ details.tarjeta { padding: 12px 20px; border-radius: var(--radio-tarjeta); }
 .lista-conversion { list-style: none; padding: 0; margin: 0 0 12px; }
 .lista-conversion li { padding: 8px 0; border-bottom: 1px solid var(--borde-suave); gap: 8px; flex-wrap: wrap; }
 .lista-conversion li:last-child { border-bottom: 0; }
+
+/* Revisión de escrituras: los mismos colores que en el Word corregido (agregado en amarillo, eliminado tachado en rojo) */
+.revision-marcas del, .marca-eliminado { background: none; color: #d00000; text-decoration: line-through; text-decoration-color: #d00000; }
+.revision-marcas ins, .marca-agregado { background: #fff200; color: #1a1a1a; text-decoration: none; padding: 0 3px; border-radius: 2px; }

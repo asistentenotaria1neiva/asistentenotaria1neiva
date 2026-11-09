@@ -89,3 +89,53 @@ describe('reemplazarEnDocx', () => {
     expect(texto(s.docx)).toBe('{{nombre}} ANALIZA el folio {{matricula}} y el 200-1234.');
   });
 });
+
+describe('reemplazarEnDocx con los cambios marcados (revisión de escrituras)', () => {
+  const marcar = { marcar: true };
+
+  it('deja lo eliminado tachado en rojo y lo agregado resaltado en amarillo, con el formato de su corrida', () => {
+    const d = docxCon(`<w:p>${r('El ')}${r('comprador', NEGRITA)}${r(' declara que recibe el inmueble.')}</w:p>`);
+    const s = reemplazarEnDocx(d, [{ original: 'comprador declara', nuevo: 'comprador manifiesta' }], undefined, marcar);
+    expect(s.resultados).toEqual(['APLICADO']);
+    const segmentos = vistaPreviaDocx(s.docx)[0].segmentos;
+    expect(segmentos.map((x) => x.texto).join('')).toBe('El comprador declaracomprador manifiesta que recibe el inmueble.');
+    const x = xml(s.docx);
+    // Negrilla conservada y propiedades en el orden del esquema de Word (b antes de strike y color)
+    expect(x).toContain('<w:rPr><w:b/><w:strike/><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">comprador</w:t>');
+    expect(x).toContain('<w:rPr><w:strike/><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve"> declara</w:t>');
+    expect(x).toContain('<w:rPr><w:b/><w:highlight w:val="yellow"/></w:rPr><w:t xml:space="preserve">comprador manifiesta</w:t>');
+    // Lo que sigue al cambio conserva su corrida
+    expect(x).toContain('<w:t xml:space="preserve"> que recibe el inmueble.</w:t>');
+  });
+
+  it('los cambios siguientes no ven el texto tachado, y lo agregado que otro cambio quita desaparece', () => {
+    const d = docxCon(`<w:p>${r('Vende JUAN PERES GOMEZ.')}</w:p>`);
+    const s = reemplazarEnDocx(d, [
+      { original: 'PERES', nuevo: 'PÉREZ' },
+      { original: 'PÉREZ GOMEZ', nuevo: 'PÉREZ GÓMEZ' },
+    ], undefined, marcar);
+    expect(s.resultados).toEqual(['APLICADO', 'APLICADO']);
+    // Tachado: «PERES» y « GOMEZ» (del original); resaltado: «PÉREZ GÓMEZ». El «PÉREZ» intermedio no queda.
+    expect(texto(s.docx)).toBe('Vende JUAN PERES GOMEZPÉREZ GÓMEZ.');
+    const x = xml(s.docx);
+    expect(x.match(/<w:strike\/>/g)).toHaveLength(2);
+    expect(x.match(/<w:highlight w:val="yellow"\/>/g)).toHaveLength(1);
+  });
+
+  it('una eliminación sin texto nuevo solo tacha', () => {
+    const d = docxCon(`<w:p>${r('Inmueble urbano. Hoja No 2. Ubicado en Neiva.')}</w:p>`);
+    const s = reemplazarEnDocx(d, [{ original: 'Hoja No 2. ', nuevo: '' }], undefined, marcar);
+    expect(s.resultados).toEqual(['APLICADO']);
+    expect(xml(s.docx)).not.toContain('highlight');
+    expect(xml(s.docx)).toContain('<w:strike/><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">Hoja No 2.</w:t>');
+  });
+
+  it('copia bien las propiedades que traen historial de cambios de Word', () => {
+    const rPr = '<w:rPr><w:i/><w:rPrChange w:id="1" w:author="x"><w:rPr><w:b/></w:rPr></w:rPrChange></w:rPr>';
+    const d = docxCon(`<w:p>${r('texto con error aqui', rPr)}</w:p>`);
+    const s = reemplazarEnDocx(d, [{ original: 'aqui', nuevo: 'aquí' }], undefined, marcar);
+    expect(s.resultados).toEqual(['APLICADO']);
+    expect(xml(s.docx)).toContain('<w:rPr><w:i/><w:highlight w:val="yellow"/></w:rPr><w:t xml:space="preserve">aquí</w:t>');
+    expect(() => new PizZip(s.docx)).not.toThrow();
+  });
+});

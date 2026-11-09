@@ -1,17 +1,16 @@
 'use server';
 /**
- * Acciones de la revisión de escrituras ya hechas (todos los roles; cada digitador ve las suyas).
- * El análisis de la IA corre después de responder: la página muestra el avance.
+ * Acciones de la revisión de escrituras de sucesión (todos los roles; cada digitador ve las suyas).
+ * La revisión corre por etapas en segundo plano: la página muestra el avance.
  */
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { after } from 'next/server';
 import { requerirSesion } from '@/lib/sesion';
+import { urlAplicacion } from '@/lib/seguridad/red';
 import { cargarRevision, reanalizarRevision, aplicarCambios, eliminarRevision, ErrorRevisionEscritura } from '@/lib/servicios/revision-escrituras';
 
 export interface ResultadoRevision { error?: string; ok?: string }
-
-const t = (f: FormData, k: string) => String(f.get(k) ?? '').trim();
 
 function fallo(e: unknown, mensaje: string): ResultadoRevision {
   if (e instanceof ErrorRevisionEscritura) return { error: e.message };
@@ -19,15 +18,14 @@ function fallo(e: unknown, mensaje: string): ResultadoRevision {
   return { error: mensaje };
 }
 
-export async function accionCargarRevision(_: ResultadoRevision, f: FormData): Promise<ResultadoRevision> {
+/** Une las partes del PDF ya subidas (api/revisiones/partes) e inicia la revisión */
+export async function accionCargarRevision(datos: { carga: string; partes: number; nombre: string; tipoId: string; notas: string }): Promise<ResultadoRevision> {
   const s = await requerirSesion();
   if (!process.env.ANTHROPIC_API_KEY) return { error: 'La IA no está configurada en el servidor (ANTHROPIC_API_KEY).' };
-  const archivo = f.get('archivo');
-  if (!(archivo instanceof File) || !archivo.size) return { error: 'Seleccione la escritura en Word (.docx).' };
   let id: string;
   try {
-    const r = await cargarRevision(s, { nombreArchivo: archivo.name, archivo: Buffer.from(await archivo.arrayBuffer()), tipoId: t(f, 'tipoId') || undefined, notas: t(f, 'notas') || undefined });
-    after(r.tarea);
+    const r = await cargarRevision(s, { carga: datos.carga, partes: datos.partes, nombreArchivo: datos.nombre, tipoId: datos.tipoId, notas: datos.notas.trim() || undefined }, await urlAplicacion());
+    after(r.etapa);
     id = r.id;
   } catch (e) {
     return fallo(e, 'No se pudo cargar la escritura.');
@@ -39,24 +37,24 @@ export async function accionCargarRevision(_: ResultadoRevision, f: FormData): P
 export async function accionReanalizar(id: string): Promise<ResultadoRevision> {
   const s = await requerirSesion();
   try {
-    const r = await reanalizarRevision(s, id);
-    after(r.tarea);
+    const r = await reanalizarRevision(s, id, await urlAplicacion());
+    after(r.etapa);
   } catch (e) {
-    return fallo(e, 'No se pudo iniciar el análisis.');
+    return fallo(e, 'No se pudo iniciar la revisión.');
   }
   revalidatePath('/revisiones', 'layout');
-  return { ok: 'La IA está analizando la escritura de nuevo.' };
+  return { ok: 'La IA está revisando la escritura de nuevo.' };
 }
 
-/** Aplica los cambios elegidos en una copia del original; sin índices, descarta la copia */
-export async function accionAplicarCambios(id: string, indices: number[]): Promise<ResultadoRevision> {
+/** Genera la escritura con los cambios elegidos (por número); sin números, descarta la corregida */
+export async function accionAplicarCambios(id: string, numeros: number[]): Promise<ResultadoRevision> {
   const s = await requerirSesion();
   try {
-    const r = await aplicarCambios(s, id, indices);
+    const r = await aplicarCambios(s, id, numeros);
     revalidatePath(`/revisiones/${id}`);
-    if (!indices.length) return { ok: 'Se descartó la versión corregida: queda solo el original.' };
-    if (!r.aplicadas) return { error: `No se pudo aplicar ningún cambio: ${r.fallidas.join('; ')}` };
-    return { ok: `Se aplicaron ${r.aplicadas} cambio(s) en una copia de la escritura; el original no cambió.${r.fallidas.length ? ` ${r.fallidas.length} no se pudieron aplicar (ver abajo).` : ''} Descárguela y revísela en Word.` };
+    if (!numeros.length) return { ok: 'Se descartó la escritura corregida.' };
+    if (!r.aplicados) return { error: `No se pudo aplicar ningún cambio: ${r.fallidas.join('; ')}` };
+    return { ok: `Escritura generada con ${r.aplicados} cambio(s) marcados y su relación al final.${r.fallidas.length ? ` ${r.fallidas.length} no se pudieron aplicar (ver abajo).` : ''} Descárguela y revísela en Word.` };
   } catch (e) {
     return fallo(e, 'No se pudieron aplicar los cambios.');
   }

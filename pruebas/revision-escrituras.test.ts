@@ -2,120 +2,154 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import PizZip from 'pizzip';
+import { PDFDocument } from 'pdf-lib';
 import { vistaPreviaDocx, textoDeParrafos } from '@/lib/escritura/vista-previa';
 
-// Base de datos, almacenamiento, auditoría e IA en memoria
+// Base de datos, almacenamiento, auditoría, avisos e IA en memoria
 const filas = new Map<string, Record<string, unknown>>();
 const archivos = new Map<string, Buffer>();
-const respuestaIA = vi.fn();
-/** Como la base: cada lectura y escritura del JSON es una copia independiente */
-const copia = (f: Record<string, unknown>) => ({ ...f, resultado: f.resultado ? JSON.parse(JSON.stringify(f.resultado)) : f.resultado });
+const llamadas: string[] = [];
+const respuestas = { revision: {} as unknown };
+/** Como la base: cada lectura y escritura de los JSON es una copia independiente */
+const copia = (f: Record<string, unknown>) => JSON.parse(JSON.stringify(f), (k, v) => (['creadaEn', 'actualizadaEn', 'analizadaEn', 'aplicadaEn'].includes(k) && v ? new Date(v) : v));
+const raiz = path.resolve(__dirname, '..');
+const PLANTILLA = fs.readFileSync(path.join(raiz, 'plantillas', 'docx', 'cierre.docx'));
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/auditoria', () => ({ auditar: vi.fn(async () => {}) }));
+vi.mock('@/lib/servicios/notificaciones', () => ({ notificar: vi.fn(async () => {}) }));
+vi.mock('@/lib/servicios/tareas', () => ({ firmaEtapa: () => 'firma', LIMITE_SIN_LATIDO_MS: 360_000 }));
 vi.mock('@/lib/almacenamiento', () => ({
-  guardarCifrado: vi.fn(async (d: Buffer, p: string) => { const ruta = `${p}/${archivos.size}`; archivos.set(ruta, Buffer.from(d)); return ruta; }),
+  guardarCifrado: vi.fn(async (d: Buffer, p: string) => { const ruta = `${p}/${archivos.size}-${Math.random()}`; archivos.set(ruta, Buffer.from(d)); return ruta; }),
   leerCifrado: vi.fn(async (ruta: string) => archivos.get(ruta)!),
   borrarCifrado: vi.fn(async (ruta: string) => { archivos.delete(ruta); }),
+  guardarParte: vi.fn(async () => {}),
+  unirPartes: vi.fn(async () => Buffer.from('')),
 }));
 vi.mock('@/lib/ia/cliente', () => ({
   ErrorIA: class extends Error {},
-  llamarEstructurado: (...a: unknown[]) => respuestaIA(...a),
+  prepararDocumento: async (_b: Buffer, _m: string, titulo: string) => ({ bloque: { type: 'text', text: titulo }, liberar: async () => {} }),
+  llamarEstructurado: async (o: { sistema: string; contenido: { text?: string }[] }) => {
+    const uso = { modelo: 'claude-sonnet-5-5', tokensEntrada: 1, tokensSalida: 1, tokensCacheLectura: 0, duracionMs: 1 };
+    if (o.sistema.startsWith('Recibes un PDF')) {
+      llamadas.push('identificar');
+      return { ...uso, datos: { escritura: [{ desde: 1, hasta: 5 }], tipo_escritura: 'Sucesión intestada de ANA PERES', soportes: [{ tipo: 'Registro civil de defunción', descripcion: 'De ANA PÉREZ', desde: 6, hasta: 6 }] } };
+    }
+    if (o.sistema.startsWith('Transcribes')) {
+      const paginas = o.contenido[0].text!;
+      llamadas.push(`transcribir ${paginas}`);
+      return { ...uso, datos: { parrafos: paginas.includes('1 a 4')
+        ? [
+          { texto: 'ESCRITURA PÚBLICA NÚMERO:', alineacion: 'IZQUIERDA', continua_anterior: false },
+          { texto: 'Compareció quien dijo ser JUAN GÓMEZ, apoderado de la causante ANA PERES, identificada con cédula 12.345, y', alineacion: 'JUSTIFICADO', continua_anterior: false },
+        ]
+        : [
+          { texto: 'manifestó que eleva a escritura pública la sucesión de ANA PERES. ----------', alineacion: 'JUSTIFICADO', continua_anterior: true },
+          { texto: 'PRIMERO: PRIMERO: Que el activo es de CIEN PESOS ($100).', alineacion: 'JUSTIFICADO', continua_anterior: false },
+        ] } };
+    }
+    llamadas.push('revisar');
+    expect(o.contenido.at(-1)!.text).toContain('[P2] Compareció quien dijo ser JUAN GÓMEZ, apoderado de la causante ANA PERES, identificada con cédula 12.345, y manifestó que eleva');
+    return { ...uso, datos: respuestas.revision };
+  },
 }));
 vi.mock('@/lib/db', () => ({
   db: {
     revisionEscritura: {
-      create: async ({ data }: { data: Record<string, unknown> }) => { const f = { id: 'r1', creadaEn: new Date(), rutaCorregida: null, aplicadaEn: null, resultado: null, ...data }; filas.set('r1', f); return f; },
+      create: async ({ data }: { data: Record<string, unknown> }) => { const f = copia({ id: 'r1', creadaEn: new Date(), actualizadaEn: new Date(), rutaBase: null, rutaCorregida: null, aplicadaEn: null, resultado: null, ...data }); filas.set('r1', f); return copia(f); },
       findUnique: async ({ where }: { where: { id: string } }) => (filas.has(where.id) ? { ...copia(filas.get(where.id)!), cargadaPor: { nombreCompleto: 'Ana' } } : null),
-      findUniqueOrThrow: async ({ where }: { where: { id: string } }) => copia(filas.get(where.id)!),
-      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => { const f = copia({ ...filas.get(where.id)!, ...data }); filas.set(where.id, f); return f; },
+      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => { const f = copia({ ...filas.get(where.id)!, ...data, actualizadaEn: new Date() }); filas.set(where.id, f); return f; },
+      updateMany: async ({ where, data }: { where: { id: string; estado?: string; progreso?: { equals: number } }; data: Record<string, unknown> }) => {
+        const f = filas.get(where.id);
+        if (!f || (where.estado && f.estado !== where.estado) || (where.progreso && (f.progreso as { turno: number } | null)?.turno !== where.progreso.equals)) return { count: 0 };
+        filas.set(where.id, copia({ ...f, ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, typeof v === 'object' && v && 'toJSON' in (v as object) && String(v).includes('DbNull') ? null : v])), actualizadaEn: new Date() }));
+        return { count: 1 };
+      },
       delete: async ({ where }: { where: { id: string } }) => { filas.delete(where.id); },
     },
-    tipoEscritura: { findUnique: async () => null },
-    plantilla: { findFirst: async () => null },
+    plantilla: { findFirst: async () => ({ id: 'p1', tipoId: 'sucesion_intestada', version: 1, archivo: PLANTILLA, tipo: { nombre: 'Sucesión intestada' } }) },
   },
 }));
 
-const raiz = path.resolve(__dirname, '..');
-const r = (t: string) => `<w:r><w:t xml:space="preserve">${t}</w:t></w:r>`;
-function docxCon(cuerpo: string, sectPr = '<w:sectPr><w:pgMar w:top="1701" w:right="1247" w:bottom="510" w:left="1758"/></w:sectPr>'): Buffer {
-  const zip = new PizZip(fs.readFileSync(path.join(raiz, 'plantillas', 'docx', 'cierre.docx')));
-  zip.file('word/document.xml', `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${cuerpo}${sectPr}</w:body></w:document>`);
-  return zip.generate({ type: 'nodebuffer' }) as Buffer;
+async function pdfDe(paginas: number): Promise<Buffer> {
+  const d = await PDFDocument.create();
+  for (let i = 0; i < paginas; i++) d.addPage();
+  return Buffer.from(await d.save());
 }
 const texto = (d: Buffer) => textoDeParrafos(vistaPreviaDocx(d));
+const xml = (d: Buffer) => new PizZip(d).file('word/document.xml')!.asText();
 const sesion = { sesionId: 's', usuario: { id: 'u1', usuario: 'ana', nombre: 'Ana', rol: 'DIGITADOR' as const, debeCambiarContrasena: false, totpActivo: false }, dispositivoId: null, remota: false, segundoFactorOk: true, ip: '127.0.0.1' };
 
-const ESCRITURA = docxCon([
-  `<w:p>${r('Compareció JUAN PERES GÓMEZ, mayor de edad, identificado con cédula 12.345.')}</w:p>`,
-  `<w:p>${r('El vendedor JUAN PERES GÓMEZ transfiere el inmueble por la suma de CIEN MILLONES DE PESOS ($100.000.000).')}</w:p>`,
-  `<w:p>${r('Los compradores declaran que recibio el inmueble.')}</w:p>`,
-].join(''));
+const cambio = (x: Record<string, unknown>) => ({ nivel: 'ADVERTENCIA', categoria: 'REDACCION', parrafo: 2, ubicacion: 'Comparecencia', original: '', corregido: '', todas_las_apariciones: false, motivo: 'm', fuente: 'Texto de la escritura', ...x });
 
-const recomendacion = (x: Partial<{ nivel: string; categoria: string; mensaje: string; original: string | null; corregido: string | null; todas_las_apariciones: boolean }>) => ({
-  nivel: 'ADVERTENCIA', categoria: 'REDACCION', mensaje: 'm', original: null, corregido: null, todas_las_apariciones: false, ...x,
-});
+describe('revisión de escrituras de sucesión desde un PDF', () => {
+  beforeEach(() => { filas.clear(); archivos.clear(); llamadas.length = 0; });
 
-describe('revisión de escrituras ya hechas', () => {
-  beforeEach(() => { filas.clear(); archivos.clear(); respuestaIA.mockReset(); });
+  it('identifica, transcribe por bloques, revisa y genera la escritura con los cambios marcados y su relación', async () => {
+    const { registrarRevision, aplicarCambios, resultadoDe, descargarRevision } = await import('@/lib/servicios/revision-escrituras');
+    respuestas.revision = {
+      resumen: 'El apellido de la causante no coincide con el registro civil.',
+      cambios: [
+        cambio({ nivel: 'CRITICA', categoria: 'DATOS', parrafo: 2, ubicacion: 'Comparecencia y cláusula PRIMERO', original: 'PERES', corregido: 'PÉREZ', todas_las_apariciones: true, motivo: 'El registro civil de defunción dice PÉREZ.', fuente: 'Registro civil de defunción, pág. 6' }),
+        cambio({ parrafo: 4, ubicacion: 'Cláusula PRIMERO', original: 'PRIMERO: PRIMERO:', corregido: 'PRIMERO:', motivo: 'Título repetido.' }),
+        cambio({ parrafo: 4, ubicacion: 'Cláusula PRIMERO', original: 'texto que no existe', corregido: 'otro' }),
+      ],
+      observaciones: [{ nivel: 'ADVERTENCIA', categoria: 'CONTENIDO', ubicacion: 'Otorgamiento', mensaje: 'Falta la constancia de la UGPP.', fuente: 'Modelo aprobado' }],
+    };
+    const { id, etapa } = await registrarRevision(sesion, { pdf: await pdfDe(6), nombreArchivo: 'sucesion.pdf', tipoId: 'sucesion_intestada' }, '');
+    await etapa(); // sin dirección de la aplicación, las etapas siguen en la misma invocación
 
-  it('verifica el formato de la notaría sin cambiar el documento', async () => {
-    const { verificarFormato } = await import('@/lib/servicios/revision-escrituras');
-    const bien = verificarFormato(ESCRITURA);
-    expect(bien[0]).toMatchObject({ ok: true });
-    const mal = verificarFormato(docxCon(`<w:p>${r('Texto')}</w:p><w:p/><w:p>${r('Más texto')}</w:p><w:p>${r('Fin')}</w:p>`, '<w:sectPr><w:pgMar w:top="1440" w:right="1247" w:bottom="510" w:left="1758"/></w:sectPr>'));
-    expect(mal[0].ok).toBe(false);
-    expect(mal[0].mensaje).toContain('superior 2,5 cm');
-    expect(mal.at(-1)).toMatchObject({ ok: false });
-  });
-
-  it('analiza, deja aplicables solo los cambios que se pueden hacer y aplica los elegidos en una copia', async () => {
-    const { cargarRevision, aplicarCambios, resultadoDe, descargarRevision } = await import('@/lib/servicios/revision-escrituras');
-    respuestaIA.mockResolvedValue({
-      modelo: 'claude-sonnet-5-5', tokensEntrada: 10, tokensSalida: 5, duracionMs: 1,
-      datos: {
-        tipo_detectado: 'Compraventa', resumen: 'Hay errores de redacción.',
-        recomendaciones: [
-          recomendacion({ nivel: 'INFORMATIVA', original: 'declaran que recibio', corregido: 'declaran que recibieron' }),
-          recomendacion({ nivel: 'CRITICA', categoria: 'DATOS', original: 'PERES', corregido: 'PÉREZ', todas_las_apariciones: true }),
-          recomendacion({ original: 'texto que no existe', corregido: 'otro' }),
-          recomendacion({ categoria: 'CONTENIDO', mensaje: 'Falta la afectación a vivienda familiar.' }),
-        ],
-      },
-    });
-    const { id, tarea } = await cargarRevision(sesion, { nombreArchivo: 'escritura.docx', archivo: ESCRITURA });
-    await tarea();
+    expect(llamadas).toEqual(['identificar', 'transcribir Escritura, páginas 1 a 4', 'transcribir Escritura, páginas 5 a 5', 'revisar']);
     const fila = filas.get(id)!;
     expect(fila.estado).toBe('COMPLETADA');
     const res = resultadoDe(fila as never)!;
-    // Ordenadas por nivel: la crítica primero
-    expect(res.recomendaciones.map((x) => [x.nivel, x.aplicable])).toEqual([['CRITICA', true], ['ADVERTENCIA', false], ['ADVERTENCIA', false], ['INFORMATIVA', true]]);
-    expect(res.recomendaciones[0].veces).toBe(2);
-    expect(res.recomendaciones.find((x) => x.original === 'texto que no existe')?.motivo).toContain('no está tal cual');
+    // El párrafo partido entre los dos bloques queda en uno, sin el relleno de guiones
+    expect(res.parrafos.map((x) => x.texto)).toEqual([
+      'ESCRITURA PÚBLICA NÚMERO:',
+      'Compareció quien dijo ser JUAN GÓMEZ, apoderado de la causante ANA PERES, identificada con cédula 12.345, y manifestó que eleva a escritura pública la sucesión de ANA PERES.',
+      'PRIMERO: PRIMERO: Que el activo es de CIEN PESOS ($100).',
+    ]);
+    expect(res.soportes).toHaveLength(1);
+    expect(res.cambios.map((c) => [c.numero, c.aplicable])).toEqual([[1, true], [2, true], [3, false]]);
+    expect(res.cambios[0].veces).toBe(2);
+    expect(res.cambios[2].noAplicable).toContain('no está tal cual');
 
-    // Se eligen solo la crítica: el original no cambia y la copia lleva el cambio en las dos apariciones
-    const r1 = await aplicarCambios(sesion, id, [0]);
-    expect(r1).toEqual({ aplicadas: 1, fallidas: [] });
-    const corregida = (await descargarRevision(sesion, id, 'corregida', true)).bytes;
-    expect(texto(corregida)).toContain('Compareció JUAN PÉREZ GÓMEZ');
-    expect(texto(corregida)).toContain('El vendedor JUAN PÉREZ GÓMEZ');
-    expect(texto(corregida)).toContain('recibio');
-    expect(texto((await descargarRevision(sesion, id, 'original', true)).bytes)).toContain('PERES');
+    const r = await aplicarCambios(sesion, id, [1, 2, 3]);
+    expect(r).toEqual({ aplicados: 2, fallidas: [] });
+    const marcada = (await descargarRevision(sesion, id, 'corregida', true)).bytes;
+    const x = xml(marcada);
+    expect(x.match(/<w:t xml:space="preserve">PERES<\/w:t>/g)).toHaveLength(2);
+    expect(x).toMatch(/<w:strike\/><w:color w:val="FF0000"\/>[^]*?PERES/);
+    expect(x).toMatch(/<w:highlight w:val="yellow"\/><\/w:rPr><w:t xml:space="preserve">PÉREZ<\/w:t>/);
+    expect(x).toContain('<w:vertAlign w:val="superscript"/></w:rPr><w:t xml:space="preserve">[1]</w:t>');
+    const t = texto(marcada);
+    expect(t).toContain('RELACIÓN DE CAMBIOS DE LA REVISIÓN');
+    expect(t).toContain('[1] Comparecencia y cláusula PRIMERO (párrafo 2, 2 lugares). Se cambió «PERES» por «PÉREZ». Motivo: El registro civil de defunción dice PÉREZ. Fuente: Registro civil de defunción, pág. 6.');
+    expect(t).toContain('PENDIENTE DE REVISAR A MANO');
+    expect(t).toContain('Falta la constancia de la UGPP.');
 
-    // Otra selección rehace la copia desde el original; un índice no aplicable se ignora
-    await aplicarCambios(sesion, id, [3, 1]);
-    const otra = texto((await descargarRevision(sesion, id, 'corregida', true)).bytes);
-    expect(otra).toContain('recibieron');
-    expect(otra).toContain('PERES');
+    // La limpia: los mismos cambios, sin marcas ni relación
+    const limpia = (await descargarRevision(sesion, id, 'limpia', true)).bytes;
+    const tl = texto(limpia);
+    expect(tl).toContain('la causante ANA PÉREZ, identificada');
+    expect(tl).toContain('sucesión de ANA PÉREZ.');
+    expect(tl).toContain('PRIMERO: Que el activo');
+    expect(tl).not.toContain('PRIMERO: PRIMERO:');
+    expect(tl).not.toContain('RELACIÓN DE CAMBIOS');
+    expect(xml(limpia)).not.toContain('<w:strike/>');
 
-    // Sin selección se descarta la copia
+    // La transcrita no cambia
+    expect(texto((await descargarRevision(sesion, id, 'transcrita', true)).bytes)).toContain('ANA PERES');
+
+    // Otra selección rehace la escritura; sin selección se descarta
+    await aplicarCambios(sesion, id, [2]);
+    expect(texto((await descargarRevision(sesion, id, 'limpia', true)).bytes)).toContain('ANA PERES');
     await aplicarCambios(sesion, id, []);
     expect(filas.get(id)!.rutaCorregida).toBeNull();
   });
 
-  it('rechaza archivos que no son .docx', async () => {
-    const { cargarRevision } = await import('@/lib/servicios/revision-escrituras');
-    await expect(cargarRevision(sesion, { nombreArchivo: 'escritura.pdf', archivo: Buffer.from('x') })).rejects.toThrow('.docx');
-    await expect(cargarRevision(sesion, { nombreArchivo: 'escritura.docx', archivo: Buffer.from('no es zip') })).rejects.toThrow('no es un documento de Word');
+  it('rechaza lo que no es un PDF', async () => {
+    const { registrarRevision } = await import('@/lib/servicios/revision-escrituras');
+    await expect(registrarRevision(sesion, { pdf: Buffer.from('no es pdf'), nombreArchivo: 'x.pdf', tipoId: 'sucesion_intestada' }, '')).rejects.toThrow('no es un PDF');
   });
 });

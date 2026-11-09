@@ -507,25 +507,30 @@ model Notificacion {
   @@map("notificaciones")
 }
 
-// Revisión de escrituras ya hechas (src/lib/servicios/revision-escrituras.ts): se carga el .docx, la IA
-// recomienda cambios de texto sin tocar la estructura y el usuario elige cuáles aplicar en una copia.
-// Los archivos (original y corregido) van cifrados en el almacenamiento, como los documentos soporte.
+// Revisión de escrituras de sucesión ya hechas (src/lib/servicios/revision-escrituras.ts): se carga un PDF con
+// la escritura y sus documentos soporte; la IA transcribe la escritura, la cruza con los soportes y la plantilla
+// aprobada, y recomienda cambios. El usuario elige cuáles aplicar y se genera la escritura en Word con los
+// cambios marcados (y su relación: qué se cambió, dónde y por qué). Los archivos van cifrados.
 model RevisionEscritura {
   id            String    @id @default(cuid())
   nombreArchivo String
   tamano        Int
-  hashSha256    String // del archivo original (integridad)
-  rutaOriginal  String // ruta relativa en el almacenamiento cifrado
-  rutaCorregida String? // copia con los cambios elegidos aplicados
-  tipoId        String? // tipo de escritura indicado por el usuario (se compara con su plantilla aprobada)
+  hashSha256    String // del PDF cargado (integridad)
+  paginas       Int?
+  rutaOriginal  String // PDF cargado (escritura + soportes), en el almacenamiento cifrado
+  rutaBase      String? // la escritura transcrita, en Word con el formato de la notaría y sin cambios
+  rutaCorregida String? // la escritura con los cambios elegidos marcados
+  tipoId        String? // tipo de escritura (su plantilla aprobada es la referencia y la base del Word)
   notas         String? // qué quiere el usuario que se revise
   estado        String    @default("EN_CURSO") // EN_CURSO | COMPLETADA | ERROR
   error         String?
-  resultado     Json? // resumen, verificación de formato y recomendaciones con su estado
+  progreso      Json? // avance por etapas en segundo plano (identificar, transcribir, revisar)
+  resultado     Json? // transcripción, documentos soporte, resumen y recomendaciones con su estado
   modelo        String?
   cargadaPor    Usuario   @relation(fields: [cargadaPorId], references: [id])
   cargadaPorId  String
   creadaEn      DateTime  @default(now())
+  actualizadaEn DateTime  @default(now()) @updatedAt // latido: si deja de cambiar, la etapa se cortó
   analizadaEn   DateTime?
   aplicadaEn    DateTime?
 
