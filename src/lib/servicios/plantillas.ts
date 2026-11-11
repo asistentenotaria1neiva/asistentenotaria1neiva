@@ -1,172 +1,153 @@
 /**
- * Plantillas: el modelo de redacción (.docx, sin variables) de cada tipo de escritura, versionado.
- * Toda plantilla nueva entra como PENDIENTE_APROBACION; solo el administrador la aprueba.
- * La IA redacta cada escritura tomando como base la versión APROBADA más reciente de su tipo
- * (src/lib/servicios/redaccion.ts).
- *
- * Variantes: un tipo con `variantes` (p. ej. la compraventa con hipoteca, cuya estructura cambia
- * según el banco o la obra) tiene varias plantillas aprobadas a la vez, una por variante. Las
- * versiones de una variante comparten su nombre; aprobar una retira solo la anterior de esa misma
- * variante. Al redactar, la IA elige la variante según los documentos del caso
- * (src/lib/servicios/eleccion-plantilla.ts), o el funcionario la indica.
+ * Biblioteca de plantillas: las escrituras modelo de la notaría, con su categoría y su fecha.
+ * Todos los usuarios buscan y ven las plantillas; el revisor (y el administrador) las alimenta:
+ * agrega nuevas, corrige sus datos y las retira o elimina.
  */
 import 'server-only';
-import PizZip from 'pizzip';
+import type { Prisma } from '@prisma/client';
 import { db } from '../db';
+import { auditar } from '../auditoria';
+import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
+import { guardarCifrado, leerCifrado, borrarCifrado } from '../almacenamiento';
 import { sha256 } from '../seguridad/cifrado';
+import { ErrorDocx } from '../escritura/docx';
+import { prepararPlantilla, nombreCategoria, textoBusqueda, textoDeBusqueda } from '../escritura/biblioteca';
+import { terminosBusqueda } from '../texto/normalizar';
 
 export class ErrorPlantilla extends Error {}
 
-/** Nombre de la variante (las cargadas sin nombre se identifican por su archivo) */
-export const nombreVariante = (p: { variante: string | null; nombreArchivo: string }) => p.variante?.trim() || p.nombreArchivo.replace(/\.docx$/i, '');
-/** Clave para comparar nombres de variante (sin tildes, mayúsculas ni espacios de más) */
-const claveVariante = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
-const mismaVariante = (a: { variante: string | null; nombreArchivo: string }, b: { variante: string | null; nombreArchivo: string }) => claveVariante(nombreVariante(a)) === claveVariante(nombreVariante(b));
+export const POR_PAGINA = 25;
+const MAXIMO_ARCHIVO = 4 * 1024 * 1024;
 
-export async function plantillaAprobada(tipoId: string) {
-  const p = await db.plantilla.findFirst({ where: { tipoId, estado: 'APROBADA' }, orderBy: { version: 'desc' } });
-  if (!p) throw new ErrorPlantilla(`No hay una plantilla APROBADA para "${tipoId}". El administrador debe aprobarla en Plantillas.`);
-  return p;
+export const puedeAdministrar = (s: SesionActiva) => s.usuario.rol === 'REVISOR' || s.usuario.rol === 'ADMINISTRADOR';
+
+function exigirAdministrar(s: SesionActiva) {
+  if (!puedeAdministrar(s)) throw new ErrorPlantilla('Solo el revisor o el administrador pueden modificar la biblioteca.');
 }
 
-/** Todas las plantillas aprobadas de un tipo (en un tipo con variantes, una por variante), la más reciente primero */
-export async function plantillasAprobadas(tipoId: string) {
-  const lista = await db.plantilla.findMany({ where: { tipoId, estado: 'APROBADA' }, orderBy: { version: 'desc' } });
-  if (!lista.length) throw new ErrorPlantilla(`No hay una plantilla APROBADA para "${tipoId}". El administrador debe aprobarla en Plantillas.`);
-  return lista;
+export interface FiltroPlantillas {
+  q?: string;
+  categoria?: string;
+  subcategoria?: string;
+  anio?: number;
+  desde?: Date;
+  hasta?: Date;
+  /** Incluir las retiradas (solo revisor y administrador) */
+  retiradas?: boolean;
+  pagina?: number;
 }
 
-/** Cargador para la redacción: devuelve el .docx aprobado y registra qué versión se usó */
-export function cargadorAprobadas(usadas: { tipoId: string; version: number; id: string }[]) {
-  return async (tipoId: string) => {
-    const p = await plantillaAprobada(tipoId);
-    if (!usadas.some((u) => u.id === p.id)) usadas.push({ tipoId, version: p.version, id: p.id });
-    return Buffer.from(p.archivo);
+/** Filtro de la URL (?q=&categoria=&subcategoria=&anio=&desde=&hasta=&pagina=) */
+export function filtroDesdeParametros(p: Record<string, string | string[] | undefined>): FiltroPlantillas {
+  const uno = (k: string) => { const v = p[k]; return (Array.isArray(v) ? v[0] : v)?.trim() || undefined; };
+  const fecha = (k: string, fin = false) => { const v = uno(k); if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined; const d = new Date(`${v}T${fin ? '23:59:59' : '00:00:00'}-05:00`); return Number.isNaN(d.getTime()) ? undefined : d; };
+  const anio = Number(uno('anio'));
+  return {
+    q: uno('q')?.slice(0, 200), categoria: uno('categoria'), subcategoria: uno('subcategoria'),
+    anio: Number.isInteger(anio) && anio > 1990 && anio < 2100 ? anio : undefined,
+    desde: fecha('desde'), hasta: fecha('hasta', true),
+    retiradas: uno('retiradas') === '1',
+    pagina: Math.max(1, Math.trunc(Number(uno('pagina'))) || 1),
   };
 }
 
-/** Verifica que un .docx sea una plantilla válida: zip legible, con documento principal y texto */
-export function validarDocxPlantilla(archivo: Buffer): { ok: true } | { ok: false; error: string } {
-  if (archivo.length > 5 * 1024 * 1024) return { ok: false, error: 'La plantilla supera 5 MB.' };
-  if (archivo.subarray(0, 2).toString() !== 'PK') return { ok: false, error: 'El archivo no es un .docx válido.' };
+export async function buscarPlantillas(s: SesionActiva, f: FiltroPlantillas) {
+  const terminos = terminosBusqueda(f.q ?? '');
+  const where: Prisma.PlantillaWhereInput = {
+    ...(f.retiradas && puedeAdministrar(s) ? {} : { activa: true }),
+    ...(f.categoria ? { categoria: f.categoria } : {}),
+    ...(f.subcategoria ? { subcategoria: f.subcategoria } : {}),
+    ...(f.anio ? { anio: f.anio } : {}),
+    ...(f.desde || f.hasta ? { fecha: { ...(f.desde ? { gte: f.desde } : {}), ...(f.hasta ? { lte: f.hasta } : {}) } } : {}),
+    ...(terminos.length ? { AND: terminos.map((t) => ({ busqueda: { contains: t } })) } : {}),
+  };
+  const pagina = f.pagina ?? 1;
+  const [total, filas] = await Promise.all([
+    db.plantilla.count({ where }),
+    db.plantilla.findMany({
+      where, orderBy: [{ fecha: 'desc' }, { nombre: 'asc' }], skip: (pagina - 1) * POR_PAGINA, take: POR_PAGINA,
+      select: { id: true, nombre: true, categoria: true, subcategoria: true, anio: true, fecha: true, activa: true, origen: true, caracteres: true },
+    }),
+  ]);
+  return { total, filas, pagina, paginas: Math.max(1, Math.ceil(total / POR_PAGINA)) };
+}
+
+/** Categorías (con sus subcategorías y cuántas plantillas tiene cada una) y años, para los filtros */
+export async function opcionesFiltro() {
+  const [grupos, anios] = await Promise.all([
+    db.plantilla.groupBy({ by: ['categoria', 'subcategoria'], where: { activa: true }, _count: true }),
+    db.plantilla.groupBy({ by: ['anio'], where: { activa: true }, _count: true, orderBy: { anio: 'desc' } }),
+  ]);
+  const categorias = new Map<string, { nombre: string; total: number; subcategorias: { nombre: string; total: number }[] }>();
+  for (const g of grupos) {
+    const c = categorias.get(g.categoria) ?? { nombre: g.categoria, total: 0, subcategorias: [] };
+    c.total += g._count;
+    if (g.subcategoria) c.subcategorias.push({ nombre: g.subcategoria, total: g._count });
+    categorias.set(g.categoria, c);
+  }
+  return {
+    categorias: [...categorias.values()].sort((a, b) => a.nombre.localeCompare(b.nombre)).map((c) => ({ ...c, subcategorias: c.subcategorias.sort((a, b) => a.nombre.localeCompare(b.nombre)) })),
+    anios: anios.map((a) => ({ anio: a.anio, total: a._count })),
+  };
+}
+
+export const obtenerPlantilla = (id: string) => db.plantilla.findUnique({ where: { id }, include: { cargadaPor: { select: { nombreCompleto: true } } } });
+
+/** El .docx de una plantilla de la biblioteca (verifica su integridad) */
+export async function archivoPlantilla(id: string): Promise<Buffer> {
+  const p = await db.plantilla.findUnique({ where: { id }, select: { rutaCifrada: true, hashSha256: true } });
+  if (!p) throw new ErrorPlantilla('La plantilla no existe.');
+  const bytes = await leerCifrado(p.rutaCifrada);
+  if (sha256(bytes) !== p.hashSha256) throw new ErrorPlantilla('La plantilla no pasó la verificación de integridad.');
+  return bytes;
+}
+
+export interface DatosPlantilla { nombre?: string; categoria: string; subcategoria?: string | null; fecha?: Date | null }
+
+/** El revisor agrega una plantilla a la biblioteca */
+export async function agregarPlantilla(s: SesionActiva, bytes: Buffer, nombreArchivo: string, datos: DatosPlantilla) {
+  exigirAdministrar(s);
+  if (!/\.docx$/i.test(nombreArchivo)) throw new ErrorPlantilla('Solo se aceptan documentos de Word .docx (los .doc antiguos se abren en Word y se guardan como .docx).');
+  if (!bytes.length || bytes.length > MAXIMO_ARCHIVO) throw new ErrorPlantilla('El archivo está vacío o pesa más de 4 MB.');
+  if (!nombreCategoria(datos.categoria)) throw new ErrorPlantilla('Indique la categoría de la plantilla.');
+  let p;
   try {
-    const zip = new PizZip(archivo);
-    const xml = zip.file('word/document.xml')?.asText();
-    if (!xml) return { ok: false, error: 'El .docx no tiene documento principal.' };
-    if (!/<w:t[\s>]/.test(xml)) return { ok: false, error: 'El .docx no tiene texto.' };
-    return { ok: true };
-  } catch {
-    return { ok: false, error: 'El archivo no es un .docx válido.' };
+    p = prepararPlantilla(bytes, { nombreArchivo, nombre: datos.nombre, categoria: datos.categoria, subcategoria: datos.subcategoria, fecha: datos.fecha ?? new Date() });
+  } catch (e) {
+    if (e instanceof ErrorDocx) throw new ErrorPlantilla(e.message);
+    throw e;
   }
+  if (p.caracteres < 200) throw new ErrorPlantilla('El documento casi no tiene texto: cargue la escritura modelo completa.');
+  const existente = await db.plantilla.findUnique({ where: { hashSha256: p.hashSha256 }, select: { nombre: true, categoria: true } });
+  if (existente) throw new ErrorPlantilla(`Ese archivo ya está en la biblioteca: «${existente.nombre}» (${existente.categoria}).`);
+  const rutaCifrada = await guardarCifrado(bytes, 'plantillas');
+  const creada = await db.plantilla.create({ data: { ...p, rutaCifrada, origen: 'REVISOR', cargadaPorId: s.usuario.id } });
+  await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_AGREGADA', entidad: 'plantilla', entidadId: creada.id, detalle: { nombre: p.nombre, categoria: p.categoria, subcategoria: p.subcategoria, sha256: p.hashSha256 } });
+  return creada;
 }
 
-export interface DatosVariante { variante?: string | null; criterios?: string | null }
-
-const limpiarVariante = (d: DatosVariante) => ({
-  variante: d.variante?.trim().replace(/\s+/g, ' ').slice(0, 120) || null,
-  criterios: d.criterios?.trim().slice(0, 2000) || null,
-});
-
-export async function cargarPlantilla(tipoId: string, nombreArchivo: string, archivo: Buffer, usuarioId: string | null, notas?: string, variante: DatosVariante = {}) {
-  const v = validarDocxPlantilla(archivo);
-  if (!v.ok) throw new ErrorPlantilla(v.error);
-  const ultima = await db.plantilla.findFirst({ where: { tipoId }, orderBy: { version: 'desc' } });
-  return db.plantilla.create({
-    data: { tipoId, version: (ultima?.version ?? 0) + 1, nombreArchivo, archivo: new Uint8Array(archivo), hashSha256: sha256(archivo), notas, cargadaPorId: usuarioId, ...limpiarVariante(variante) },
+export async function editarPlantilla(s: SesionActiva, id: string, datos: DatosPlantilla & { activa?: boolean }) {
+  exigirAdministrar(s);
+  const actual = await db.plantilla.findUnique({ where: { id } });
+  if (!actual) throw new ErrorPlantilla('La plantilla no existe.');
+  const nombre = datos.nombre?.trim().slice(0, 200) || actual.nombre;
+  const categoria = nombreCategoria(datos.categoria) || actual.categoria;
+  const subcategoria = datos.subcategoria === undefined ? actual.subcategoria : (datos.subcategoria ? nombreCategoria(datos.subcategoria) || null : null);
+  const fecha = datos.fecha ?? actual.fecha;
+  // La búsqueda conserva el comienzo de la escritura; cambian el nombre y las categorías
+  await db.plantilla.update({
+    where: { id },
+    data: { nombre, categoria, subcategoria, fecha, anio: datos.fecha ? fecha.getFullYear() : actual.anio, ...(datos.activa !== undefined ? { activa: datos.activa } : {}), busqueda: textoBusqueda(nombre, categoria, subcategoria, textoDeBusqueda(actual.busqueda)) },
   });
+  await auditar({ ...datosAuditoria(s), accion: datos.activa === false ? 'PLANTILLA_RETIRADA' : datos.activa === true && !actual.activa ? 'PLANTILLA_REACTIVADA' : 'PLANTILLA_EDITADA', entidad: 'plantilla', entidadId: id, detalle: { nombre, categoria, subcategoria } });
 }
 
-/** Aprobadas que deja retiradas aprobar `p`: todas las del tipo o, si el tipo tiene variantes, las de su misma variante */
-async function aRetirar(p: { id: string; tipoId: string; variante: string | null; nombreArchivo: string }): Promise<string[]> {
-  const tipo = await db.tipoEscritura.findUnique({ where: { id: p.tipoId }, select: { variantes: true } });
-  const aprobadas = await db.plantilla.findMany({ where: { tipoId: p.tipoId, estado: 'APROBADA', id: { not: p.id } }, select: { id: true, variante: true, nombreArchivo: true } });
-  return aprobadas.filter((a) => !tipo?.variantes || mismaVariante(a, p)).map((a) => a.id);
-}
-
-export async function aprobarPlantilla(id: string, usuarioId: string) {
-  const p = await db.plantilla.findUniqueOrThrow({ where: { id } });
-  const retirar = await aRetirar(p);
-  await db.$transaction([
-    // Al aprobar una versión, las aprobadas anteriores del mismo tipo (o de la misma variante) quedan retiradas
-    db.plantilla.updateMany({ where: { id: { in: retirar } }, data: { estado: 'RETIRADA' } }),
-    db.plantilla.update({ where: { id }, data: { estado: 'APROBADA', aprobadaPorId: usuarioId, aprobadaEn: new Date() } }),
-  ]);
-  return { ...p, retiradas: retirar.length };
-}
-
-/**
- * Aprueba de una vez las versiones pendientes de un tipo con variantes. Si una variante tiene varias
- * pendientes, queda aprobada la más reciente. Devuelve las aprobadas.
- */
-export async function aprobarPendientesDeVariantes(tipoId: string, usuarioId: string, ids?: string[]) {
-  const tipo = await db.tipoEscritura.findUnique({ where: { id: tipoId }, select: { variantes: true } });
-  if (!tipo?.variantes) throw new ErrorPlantilla('Este tipo de escritura no tiene variantes: apruebe la versión en su propia página.');
-  const pendientes = await db.plantilla.findMany({
-    where: { tipoId, estado: 'PENDIENTE_APROBACION', ...(ids ? { id: { in: ids } } : {}) },
-    orderBy: { version: 'asc' }, select: { id: true, tipoId: true, version: true, variante: true, nombreArchivo: true },
-  });
-  if (!pendientes.length) throw new ErrorPlantilla('No hay versiones pendientes de aprobación.');
-  const aprobadas: typeof pendientes = [];
-  for (const p of pendientes) {
-    await aprobarPlantilla(p.id, usuarioId);
-    aprobadas.push(p);
-  }
-  return aprobadas;
-}
-
-/** Cambia el nombre de la variante o sus criterios de elección (no el texto: eso es una versión nueva) */
-export async function actualizarVariante(id: string, datos: DatosVariante) {
-  const p = await db.plantilla.findUnique({ where: { id }, include: { tipo: { select: { variantes: true } } } });
+/** Elimina la plantilla y su archivo. Las escrituras que la usaban conservan su nombre y deben elegir otra. */
+export async function eliminarPlantilla(s: SesionActiva, id: string) {
+  exigirAdministrar(s);
+  const p = await db.plantilla.findUnique({ where: { id }, select: { nombre: true, rutaCifrada: true, hashSha256: true, _count: { select: { expedientes: true } } } });
   if (!p) throw new ErrorPlantilla('La plantilla no existe.');
-  if (!p.tipo.variantes) throw new ErrorPlantilla('Este tipo de escritura no tiene variantes.');
-  const nuevos = limpiarVariante(datos);
-  if (!nuevos.variante) throw new ErrorPlantilla('Escriba el nombre de la variante.');
-  // Si se renombra, todas las versiones de la variante pasan al nombre nuevo (siguen siendo la misma variante)
-  const hermanas = (await db.plantilla.findMany({ where: { tipoId: p.tipoId }, select: { id: true, variante: true, nombreArchivo: true } })).filter((x) => mismaVariante(x, p)).map((x) => x.id);
-  const otra = (await db.plantilla.findMany({ where: { tipoId: p.tipoId, id: { notIn: hermanas } }, select: { variante: true, nombreArchivo: true } })).find((x) => mismaVariante(x, { variante: nuevos.variante, nombreArchivo: '' }));
-  if (otra) throw new ErrorPlantilla(`Ya existe otra variante llamada «${nombreVariante(otra)}».`);
-  await db.$transaction([
-    db.plantilla.updateMany({ where: { id: { in: hermanas } }, data: { variante: nuevos.variante } }),
-    db.plantilla.update({ where: { id }, data: { criterios: nuevos.criterios } }),
-  ]);
-  return { ...p, ...nuevos };
-}
-
-/** Activa o desactiva las variantes de un tipo. Para desactivarlas debe quedar una sola aprobada. */
-export async function cambiarVariantes(tipoId: string, activar: boolean) {
-  if (!activar) {
-    const aprobadas = await db.plantilla.count({ where: { tipoId, estado: 'APROBADA' } });
-    if (aprobadas > 1) throw new ErrorPlantilla(`Hay ${aprobadas} variantes aprobadas. Retire las que sobran hasta dejar una antes de desactivar las variantes.`);
-  }
-  return db.tipoEscritura.update({ where: { id: tipoId }, data: { variantes: activar } });
-}
-
-export async function retirarPlantilla(id: string) {
-  return db.plantilla.update({ where: { id }, data: { estado: 'RETIRADA' } });
-}
-
-/** Versiones de un tipo con las que ya se generó algún borrador: se conservan para saber con qué se hizo */
-async function versionesUsadas(tipoId: string): Promise<Set<number>> {
-  const borradores = await db.borrador.findMany({ select: { plantillasUsadas: true } });
-  return new Set(borradores.flatMap((b) => (Array.isArray(b.plantillasUsadas) ? b.plantillasUsadas as { tipoId?: string; version?: number }[] : []))
-    .filter((u) => u.tipoId === tipoId && typeof u.version === 'number').map((u) => u.version!));
-}
-
-/** Elimina una versión (el tipo de escritura y las demás versiones quedan). Devuelve la versión eliminada. */
-export async function eliminarVersionPlantilla(id: string) {
-  const p = await db.plantilla.findUnique({ where: { id }, select: { id: true, tipoId: true, version: true, estado: true, hashSha256: true } });
-  if (!p) throw new ErrorPlantilla('La plantilla no existe.');
-  if ((await versionesUsadas(p.tipoId)).has(p.version)) throw new ErrorPlantilla(`Con la versión ${p.version} ya se generaron borradores: no se puede eliminar. Puede retirarla.`);
   await db.plantilla.delete({ where: { id } });
-  return p;
-}
-
-/** Elimina todas las versiones de la plantilla de un tipo; el tipo de escritura queda (se le puede cargar otra) */
-export async function eliminarPlantillaCompleta(tipoId: string) {
-  const versiones = await db.plantilla.findMany({ where: { tipoId }, select: { version: true, estado: true, hashSha256: true } });
-  if (!versiones.length) throw new ErrorPlantilla('Este tipo no tiene plantillas.');
-  const usadas = await versionesUsadas(tipoId);
-  if (versiones.some((v) => usadas.has(v.version))) throw new ErrorPlantilla(`Con las versiones ${[...usadas].sort((a, b) => a - b).join(', ')} ya se generaron borradores: no se pueden eliminar. Elimine las demás una por una o retírelas.`);
-  await db.plantilla.deleteMany({ where: { tipoId } });
-  return versiones;
+  await borrarCifrado(p.rutaCifrada).catch((e) => console.error('[eliminarPlantilla]', e));
+  await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_ELIMINADA', entidad: 'plantilla', entidadId: id, detalle: { nombre: p.nombre, sha256: p.hashSha256, escriturasQueLaUsaban: p._count.expedientes } });
 }

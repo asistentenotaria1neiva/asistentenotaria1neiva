@@ -1,5 +1,5 @@
 /**
- * Almacenamiento privado de documentos y borradores, cifrados con AES-256-GCM.
+ * Almacenamiento privado de plantillas, documentos y escrituras generadas, cifrados con AES-256-GCM.
  * Solo el servidor accede (sin URL directa). Dos destinos, con la misma ruta relativa:
  *   - Supabase Storage (bucket privado), si SUPABASE_URL y SUPABASE_CLAVE_SERVICIO están definidas
  *     (despliegue en Vercel, que no conserva archivos en disco);
@@ -26,7 +26,8 @@ function rutaSegura(relativa: string): string {
 }
 
 function urlObjeto(relativa: string): string {
-  if (!/^(documentos|borradores|revisiones)\/[0-9a-f]{2}\/[0-9a-f-]{36}\.bin$/.test(relativa) && !/^partes\/[0-9a-f]{32}\/\d{1,5}\.bin$/.test(relativa)) throw new Error('Ruta de almacenamiento no válida.');
+  // borradores y revisiones: archivos del sistema anterior (scripts/limpiar-sistema-anterior.ts los borra)
+  if (!/^(documentos|plantillas|escrituras|borradores|revisiones)\/[0-9a-f]{2}\/[0-9a-f-]{36}\.bin$/.test(relativa) && !/^partes\/[0-9a-f]{32}\/\d{1,5}\.bin$/.test(relativa)) throw new Error('Ruta de almacenamiento no válida.');
   return `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${relativa}`;
 }
 
@@ -43,7 +44,7 @@ async function supabase(relativa: string, init: RequestInit): Promise<Response> 
 }
 
 /** Guarda cifrado y devuelve la ruta relativa */
-export async function guardarCifrado(datos: Buffer, prefijo: 'documentos' | 'borradores' | 'revisiones'): Promise<string> {
+export async function guardarCifrado(datos: Buffer, prefijo: 'documentos' | 'plantillas' | 'escrituras'): Promise<string> {
   const id = crypto.randomUUID();
   const relativa = `${prefijo}/${id.slice(0, 2)}/${id}.bin`;
   if (enSupabase) {

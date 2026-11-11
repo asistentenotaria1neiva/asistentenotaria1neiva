@@ -17,14 +17,8 @@ const config: NextConfig = {
   poweredByHeader: false,
   productionBrowserSourceMaps: false, // el frontend se publica minificado y sin mapas de código
   serverExternalPackages: ['@node-rs/argon2', '@prisma/client'],
-  // El catálogo y las plantillas .docx se leen del disco al iniciar (src/lib/servicios/inicializacion.ts):
-  // en Vercel hay que incluirlos explícitamente en el paquete de cada función
-  outputFileTracingIncludes: {
-    // Los modelos limpios orientan la conversión de casos reales en plantillas (src/lib/servicios/variabilizar-plantilla.ts)
-    '/**': ['./plantillas/catalogo.json', './plantillas/docx/**/*', './plantillas/modelos/fuentes/**/*'],
-  },
   experimental: {
-    serverActions: { bodySizeLimit: '30mb' }, // carga de documentos soporte
+    serverActions: { bodySizeLimit: '30mb' }, // plantillas personales (hasta 4 MB)
   },
   async headers() {
     return [{ source: '/:path*', headers: cabecerasSeguridad }];

@@ -22,9 +22,9 @@ La aplicación **prepara, verifica y advierte**. No reemplaza al notario: la fir
 | Documentos | Cifrado AES-256-GCM en reposo, con verificación de integridad (SHA-256) al descargar; bucket privado de Supabase Storage (sin URL pública; el proveedor solo recibe bytes ya cifrados); se valida el tipo real del archivo por su firma (PDF, JPG, PNG, WEBP) | `src/lib/almacenamiento.ts`, `src/lib/servicios/documentos.ts` |
 | Base de datos | PostgreSQL de Supabase (cifrado en reposo del proveedor); solo la app se conecta, con su usuario. Se retiró el acceso de la API REST pública de Supabase (roles `anon`/`authenticated`) y RLS está activo en todas las tablas | `prisma/migrations/*_bloquear_api_publica` |
 | Clave de la API de Claude | Solo en el servidor (`ANTHROPIC_API_KEY` en `.env` o gestor de secretos). Nunca en el navegador ni en el repositorio (`.gitignore`) | `src/lib/ia/cliente.ts` (`server-only`) |
-| Autorización | Toda la lógica corre en el servidor; cada acción verifica rol y propiedad del expediente; el navegador nunca decide qué está permitido | `src/lib/servicios/*` |
+| Autorización | Toda la lógica corre en el servidor; cada acción verifica rol y propiedad de la escritura; el navegador nunca decide qué está permitido | `src/lib/servicios/*` |
 | CSRF | Acciones de servidor de Next verifican `Origin` contra `Host`; cookies `SameSite=Strict` | Next.js + `src/lib/sesion.ts` |
-| Exportaciones | No existe exportación masiva. Las descargas son individuales (documento, borrador, plantilla) y quedan auditadas | `src/app/api/*` |
+| Exportaciones | No existe exportación masiva. Las descargas son individuales (documento, escritura generada, plantilla) y quedan auditadas | `src/app/api/*` |
 | Auditoría | Registro inmodificable: disparadores de PostgreSQL bloquean UPDATE, DELETE y TRUNCATE; cada fila encadena el hash de la anterior y la cadena se verifica desde el panel | `prisma/migrations/*_auditoria_inmodificable`, `src/lib/auditoria.ts` |
 | Alertas | Equipo no autorizado, IP no permitida, bloqueos, acceso remoto, códigos de doble factor errados, huella de navegador distinta, límites de peticiones | `/admin/alertas` |
 | Copias | **Pendiente.** Dependen del plan de Supabase (el gratuito no incluye copias descargables; el Pro, diarias). Ver decisión pendiente n.º 15 | Panel de Supabase |
@@ -34,31 +34,29 @@ La aplicación **prepara, verifica y advierte**. No reemplaza al notario: la fir
 
 | Riesgo | Cómo se cubre |
 | --- | --- |
-| **A01 – Control de acceso roto** | Roles en el servidor (`requerirSesion({ roles })`); el digitador solo ve sus expedientes; quien elabora no aprueba su propio expediente; descargas verifican permiso; estados del flujo validados en el servidor. Pruebas: `pruebas/integracion/flujo.test.ts` (otro digitador no accede). |
-| **A02 – Fallas criptográficas** | TLS + HSTS; AES-256-GCM para documentos, borradores y secretos TOTP; Argon2id para contraseñas; HMAC-SHA256 para tokens; claves de 32 bytes en variables de entorno. |
-| **A03 – Inyección** | Prisma con consultas parametrizadas (no hay SQL concatenado); CSP con *nonce* y `strict-dynamic`; React escapa la salida; plantillas con analizador de expresiones en modo CSP (sin `eval`); nombres de archivo saneados. Los textos de los documentos se tratan como datos y no como instrucciones para la IA (instrucción explícita en el prompt). |
-| **A04 – Diseño inseguro** | Flujo con controles obligatorios: críticas bloquean, advertencias exigen justificación, revisor distinto del elaborador, plantillas solo aprobadas, la IA advierte y la persona decide. |
+| **A01 – Control de acceso roto** | Roles en el servidor (`requerirSesion({ roles })`); el digitador solo ve sus escrituras; solo el revisor y el administrador modifican la biblioteca de plantillas; las descargas verifican permiso; las etapas en segundo plano van firmadas con HMAC (`/api/tareas`). |
+| **A02 – Fallas criptográficas** | TLS + HSTS; AES-256-GCM para plantillas, documentos, escrituras generadas y secretos TOTP; Argon2id para contraseñas; HMAC-SHA256 para tokens; claves de 32 bytes en variables de entorno. |
+| **A03 – Inyección** | Prisma con consultas parametrizadas (no hay SQL concatenado); CSP con *nonce* y `strict-dynamic`; React escapa la salida; nombres de archivo saneados. Los textos de los documentos se tratan como datos y no como instrucciones para la IA (instrucción explícita en el prompt). |
+| **A04 – Diseño inseguro** | La IA solo adapta la plantilla elegida (no inventa: lo que falta queda «FALTA»), cada versión trae advertencias de la IA y verificaciones automáticas, y la persona revisa y decide; la biblioteca la alimenta solo el revisor. |
 | **A05 – Configuración insegura** | Cabeceras de seguridad, `poweredByHeader: false`, base de datos sin exposición, contenedor sin privilegios (usuario `app`), sin lista de IP en producción no entra nadie del personal. |
 | **A06 – Componentes vulnerables** | Dependencias fijadas en `package-lock.json`; `npm audit` en cada entrega. Estado actual: la única alerta (`deepmerge-ts`, vía la CLI de Prisma 6) afecta solo la herramienta de migraciones en el servidor de compilación, no la aplicación en ejecución; se resolverá al migrar a Prisma 7. Next.js actualizado a 16.4 para corregir la alerta de PostCSS. |
 | **A07 – Fallas de identificación y autenticación** | Bloqueo por intentos, límites por IP/usuario, doble factor, sesión única, inactividad, mensajes genéricos, tiempo constante cuando el usuario no existe. |
-| **A08 – Integridad de software y datos** | Hash SHA-256 de documentos, borradores y plantillas; auditoría encadenada; compilación en Vercel desde el lockfile (`npm ci`). |
+| **A08 – Integridad de software y datos** | Hash SHA-256 de documentos, escrituras generadas y plantillas; auditoría encadenada; compilación en Vercel desde el lockfile (`npm ci`). |
 | **A09 – Registro y monitoreo** | Auditoría de toda acción (ingresos, fallos, cambios de datos, descargas, aprobaciones, configuración); alertas; verificación de la cadena. |
 | **A10 – SSRF** | La app solo hace peticiones salientes a la API de Anthropic y a Supabase Storage (y a Gotenberg, si se configura); ninguna URL proviene del usuario. |
 
 ## 3. Datos personales (Ley 1581 de 2012)
 
 - **Finalidad y minimización:** solo se recolectan los datos necesarios para elaborar la escritura (los mismos que hoy contienen las minutas).
-- **Fase 0:** las 72 escrituras de la carpeta de plantillas contenían datos reales. Se trabajó sobre copias anonimizadas en `datos_locales/` (excluida del repositorio); la checklist y las fichas usan alias con iniciales.
-- **Casos de aprendizaje:** se guardan anonimizados (nombres, documentos, matrículas y direcciones enmascarados).
-- **Datos de prueba:** ficticios (`datos_prueba/casos.json`).
-- **Registros de error:** no se registran contenidos de documentos ni datos del formulario.
+- **Biblioteca de plantillas:** son escrituras reales otorgadas por la notaría (con datos personales). Se guardan cifradas, solo las ve el personal con sesión y cada descarga queda auditada. Al generar una escritura, la plantilla elegida se envía a la API de Claude junto con los documentos.
+- **Registros de error:** no se registran contenidos de documentos ni de plantillas.
 - **Transmisión a un tercero:** los documentos se envían a la API de Claude únicamente para su análisis (ver sección 4). Esta transmisión debe constar en la política de tratamiento de datos de la notaría y en la autorización de los comparecientes. **Decisión pendiente del notario** (ver `docs/decisiones_pendientes.md`).
 
 ## 4. API de Claude: uso y retención de datos (consultado el 19 de octubre de 2026)
 
 Fuentes oficiales: [API and data retention](https://platform.claude.com/docs/en/manage-claude/api-and-data-retention) y [How long do you store my organization's data?](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data).
 
-- **Entrenamiento:** según la documentación de la API, los datos retenidos *no se usan para entrenar modelos sin permiso expreso*. Ningún "entrenamiento" de este proyecto reentrena modelos de Anthropic: se ajustan instrucciones, reglas, formularios y plantillas dentro de la aplicación.
+- **Entrenamiento:** según la documentación de la API, los datos retenidos *no se usan para entrenar modelos sin permiso expreso*. Ningún "entrenamiento" de este proyecto reentrena modelos de Anthropic: se ajustan las instrucciones y la biblioteca de plantillas dentro de la aplicación.
 - **Retención estándar (cuenta comercial):** el artículo de privacidad indica que Anthropic elimina automáticamente las entradas y salidas de la API **dentro de los 30 días** siguientes a su recepción o generación. Hay excepciones: servicios con retención controlada por el cliente (p. ej. Files API: los archivos quedan guardados hasta que el cliente los borra), acuerdos distintos, cumplimiento de la ley y cumplimiento de la Política de Uso; si una solicitud se marca como violación de la política, puede conservarse **hasta 2 años** (y las puntuaciones de clasificación hasta 7 años).
 - **Retención cero (ZDR):** disponible por acuerdo con Anthropic, por organización; con ZDR no se almacenan los prompts ni las respuestas después de devolver la respuesta (salvo exigencias legales o abuso). Las funciones que usa esta app son elegibles: Messages, soporte de PDF y salidas estructuradas (estas últimas "calificadas": el esquema puede guardarse en caché; nuestros esquemas no contienen datos personales).
 - **PDF de más de 20 MB (Files API):** no caben en una solicitud, así que la aplicación los sube antes por la Files API con un nombre genérico (`documento.pdf`), los **borra en cuanto termina el análisis** (también si falla) y, como respaldo, los sube con **vencimiento de una hora** (`expires_in_seconds`). Los PDF más pequeños y las imágenes siguen viajando dentro de la solicitud. Código: `prepararDocumento` en `src/lib/ia/cliente.ts`.
@@ -79,7 +77,7 @@ Para un control de equipos más fuerte, se puede exigir un certificado de client
 
 ## 6. Custodia de claves
 
-- `CLAVE_MAESTRA` cifra documentos, borradores y secretos TOTP. **Si se pierde, no se pueden recuperar.** Guardar una copia fuera de Vercel (gestor de secretos o sobre sellado bajo custodia del notario).
+- `CLAVE_MAESTRA` cifra plantillas, documentos, escrituras generadas y secretos TOTP. **Si se pierde, no se pueden recuperar.** Guardar una copia fuera de Vercel (gestor de secretos o sobre sellado bajo custodia del notario).
 - Rotación: cambiar `CLAVE_FIRMA` invalida todas las sesiones y obliga a registrar de nuevo los equipos.
 
 ## 7. Pruebas de seguridad automatizadas

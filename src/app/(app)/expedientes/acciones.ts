@@ -1,27 +1,18 @@
 'use server';
 /**
- * Acciones de los expedientes. Cada una valida la sesión y los permisos en el servidor;
+ * Acciones de las escrituras. Cada una valida la sesión y los permisos en el servidor;
  * el navegador nunca decide qué está permitido.
  */
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { after } from 'next/server';
 import { requerirSesion } from '@/lib/sesion';
-import {
-  crearExpediente, aprobarExpediente,
-  devolverExpediente, marcarFirmada, archivarExpediente, reabrirExpediente, reasignarExpediente, ErrorNegocio,
-} from '@/lib/servicios/expedientes';
-import { completarDocumento, analizarDocumento, eliminarDocumento } from '@/lib/servicios/documentos';
-import { responderAsistente, continuarConDatos, agregarPregunta, type RespuestasAsistente } from '@/lib/servicios/asistente';
-import { iniciarTarea } from '@/lib/servicios/tareas';
+import { crearExpediente, cambiarPlantilla, guardarObservaciones, eliminarExpediente, ErrorNegocio, type EleccionPlantilla } from '@/lib/servicios/expedientes';
+import { completarDocumento, eliminarDocumento, releerDocumento, leerDocumento } from '@/lib/servicios/documentos';
+import { iniciarGeneracion } from '@/lib/servicios/generacion';
 import { urlAplicacion } from '@/lib/seguridad/red';
-import { ejecutarRevision, resolverObservacion } from '@/lib/servicios/revision';
-import { proponerCorrecciones, aplicarCorrecciones } from '@/lib/servicios/correccion-ia';
-import { iniciarRedaccion } from '@/lib/servicios/redaccion';
-import { db } from '@/lib/db';
-import type { Errores } from '@/lib/escritura/validar-formulario';
 
-export interface Resultado { error?: string; ok?: string; errores?: Errores }
+export interface Resultado { error?: string; ok?: string }
 
 async function ejecutar(fn: () => Promise<string | void>, ruta?: string): Promise<Resultado> {
   try {
@@ -36,177 +27,80 @@ async function ejecutar(fn: () => Promise<string | void>, ruta?: string): Promis
   }
 }
 
+/** La plantilla elegida en el formulario: de la biblioteca (plantillaId) o un .docx personal (archivo) */
+async function eleccionDe(f: FormData): Promise<EleccionPlantilla> {
+  const plantillaId = String(f.get('plantillaId') ?? '').trim();
+  if (plantillaId) return { plantillaId };
+  const archivo = f.get('archivo');
+  if (!(archivo instanceof File) || !archivo.size) throw new ErrorNegocio('Elija una plantilla de la biblioteca o cargue su plantilla en Word (.docx).');
+  if (!/\.docx$/i.test(archivo.name)) throw new ErrorNegocio('La plantilla personal debe ser un documento de Word .docx.');
+  return { personal: { nombre: archivo.name, bytes: Buffer.from(await archivo.arrayBuffer()) } };
+}
+
 export async function accionCrearExpediente(_: Resultado, f: FormData): Promise<Resultado> {
   const s = await requerirSesion();
-  const actos = String(f.get('actos') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
   let id = '';
-  const r = await ejecutar(async () => { id = await crearExpediente(s, actos); });
+  const r = await ejecutar(async () => { id = await crearExpediente(s, await eleccionDe(f), String(f.get('titulo') ?? '')); });
   if (r.error) return r;
-  redirect(`/expedientes/${id}/documentos`);
+  redirect(`/expedientes/${id}`);
 }
 
+export async function accionCambiarPlantilla(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
+  const s = await requerirSesion();
+  const r = await ejecutar(async () => cambiarPlantilla(s, expedienteId, await eleccionDe(f)), `/expedientes/${expedienteId}`);
+  if (r.error) return r;
+  redirect(`/expedientes/${expedienteId}`);
+}
 
-/**
- * Carga de documentos sin límite de tamaño: el navegador manda cada archivo en partes, varias a la vez
- * (api/documentos/partes; Vercel limita cada petición a 4,5 MB), y luego pide unirlas.
- */
-export async function accionCompletarDocumento(expedienteId: string, carga: string, partes: number, nombre: string, tipo: string): Promise<Resultado> {
+export async function accionGuardarObservaciones(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {
-    await completarDocumento(s, expedienteId, carga, partes, String(nombre).slice(0, 300), tipo);
+    await guardarObservaciones(s, expedienteId, { observaciones: String(f.get('observaciones') ?? ''), ...(f.has('titulo') ? { titulo: String(f.get('titulo') ?? '') } : {}) });
+    return 'Observaciones guardadas.';
+  }, `/expedientes/${expedienteId}`);
+}
+
+/** Guarda las observaciones y empieza a generar la escritura en segundo plano */
+export async function accionGenerar(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
+  const s = await requerirSesion();
+  return ejecutar(async () => {
+    if (f.has('observaciones')) await guardarObservaciones(s, expedienteId, { observaciones: String(f.get('observaciones') ?? '') });
+    const { version, tarea } = await iniciarGeneracion(s, expedienteId, await urlAplicacion());
+    after(() => tarea().catch((e) => console.error('[generar]', e)));
+    return `Generando la versión ${version}. Puede salir de esta página: le avisaremos en «Notificaciones» al terminar.`;
+  }, `/expedientes/${expedienteId}`);
+}
+
+/**
+ * Carga de documentos sin límite de tamaño: el navegador manda cada archivo en partes (api/documentos/partes)
+ * y luego pide unirlas. La lectura con IA empieza enseguida, en segundo plano.
+ */
+export async function accionCompletarDocumento(expedienteId: string, carga: string, partes: number, nombre: string): Promise<Resultado> {
+  const s = await requerirSesion();
+  return ejecutar(async () => {
+    const id = await completarDocumento(s, expedienteId, carga, partes, String(nombre).slice(0, 300));
+    if (process.env.ANTHROPIC_API_KEY) after(() => leerDocumento(id, s.usuario.id).then(() => revalidatePath(`/expedientes/${expedienteId}`)).catch((e) => console.error('[leerDocumento]', e)));
     return 'Documento cargado y cifrado.';
-  }, `/expedientes/${expedienteId}/documentos`);
-}
-
-export async function accionAnalizarDocumento(expedienteId: string, documentoId: string): Promise<Resultado> {
-  const s = await requerirSesion();
-  return ejecutar(async () => {
-    const r = await analizarDocumento(s, documentoId);
-    if (!r.partes.length) return `Análisis completado: ${r.sugerencias} dato(s) sugerido(s).`;
-    // El PDF traía varios documentos: sus partes se analizan en segundo plano
-    const t = await iniciarTarea(s, expedienteId, 'DOCUMENTOS', await urlAplicacion());
-    after(t.etapa);
-    return `El archivo traía ${r.partes.length} documentos y se separó en partes. Se están analizando en segundo plano; le avisaremos al terminar.`;
-  }, `/expedientes/${expedienteId}/documentos`);
-}
-
-/** Analiza los documentos pendientes en segundo plano, por etapas (src/lib/servicios/tareas.ts) */
-export async function accionAnalizarPendientes(expedienteId: string): Promise<Resultado> {
-  const s = await requerirSesion();
-  return ejecutar(async () => {
-    const r = await iniciarTarea(s, expedienteId, 'DOCUMENTOS', await urlAplicacion());
-    after(r.etapa);
-    return `Analizando ${r.documentos} documento(s) en segundo plano. Puede salir de esta página: le avisaremos al terminar.`;
-  }, `/expedientes/${expedienteId}/documentos`);
-}
-
-export async function accionRevisar(expedienteId: string, conIA: boolean): Promise<Resultado> {
-  const s = await requerirSesion();
-  return ejecutar(async () => {
-    const r = await ejecutarRevision(s, expedienteId, conIA);
-    const base = `Revisión ejecutada: ${r.hallazgos} hallazgo(s) de las reglas (${r.nuevasReglas} nuevo(s)).`;
-    if (!r.tareaIA) return base;
-    // La IA sigue después de responder: la persona puede salir de la página
-    after(r.tareaIA);
-    return `${base} La IA está revisando el expediente en segundo plano; puede salir y volver más tarde.`;
   }, `/expedientes/${expedienteId}`);
 }
 
-export async function accionResolverObservacion(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
-  const s = await requerirSesion();
-  const decision = String(f.get('decision')) as 'CORREGIDA' | 'JUSTIFICADA' | 'DESCARTADA';
-  return ejecutar(() => resolverObservacion(s, String(f.get('observacionId')), decision, String(f.get('justificacion') ?? ''), f.get('falsaAlarma') === 'on').then(() => 'Observación resuelta.'), `/expedientes/${expedienteId}`);
-}
-
-export async function accionProponerCorrecciones(expedienteId: string, observacionIds: string[]): Promise<Resultado> {
+export async function accionReleerDocumento(expedienteId: string, documentoId: string): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {
-    const r = await proponerCorrecciones(s, expedienteId, observacionIds);
-    // La IA sigue después de responder: la persona puede salir de la página
-    after(r.tarea);
-    return `La IA está preparando las correcciones de ${r.observaciones} observación(es) en segundo plano; aparecerán aquí al terminar.`;
-  }, `/expedientes/${expedienteId}`);
-}
-
-export async function accionAplicarCorrecciones(expedienteId: string, analisisId: string, indices: number[]): Promise<Resultado> {
-  const s = await requerirSesion();
-  return ejecutar(async () => {
-    const r = await aplicarCorrecciones(s, expedienteId, analisisId, indices);
-    if (!r.aplicadas && !r.omitidas.length) return 'Propuesta descartada: no se cambió ningún dato.';
-    const omitidas = r.omitidas.length ? ` No se aplicaron ${r.omitidas.length} porque el dato cambió después de la propuesta: ${r.omitidas.join(', ')}.` : '';
-    const errores = r.errores ? ` Quedan ${r.errores} dato(s) por completar o corregir en el asistente.` : '';
-    return `${r.aplicadas} cambio(s) aplicado(s) y reglas ejecutadas de nuevo.${omitidas}${errores}`;
-  }, `/expedientes/${expedienteId}`);
-}
-
-/** La IA redacta la escritura desde los documentos, sobre la plantilla del tipo (src/lib/servicios/redaccion.ts) */
-async function redactar(expedienteId: string, indicaciones?: string, variantes?: Record<string, string>): Promise<Resultado> {
-  const s = await requerirSesion();
-  return ejecutar(async () => {
-    const r = await iniciarRedaccion(s, expedienteId, indicaciones, await urlAplicacion(), variantes);
-    // La IA redacta después de responder: la persona puede salir de la página
-    after(r.tarea);
-    return `La IA está leyendo los documentos y redactando la escritura sobre la plantilla${r.partes > 1 ? `, un acto a la vez (${r.partes} partes)` : ''}; tarda unos minutos. Puede salir de esta página: le avisaremos al terminar.`;
-  }, `/expedientes/${expedienteId}`);
-}
-
-export async function accionGenerarBorrador(expedienteId: string): Promise<Resultado> {
-  return redactar(expedienteId);
-}
-
-/**
- * Con indicaciones del funcionario para esta versión (formulario). Los campos «plantilla:<tipo>»
- * fijan la variante de plantilla de ese tipo; vacíos, la IA la elige según los documentos.
- */
-export async function accionRedactar(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
-  const variantes: Record<string, string> = {};
-  for (const [k, v] of f.entries()) if (k.startsWith('plantilla:') && typeof v === 'string' && v) variantes[k.slice('plantilla:'.length)] = v;
-  return redactar(expedienteId, String(f.get('indicaciones') ?? ''), variantes);
-}
-
-export async function accionFlujo(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
-  const s = await requerirSesion();
-  const accion = String(f.get('accion'));
-  return ejecutar(async () => {
-    switch (accion) {
-      case 'aprobar': await aprobarExpediente(s, expedienteId); return 'Aprobado: queda listo para la firma del notario.';
-      case 'devolver': await devolverExpediente(s, expedienteId, String(f.get('comentario') ?? '')); return 'Devuelto al responsable con comentarios.';
-      case 'firmar': await marcarFirmada(s, expedienteId, Number(f.get('numeroEscritura'))); return 'Marcada como firmada.';
-      case 'archivar': await archivarExpediente(s, expedienteId); return 'Archivado.';
-      case 'reabrir': await reabrirExpediente(s, expedienteId, String(f.get('motivo') ?? '')); return 'Reabierto.';
-      case 'reasignar': await reasignarExpediente(s, expedienteId, String(f.get('usuarioId') ?? '')); return 'Reasignado.';
-      default: throw new ErrorNegocio('Acción no válida.');
-    }
+    const tarea = await releerDocumento(s, documentoId);
+    after(() => tarea().catch((e) => console.error('[releerDocumento]', e)));
+    return 'Leyendo el documento de nuevo…';
   }, `/expedientes/${expedienteId}`);
 }
 
 export async function accionEliminarDocumento(expedienteId: string, documentoId: string): Promise<Resultado> {
   const s = await requerirSesion();
-  return ejecutar(() => eliminarDocumento(s, documentoId).then(() => 'Documento retirado. Cargue el documento correcto y vuelva a ejecutar el asistente.'), `/expedientes/${expedienteId}`);
+  return ejecutar(async () => { await eliminarDocumento(s, documentoId); return 'Documento retirado.'; }, `/expedientes/${expedienteId}`);
 }
 
-export async function accionIniciarAsistente(expedienteId: string): Promise<Resultado> {
+export async function accionEliminarExpediente(expedienteId: string): Promise<Resultado> {
   const s = await requerirSesion();
-  return ejecutar(async () => {
-    const r = await iniciarTarea(s, expedienteId, 'ASISTENTE', await urlAplicacion());
-    // La IA sigue después de responder, por etapas: la persona puede salir de la página
-    after(r.etapa);
-    return `El asistente está analizando ${r.documentos} documento(s) en segundo plano; las preguntas aparecerán aquí al terminar y le avisaremos.`;
-  }, `/expedientes/${expedienteId}`);
-}
-
-export async function accionResponderAsistente(expedienteId: string, analisisId: string, respuestas: RespuestasAsistente): Promise<Resultado & { erroresPreguntas?: Record<string, string> }> {
-  const s = await requerirSesion();
-  let erroresPreguntas: Record<string, string> | undefined;
-  const r = await ejecutar(async () => {
-    const x = await responderAsistente(s, expedienteId, analisisId, respuestas);
-    erroresPreguntas = x.errores;
-    const errores = Object.keys(x.errores).length;
-    if (errores && !x.respondidas) throw new ErrorNegocio(`Revise ${errores} respuesta(s) marcada(s).`);
-    const base = `${x.respondidas} respuesta(s) guardada(s).${x.desdeDocumentos ? ` ${x.desdeDocumentos} dato(s) del acto se tomaron de los documentos.` : ''}`;
-    if (errores) return `${base} Revise ${errores} respuesta(s) marcada(s).`;
-    if (x.obligatoriasPendientes) return `${base} Faltan ${x.obligatoriasPendientes} dato(s) obligatorio(s).`;
-    if (x.pendientes) return `${base} Quedan ${x.pendientes} pregunta(s) opcional(es); puede responderlas u omitirlas.`;
-    return `${base} Ya puede redactar la escritura en Word.`;
-  }, `/expedientes/${expedienteId}`);
-  return { ...r, erroresPreguntas };
-}
-
-export async function accionContinuarConDatos(expedienteId: string, observacionIds: string[]): Promise<Resultado> {
-  const s = await requerirSesion();
-  return ejecutar(async () => {
-    const n = await continuarConDatos(s, expedienteId, observacionIds);
-    return `Se continúa con los datos actuales: ${n} inconsistencia(s) quedan registradas como aceptadas para el revisor.`;
-  }, `/expedientes/${expedienteId}`);
-}
-
-/**
- * Pide al asistente una pregunta para corregir o completar un dato (desde la revisión de los datos,
- * una respuesta ya dada o una observación) y lleva al usuario a las preguntas.
- */
-export async function accionCorregirDato(expedienteId: string, ruta: string, motivo?: string): Promise<Resultado> {
-  const s = await requerirSesion();
-  const r = await ejecutar(() => agregarPregunta(s, expedienteId, ruta, motivo), `/expedientes/${expedienteId}`);
+  const r = await ejecutar(() => eliminarExpediente(s, expedienteId));
   if (r.error) return r;
-  redirect(`/expedientes/${expedienteId}/asistente#preguntas`);
+  redirect('/expedientes');
 }

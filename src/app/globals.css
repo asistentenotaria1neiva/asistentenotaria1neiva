@@ -482,3 +482,38 @@ details.tarjeta { padding: 12px 20px; border-radius: var(--radio-tarjeta); }
 /* Revisión de escrituras: los mismos colores que en el Word corregido (agregado en amarillo, eliminado tachado en rojo) */
 .revision-marcas del, .marca-eliminado { background: none; color: #d00000; text-decoration: line-through; text-decoration-color: #d00000; }
 .revision-marcas ins, .marca-agregado { background: #fff200; color: #1a1a1a; text-decoration: none; padding: 0 3px; border-radius: 2px; }
+
+/* Biblioteca de plantillas: resultados a la izquierda, vista previa a la derecha */
+.biblioteca { display: grid; grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; }
+.biblioteca > .tarjeta { margin-bottom: 0; }
+.vista-plantilla { position: sticky; top: 16px; }
+.vista-plantilla h2 { margin-bottom: 4px; overflow-wrap: anywhere; }
+.vista-plantilla .visor-docx { max-height: 70vh; margin-top: 12px; }
+.lista-plantillas { list-style: none; padding: 0; margin: 0 0 12px; }
+.lista-plantillas li { border-top: 1px solid var(--borde-suave); }
+.lista-plantillas li:first-child { border-top: 0; }
+.lista-plantillas a { display: grid; gap: 2px; padding: 8px 10px; margin: 0 -10px; border-radius: var(--radio-chico); color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+.lista-plantillas a:hover { background: var(--superficie-suave); }
+.lista-plantillas li.elegida a { background: var(--primario-claro); box-shadow: inset 3px 0 0 var(--primario); }
+.lista-plantillas strong { font-weight: 500; font-size: 14px; }
+.lista-plantillas .suave { font-size: 13px; }
+.paginacion { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.marca-verificar { background: var(--alerta-claro); color: var(--alerta); font-weight: 500; }
+.acciones-plantilla { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 0; }
+/* Escritura: documentos, advertencias y versiones */
+.lista-documentos { list-style: none; padding: 0; margin: 0 0 16px; }
+.lista-documentos li { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--borde-suave); flex-wrap: wrap; }
+.lista-documentos li:first-child { border-top: 0; }
+.lista-documentos .nombre { min-width: 0; overflow-wrap: anywhere; flex: 1 1 260px; }
+.lista-documentos details { margin-top: 4px; font-size: 13px; }
+.lista-documentos pre { white-space: pre-wrap; font-size: 12px; max-height: 320px; overflow: auto; background: var(--superficie-suave); padding: 8px; border-radius: var(--radio-chico); }
+.advertencias { list-style: none; padding: 0; margin: 0 0 12px; }
+.advertencias li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--borde-suave); font-size: 14px; }
+.advertencias li:first-child { border-top: 0; }
+.advertencias li > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.paso-escritura h2 { display: flex; align-items: center; gap: 8px; }
+.paso-escritura h2 .numero-paso { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--primario); color: #fff; font-size: 13px; font-weight: 500; flex: none; }
+@media (max-width: 960px) {
+  .biblioteca { grid-template-columns: 1fr; }
+  .vista-plantilla { position: static; }
+}

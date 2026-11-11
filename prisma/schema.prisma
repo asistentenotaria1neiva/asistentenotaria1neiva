@@ -41,17 +41,13 @@ model Usuario {
   creadoEn              DateTime      @default(now())
   actualizadoEn         DateTime      @updatedAt
 
-  sesiones                Sesion[]
-  expedientesResponsable  Expediente[]  @relation("responsable")
-  expedientesRevisor      Expediente[]  @relation("revisor")
-  documentos              Documento[]
-  observacionesResueltas  Observacion[]
-  correcciones            Correccion[]
-  dispositivosAprobados   Dispositivo[]
-  plantillasCargadas      Plantilla[]   @relation("cargadaPor")
-  plantillasAprobadas     Plantilla[]   @relation("aprobadaPor")
-  notificaciones          Notificacion[]
-  revisionesEscritura     RevisionEscritura[]
+  sesiones               Sesion[]
+  expedientesResponsable Expediente[]   @relation("responsable")
+  documentos             Documento[]
+  generaciones           Generacion[]
+  dispositivosAprobados  Dispositivo[]
+  plantillasCargadas     Plantilla[]    @relation("cargadaPor")
+  notificaciones         Notificacion[]
 
   @@map("usuarios")
 }
@@ -104,233 +100,121 @@ model Sesion {
   @@map("sesiones")
 }
 
-// ---------------------------------------------------------------- Tipos de escritura, plantillas y esquemas
+// ---------------------------------------------------------------- Biblioteca de plantillas
 
-enum EstadoAprobacion {
-  PENDIENTE_APROBACION
-  APROBADA
-  RETIRADA
-}
-
-model TipoEscritura {
-  id          String  @id // slug, p. ej. "compraventa"
-  categoria   String
-  nombre      String
-  prioridad   String // Alta | Media | Baja
-  esBloque    Boolean @default(false) // bloque común (carátula, cierre…) y no un acto
-  activo      Boolean @default(true)
-  // Admite varias plantillas aprobadas a la vez (variantes por banco, obra…); la IA elige una por caso
-  variantes   Boolean @default(false)
-  descripcion String?
-  normas      String? // referencia normativa – pendiente de validar por el notario
-
-  plantillas    Plantilla[]
-  esquemas      EsquemaFormulario[]
-  instrucciones InstruccionIA[]
-  expedientes   Expediente[]
-
-  @@map("tipos_escritura")
-}
-
+// Escrituras modelo de la notaría: la carga inicial (carpeta de minutas, scripts/cargar-biblioteca.ts) y
+// las que agrega el revisor. El .docx va cifrado en el almacenamiento; aquí quedan los datos para buscar.
 model Plantilla {
-  id            String           @id @default(cuid())
-  tipo          TipoEscritura    @relation(fields: [tipoId], references: [id])
-  tipoId        String
-  version       Int
-  estado        EstadoAprobacion @default(PENDIENTE_APROBACION)
+  id            String   @id @default(cuid())
+  nombre        String // del nombre del archivo, sin el número inicial
+  categoria     String // carpeta del acto: COMPRAVENTA, HIPOTECA, LEASING…
+  subcategoria  String? // subcarpeta: el banco (BANCOLOMBIA, FNA…) o la clase de oficio
+  anio          Int
+  fecha         DateTime // última modificación del archivo (o la que indique el revisor)
   nombreArchivo String
-  archivo       Bytes // .docx: modelo de redacción del tipo de escritura (la IA redacta sobre él; sin variables)
-  hashSha256    String
-  notas         String?
-  // Tipos con variantes: nombre de la variante (sus versiones comparten el nombre) y cuándo usarla
-  variante      String?
-  criterios     String?
-  cargadaPor    Usuario?         @relation("cargadaPor", fields: [cargadaPorId], references: [id])
+  tamano        Int
+  hashSha256    String   @unique
+  rutaCifrada   String
+  // Texto para buscar: nombre, categoría, subcategoría y el comienzo de la escritura (mayúsculas, sin tildes)
+  busqueda      String
+  caracteres    Int      @default(0)
+  activa        Boolean  @default(true)
+  origen        String   @default("CARGA_INICIAL") // CARGA_INICIAL | REVISOR
+  cargadaPor    Usuario? @relation("cargadaPor", fields: [cargadaPorId], references: [id], onDelete: SetNull)
   cargadaPorId  String?
-  aprobadaPor   Usuario?         @relation("aprobadaPor", fields: [aprobadaPorId], references: [id])
-  aprobadaPorId String?
-  aprobadaEn    DateTime?
-  revision      Json? // verificación automática + revisión de la IA (src/lib/servicios/revision-plantillas.ts)
-  revisadaEn    DateTime?
-  creadaEn      DateTime         @default(now())
+  creadaEn      DateTime @default(now())
 
-  @@unique([tipoId, version])
+  expedientes Expediente[]
+
+  @@index([categoria, anio])
+  @@index([fecha])
   @@map("plantillas")
 }
 
-model EsquemaFormulario {
-  id       String           @id @default(cuid())
-  tipo     TipoEscritura    @relation(fields: [tipoId], references: [id])
-  tipoId   String
-  version  Int
-  estado   EstadoAprobacion @default(PENDIENTE_APROBACION)
-  esquema  Json // pasos, campos, tipo de dato, obligatoriedad, validaciones, documentos soporte, reglas
-  creadoEn DateTime         @default(now())
-
-  @@unique([tipoId, version])
-  @@map("esquemas_formulario")
-}
-
-// Instrucciones de la IA por tipo de escritura (el "entrenamiento" se hace aquí, versionado)
-model InstruccionIA {
-  id          String           @id @default(cuid())
-  tipo        TipoEscritura?   @relation(fields: [tipoId], references: [id])
-  tipoId      String? // null = instrucción general
-  proposito   String // EXTRACCION | REVISION
-  version     Int
-  estado      EstadoAprobacion @default(PENDIENTE_APROBACION)
-  contenido   String
-  motivo      String? // qué patrón de error motivó el cambio
-  creadoPorId String?
-  creadaEn    DateTime         @default(now())
-
-  @@unique([tipoId, proposito, version])
-  @@map("instrucciones_ia")
-}
-
-// ---------------------------------------------------------------- Expedientes
-
-enum EstadoExpediente {
-  BORRADOR
-  EN_REVISION
-  DEVUELTO
-  APROBADA // lista para firma del notario
-  FIRMADA
-  ARCHIVADA
-}
+// ---------------------------------------------------------------- Escrituras (expedientes)
 
 model Expediente {
-  id                 String           @id @default(cuid())
-  numeroInterno      String           @unique // EXP-AAAA-NNNNN
-  tipo               TipoEscritura    @relation(fields: [tipoId], references: [id])
-  tipoId             String // acto principal
-  actos              Json // lista ordenada de actos (ids de tipo) que componen la escritura
-  estado             EstadoExpediente @default(BORRADOR)
-  datos              Json             @default("{}") // datos del formulario por pasos
-  responsable        Usuario          @relation("responsable", fields: [responsableId], references: [id])
-  responsableId      String
-  revisor            Usuario?         @relation("revisor", fields: [revisorId], references: [id])
-  revisorId          String?
-  comentarioRevision String?
-  numeroEscritura    Int?
-  creadoEn           DateTime         @default(now())
-  actualizadoEn      DateTime         @updatedAt
-  enviadoRevisionEn  DateTime?
-  aprobadoEn         DateTime?
+  id              String     @id @default(cuid())
+  numeroInterno   String     @unique // EXP-AAAA-NNNNN
+  titulo          String? // descripción corta que escribe el digitador
+  // La plantilla de la biblioteca o, si es personal, el .docx que cargó el digitador (cifrado)
+  plantilla       Plantilla? @relation(fields: [plantillaId], references: [id], onDelete: SetNull)
+  plantillaId     String?
+  plantillaNombre String
+  plantillaRuta   String? // solo plantilla personal
+  observaciones   String? // indicaciones del digitador para la IA, antes de generar
+  responsable     Usuario    @relation("responsable", fields: [responsableId], references: [id])
+  responsableId   String
+  creadoEn        DateTime   @default(now())
+  actualizadoEn   DateTime   @updatedAt
 
-  comparecientes Compareciente[]
-  inmuebles      Inmueble[]
-  documentos     Documento[]
-  datosExtraidos DatoExtraido[]
-  analisis       AnalisisIA[]
-  observaciones  Observacion[]
-  borradores     Borrador[]
-  correcciones   Correccion[]
+  documentos   Documento[]
+  generaciones Generacion[]
 
-  @@index([estado])
   @@index([responsableId])
   @@map("expedientes")
 }
 
-// Copias normalizadas de los comparecientes e inmuebles del formulario (búsqueda y estadísticas)
-model Compareciente {
-  id              String     @id @default(cuid())
-  expediente      Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
-  expedienteId    String
-  rol             String // VENDEDOR, COMPRADOR, APODERADO, ACREEDOR…
-  tipoPersona     String // NATURAL | JURIDICA
-  nombre          String
-  tipoDocumento   String
-  numeroDocumento String
-  datos           Json
-
-  @@index([numeroDocumento])
-  @@map("comparecientes")
-}
-
-model Inmueble {
-  id              String     @id @default(cuid())
-  expediente      Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
-  expedienteId    String
-  matricula       String?
-  cedulaCatastral String?
-  direccion       String?
-  datos           Json
-
-  @@index([matricula])
-  @@map("inmuebles")
-}
-
 model Documento {
-  id            String     @id @default(cuid())
-  expediente    Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
-  expedienteId  String
-  tipoDocumental String // CEDULA, CERTIFICADO_TRADICION, PAZ_Y_SALVO, …
+  id             String     @id @default(cuid())
+  expediente     Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  expedienteId   String
   nombreOriginal String
-  mime          String
-  tamano        Int
-  hashSha256    String // del archivo original (integridad)
-  rutaCifrada   String // ruta relativa en el almacenamiento cifrado
-  estadoAnalisis String   @default("PENDIENTE") // PENDIENTE | EN_CURSO | COMPLETADO | ERROR | DIVIDIDO
-  hechos        Json? // datos extraídos por la IA: { campo: { valor, pagina, fragmento, confianza } }
-  // Un PDF con varios documentos se separa en partes (DIVIDIDO): cada parte guarda de dónde salió
-  origen        Documento?  @relation("PartesDocumento", fields: [origenId], references: [id], onDelete: SetNull)
-  origenId      String?
-  paginaDesde   Int?
-  paginaHasta   Int?
-  partes        Documento[] @relation("PartesDocumento")
-  subidoPor     Usuario    @relation(fields: [subidoPorId], references: [id])
-  subidoPorId   String
-  creadoEn      DateTime   @default(now())
+  mime           String
+  tamano         Int
+  paginas        Int?
+  hashSha256     String // del archivo original (integridad)
+  rutaCifrada    String
+  estadoLectura  String     @default("PENDIENTE") // PENDIENTE | EN_CURSO | LEIDO | ERROR
+  // Lo que la IA leyó del documento (src/lib/servicios/documentos.ts): se lee una sola vez y se reutiliza
+  lectura        Json?
+  errorLectura   String?
+  subidoPor      Usuario    @relation(fields: [subidoPorId], references: [id])
+  subidoPorId    String
+  creadoEn       DateTime   @default(now())
+  actualizadoEn  DateTime   @default(now()) @updatedAt
 
-  datosExtraidos DatoExtraido[]
-
+  @@index([expedienteId])
   @@map("documentos")
+}
+
+// Cada vez que se genera la escritura: avance por etapas, el Word resultante y la revisión de la IA
+model Generacion {
+  id              String     @id @default(cuid())
+  expediente      Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+  expedienteId    String
+  version         Int
+  estado          String     @default("EN_CURSO") // EN_CURSO | COMPLETADA | ERROR
+  error           String?
+  progreso        Json? // etapa, turno y lo acumulado (src/lib/servicios/generacion.ts)
+  resultado       Json? // resumen, advertencias, faltantes y cambios aplicados
+  observaciones   String? // las observaciones con que se generó
+  plantillaNombre String
+  rutaDocx        String?
+  hashSha256      String?
+  modelo          String?
+  generadaPor     Usuario    @relation(fields: [generadaPorId], references: [id])
+  generadaPorId   String
+  creadaEn        DateTime   @default(now())
+  actualizadaEn   DateTime   @default(now()) @updatedAt // latido: si deja de cambiar, la etapa se cortó
+
+  @@unique([expedienteId, version])
+  @@map("generaciones")
 }
 
 // ---------------------------------------------------------------- IA
 
-enum Confianza {
-  ALTA
-  MEDIA
-  BAJA
-}
-
-model AnalisisIA {
-  id                  String     @id @default(cuid())
-  expediente          Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
-  expedienteId        String
-  proposito           String // EXTRACCION | REVISION
-  modelo              String
-  versionInstruccion  String?
-  estado              String // EN_CURSO | COMPLETADO | ERROR
-  tokensEntrada       Int        @default(0)
-  tokensSalida        Int        @default(0)
-  tokensCacheLectura  Int        @default(0)
-  duracionMs          Int?
-  error               String?
-  documentoId         String?
-  resultado           Json?
-  progreso            Json? // avance de un análisis en segundo plano (src/lib/servicios/tareas.ts)
-  actualizadoEn       DateTime   @default(now()) @updatedAt // latido: si deja de cambiar, la tarea se cortó
-  creadoEn            DateTime   @default(now())
-
-  datos DatoExtraido[]
-
-  @@map("analisis_ia")
-}
-
 // Una fila por cada llamada a la API de Claude: tokens y costo, con quién la hizo y sobre qué.
-// Sin relaciones: el gasto se conserva aunque se borre el expediente, la plantilla o el usuario.
+// Sin relaciones: el gasto se conserva aunque se borre la escritura, la plantilla o el usuario.
 model ConsumoIA {
   id                   String   @id @default(cuid())
   creadoEn             DateTime @default(now())
   usuarioId            String? // quien disparó la llamada
   expedienteId         String? // la escritura
-  plantillaId          String? // revisión o corrección de plantillas
-  analisisId           String?
-  revisionId           String? // revisión de una escritura ya hecha (revisiones_escritura)
-  proposito            String // EXTRACCION | REVISION | REDACCION | PLANTILLA | ESCRITURA
+  plantillaId          String? // registros anteriores: revisión o corrección de plantillas
+  analisisId           String? // la generación (generaciones) o, en registros anteriores, el análisis
+  revisionId           String? // registros anteriores: revisión de una escritura ya hecha
+  proposito            String // LECTURA | REDACCION (anteriores: EXTRACCION, REVISION, PLANTILLA, ESCRITURA)
   modelo               String
   tokensEntrada        Int      @default(0)
   tokensSalida         Int      @default(0)
@@ -344,99 +228,6 @@ model ConsumoIA {
   @@index([expedienteId])
   @@index([revisionId])
   @@map("consumo_ia")
-}
-
-model DatoExtraido {
-  id                 String      @id @default(cuid())
-  expediente         Expediente  @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
-  expedienteId       String
-  analisis           AnalisisIA  @relation(fields: [analisisId], references: [id], onDelete: Cascade)
-  analisisId         String
-  campo              String // ruta del campo en el formulario, p. ej. "vendedores[0].numero_documento"
-  valor              Json
-  documento          Documento?  @relation(fields: [documentoId], references: [id])
-  documentoId        String?
-  pagina             Int?
-  fragmento          String? // texto de origen
-  confianza          Confianza
-  revisionManual     Boolean     @default(false) // confianza baja o validación fallida
-  estado             String      @default("PENDIENTE") // PENDIENTE | ACEPTADO | CORREGIDO | DESCARTADO
-  valorFinal         Json?
-  creadoEn           DateTime    @default(now())
-
-  @@index([expedienteId, campo])
-  @@map("datos_extraidos")
-}
-
-enum NivelObservacion {
-  CRITICA
-  ADVERTENCIA
-  INFORMATIVA
-}
-
-enum EstadoObservacion {
-  ABIERTA
-  CORREGIDA
-  JUSTIFICADA
-  DESCARTADA
-}
-
-model Observacion {
-  id            String            @id @default(cuid())
-  expediente    Expediente        @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
-  expedienteId  String
-  origen        String // REGLA | IA
-  codigo        String // código de la regla o "IA"
-  nivel         NivelObservacion
-  mensaje       String
-  campo         String?
-  evidencia     Json?
-  estado        EstadoObservacion @default(ABIERTA)
-  justificacion String?
-  falsaAlarma   Boolean? // marcado por quien la resuelve (indicador mensual)
-  resueltaPor   Usuario?          @relation(fields: [resueltaPorId], references: [id])
-  resueltaPorId String?
-  resueltaEn    DateTime?
-  creadaEn      DateTime          @default(now())
-
-  @@index([expedienteId, estado])
-  @@map("observaciones")
-}
-
-model Borrador {
-  id                String     @id @default(cuid())
-  expediente        Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
-  expedienteId      String
-  version           Int
-  plantillasUsadas  Json // ids y versiones de las plantillas aprobadas (modelos) sobre las que se redactó
-  redaccion         Json? // resumen, datos faltantes y advertencias de la redacción de la IA (src/lib/servicios/redaccion.ts)
-  rutaDocxCifrada   String
-  rutaPdfCifrada    String?
-  hashSha256        String
-  generadoPorId     String
-  creadoEn          DateTime   @default(now())
-
-  @@unique([expedienteId, version])
-  @@map("borradores")
-}
-
-// Casos de aprendizaje (anonimizados) para el ciclo de entrenamiento de 6 meses
-model Correccion {
-  id             String     @id @default(cuid())
-  expediente     Expediente @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
-  expedienteId   String
-  tipoId         String
-  categoria      String // EXTRACCION | OBSERVACION | BORRADOR | REVISION
-  campo          String?
-  valorIA        String? // anonimizado
-  valorCorregido String? // anonimizado
-  motivo         String?
-  creadoPor      Usuario    @relation(fields: [creadoPorId], references: [id])
-  creadoPorId    String
-  creadoEn       DateTime   @default(now())
-
-  @@index([tipoId, campo])
-  @@map("correcciones")
 }
 
 // ---------------------------------------------------------------- Auditoría, alertas y configuración
@@ -494,7 +285,7 @@ model LimitePeticiones {
   @@map("limite_peticiones")
 }
 
-// Avisos para el usuario: análisis terminados, escrituras aprobadas o devueltas…
+// Avisos para el usuario: lecturas y escrituras terminadas…
 model Notificacion {
   id        String    @id @default(cuid())
   usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
@@ -507,35 +298,4 @@ model Notificacion {
 
   @@index([usuarioId, creadaEn])
   @@map("notificaciones")
-}
-
-// Revisión de escrituras de sucesión ya hechas (src/lib/servicios/revision-escrituras.ts): se carga un PDF con
-// la escritura y sus documentos soporte; la IA transcribe la escritura, la cruza con los soportes y la plantilla
-// aprobada, y recomienda cambios. El usuario elige cuáles aplicar y se genera la escritura en Word con los
-// cambios marcados (y su relación: qué se cambió, dónde y por qué). Los archivos van cifrados.
-model RevisionEscritura {
-  id            String    @id @default(cuid())
-  nombreArchivo String
-  tamano        Int
-  hashSha256    String // del PDF cargado (integridad)
-  paginas       Int?
-  rutaOriginal  String // PDF cargado (escritura + soportes), en el almacenamiento cifrado
-  rutaBase      String? // la escritura transcrita, en Word con el formato de la notaría y sin cambios
-  rutaCorregida String? // la escritura con los cambios elegidos marcados
-  tipoId        String? // tipo de escritura (su plantilla aprobada es la referencia y la base del Word)
-  notas         String? // qué quiere el usuario que se revise
-  estado        String    @default("EN_CURSO") // EN_CURSO | COMPLETADA | ERROR
-  error         String?
-  progreso      Json? // avance por etapas en segundo plano (identificar, transcribir, revisar)
-  resultado     Json? // transcripción, documentos soporte, resumen y recomendaciones con su estado
-  modelo        String?
-  cargadaPor    Usuario   @relation(fields: [cargadaPorId], references: [id])
-  cargadaPorId  String
-  creadaEn      DateTime  @default(now())
-  actualizadaEn DateTime  @default(now()) @updatedAt // latido: si deja de cambiar, la etapa se cortó
-  analizadaEn   DateTime?
-  aplicadaEn    DateTime?
-
-  @@index([cargadaPorId, creadaEn])
-  @@map("revisiones_escritura")
 }

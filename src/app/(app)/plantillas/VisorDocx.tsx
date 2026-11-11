@@ -1,18 +1,14 @@
 'use client';
 /**
  * Muestra un .docx como se ve en Word (páginas, márgenes, encabezados, pies, imágenes y tablas)
- * con docx-preview, y resalta las variables {{…}} y las marcas «FALTA: …».
+ * con docx-preview, y resalta las marcas «FALTA: …» y [VERIFICAR: …].
  * Las páginas se reducen para caber en el ancho disponible (nunca se amplían).
  */
 import { useEffect, useRef, useState } from 'react';
 
-const ETIQUETA = /\{\{[^{}]*\}\}|«FALTA:[^»]*»/;
+const ETIQUETA = /«FALTA:[^»]*»|\[VERIFICAR:[^\]]*\]/;
 
-function claseDe(texto: string): string {
-  if (texto.startsWith('«')) return 'marca-faltante';
-  const c = texto.replace(/^\{\{\s*/, '')[0];
-  return c === '#' || c === '^' ? 'marca-condicion' : c === '/' ? 'marca-cierre' : 'marca-variable';
-}
+const claseDe = (texto: string) => (texto.startsWith('«') ? 'marca-faltante' : 'marca-verificar');
 
 /** Envuelve en <span> las etiquetas que quedaron completas dentro de un mismo nodo de texto */
 function resaltarEtiquetas(raiz: HTMLElement) {

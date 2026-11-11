@@ -17,10 +17,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const admin = s.usuario.rol === 'ADMINISTRADOR';
   const enlaces: EnlaceMenu[] = [
     { href: '/', texto: 'Inicio' },
-    { href: '/expedientes', texto: 'Expedientes' },
-    { href: '/expedientes/nuevo', texto: 'Nuevo expediente' },
-    { href: '/revisiones', texto: 'Revisar escritura' },
-    ...(admin || s.usuario.rol === 'REVISOR' ? [{ href: '/plantillas', texto: 'Plantillas' }] : []),
+    { href: '/expedientes/nuevo', texto: 'Nueva escritura' },
+    { href: '/expedientes', texto: 'Escrituras' },
+    { href: '/plantillas', texto: 'Biblioteca de plantillas' },
     ...(admin ? [
       { href: '/admin', texto: 'Panel', seccion: 'Administración' },
       { href: '/admin/dispositivos', texto: 'Dispositivos' },
@@ -28,7 +27,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       { href: '/admin/auditoria', texto: 'Auditoría' },
       { href: '/admin/estadisticas', texto: 'Estadísticas' },
       { href: '/admin/consumo', texto: 'Consumo de IA' },
-      { href: '/admin/entrenamiento', texto: 'Entrenamiento IA' },
       { href: '/admin/alertas', texto: 'Alertas' },
       { href: '/admin/configuracion', texto: 'Configuración' },
     ] : []),

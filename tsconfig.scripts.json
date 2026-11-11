@@ -6,7 +6,7 @@
         "./src/*"
       ],
       "server-only": [
-        "./pruebas/integracion/vacio.ts"
+        "./scripts/vacio.ts"
       ]
     }
   }

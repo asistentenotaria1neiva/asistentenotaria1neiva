@@ -22,84 +22,40 @@ Tenga en cuenta:
 
 | Paso | Dónde | Qué hacer |
 | --- | --- | --- |
-| 1 | **Nuevo expediente** | Elija el tipo de escritura (si son varios actos, ordénelos como deben aparecer). La plantilla es la aprobada para ese tipo. |
-| 2 | **Documentos** | Cargue los documentos del negocio (PDF o fotos, en cualquier orden): hoja de radicación, cédulas, certificado de tradición, paz y salvos, escritura anterior, poderes, etc. Puede dejar **"Detectar automáticamente"**. Un documento equivocado se puede **retirar**. |
-| 3 | **Escritura** | Pulse **"Generar escritura"**. La IA lee todos los documentos y redacta la escritura completa sobre la plantilla, **sin hacer preguntas**: lo dudoso queda **[VERIFICAR: …]**, lo que no está en los documentos **«FALTA: …»**, y todo aparece como alerta. Si algo hay que corregir, escríbalo en **Indicaciones** y genere una nueva versión. |
-| 4 | **Observaciones** | Las alertas críticas impiden enviar; las de «Revisar» se corrigen (nueva versión) o se justifican. Opcional: **"Reglas + revisión de la IA"**. |
-| 5 | **Datos y preguntas** (opcional) | Solo si quiere diligenciar o confirmar datos a mano: la IA también los usa al redactar. |
-| 6 | **Resumen y flujo → Enviar a revisión** | El revisor lo aprueba o lo devuelve con comentarios. |
-| 7 | Lista para firma | El expediente queda listo para la firma del notario. |
+| 1 | **Nueva escritura** | Busque la plantilla: escriba palabras del nombre o del contenido (p. ej. *casa soltero caja honor*), filtre por **categoría**, **banco/subcategoría**, **año** o **fecha**. Haga clic en una para verla completa en la **vista previa** y pulse **Usar esta plantilla**. Si tiene su propia plantilla, use **«¿Tiene su propia plantilla?»** y cárguela en Word (.docx). |
+| 2 | **Documentos del negocio** | Cargue los documentos (PDF, fotos o Word; varios a la vez o un PDF con todos): cédulas, certificado de tradición, escritura anterior, paz y salvos, poderes, minuta o carta del banco… La IA los **lee una sola vez** apenas se cargan; con **«Ver lo que leyó la IA»** puede revisar lo leído. Un documento equivocado se **retira**. |
+| 3 | **Observaciones y generación** | Escriba lo que la IA debe tener en cuenta y no está en los documentos (precio y forma de pago, estado civil, cláusulas que no aplican…) y pulse **Generar escritura**. Tarda unos minutos; puede salir de la página: le llega un aviso en **Notificaciones**. |
+| 4 | **Escritura generada** | Lea el **resumen** y las **advertencias** (críticas primero), revise la escritura en la vista previa y **descárguela en Word**. Si algo hay que corregir, ajuste las observaciones o los documentos y genere una **nueva versión** (las anteriores se conservan). |
 
-### Asistente IA
+### Qué hace la IA (y qué no)
 
-Al pulsar **"Analizar documentos y preparar preguntas"** la IA trabaja en segundo plano. Mientras tanto la página muestra el **porcentaje** de avance y **qué documento** está analizando (varios a la vez). Puede salir de la página: al terminar le llega un aviso en **Notificaciones** (menú lateral). Si pulsa **"Avisarme en este equipo"** y acepta el permiso del navegador, el aviso también aparece en la pantalla aunque esté en otra pestaña. Si el análisis se corta, se reanuda solo y no repite los documentos ya analizados. La IA:
+- **Sigue la plantilla al pie de la letra**: conserva su estructura, cláusulas, orden, redacción y formato. Solo cambia los datos del negocio anterior por los del nuevo (personas, inmuebles, linderos, valores, fechas, banco…) y ajusta género y número (*el vendedor / la vendedora / los vendedores*).
+- **No inventa**: lo que no está en los documentos ni en las observaciones queda **«FALTA: …»** resaltado en amarillo; lo dudoso queda **[VERIFICAR: …]**. Antes de entregar, busca otra vez en los documentos originales lo que quedó faltando.
+- Retira los párrafos que no aplican al nuevo negocio y repite los que se necesitan (p. ej. un segundo comprador). No agrega cláusulas nuevas salvo que usted lo pida en las observaciones.
+- El número y la fecha de la escritura, los derechos notariales y la retención quedan para la terminación.
 
+### Advertencias
 
-1. Lee los documentos que aún no se han analizado e identifica los que se cargaron como "Detectar automáticamente".
-2. Lleva al expediente los datos que leyó con confianza. Los dudosos (borrosos, de formato inválido o que no coinciden entre documentos) no se aplican: se convierten en preguntas.
-3. Verifica que los documentos correspondan a los actos elegidos: si indican otro tipo de escritura, lo advierte y propone los actos que corresponden para que usted confirme o los deje como están. También indica los documentos que faltan.
-4. Señala las **inconsistencias** entre documentos (nombres o cédulas distintos, vendedor que no es el titular, certificados vencidos, gravámenes vigentes…). Para cada una puede:
-   - **Recargar el documento**: retírelo en *Documentos*, cargue el correcto y pulse **"Analizar de nuevo"**.
-   - **Continuar con los datos actuales**: la inconsistencia queda registrada como aceptada y el revisor la verá.
-5. Lee la plantilla aprobada (el **modelo de redacción** de ese tipo de escritura) y hace las **preguntas** necesarias para redactarla: los datos del formulario (estado civil, quién vende y quién compra, precio…) y, en texto libre, lo que el modelo necesita y no está en los documentos («Para redactar la escritura»). La **afectación a vivienda familiar** (Ley 258 de 1996, modificada por la Ley 854 de 2003) no se pregunta: se aplica automáticamente según el estado civil de los compradores y el tipo de inmueble. Cuando un documento sugiere la respuesta, aparece ya escrita con su fuente: verifíquela. Las preguntas marcadas como *obligatorio* deben responderse; las demás pueden dejarse sin respuesta. Si al guardar falta algún dato obligatorio, el asistente agrega la pregunta.
-
-Con las respuestas, pulse **Redactar escritura con IA**: la IA escribe la escritura completa siguiendo la plantilla aprobada por el notario (su estructura, cláusulas y forma de redactar), con los datos del caso y el formato de la notaría. Tarda unos minutos y le avisa al terminar. Quedan **en blanco** para el funcionario que hace la terminación: número y fecha de la escritura, hojas de papel notarial, derechos notariales y retención en la fuente, y los datos de firma de cada otorgante.
-
-### Revisar y corregir datos
-
-Todo se resuelve en el asistente; no hay formulario aparte.
-
-- **Datos de la escritura** muestra todo lo que irá en la escritura (lo leído de los documentos y lo respondido), agrupado por acto, persona e inmueble. Si algo no es correcto, pulse **Corregir**: el asistente agrega la pregunta con el valor actual para que lo cambie.
-- En **Respuestas guardadas**, **Cambiar** vuelve a hacer una pregunta ya respondida.
-- En **Observaciones**, las que se refieren a un dato tienen el botón **Corregir en el asistente**.
-- Las respuestas se validan: la cédula solo números, el NIT con dígito de verificación, la matrícula con formato 200-12345, la cédula catastral de 15, 20, 25 o 30 dígitos. Los valores se escriben solo en número; el valor en letras se genera automáticamente.
-- Si falta una persona (p. ej. el comprador), cargue su cédula en *Documentos* y pulse **Analizar de nuevo**.
-- Ninguna respuesta sugerida por la IA se guarda sola: usted la verifica antes de guardar. Si cambia un valor que la IA leyó de un documento, el cambio queda registrado (anonimizado) para el entrenamiento.
-
-## 3. Observaciones
-
-| Nivel | Qué significa | Qué hacer |
+| Nivel | Qué significa | Ejemplo |
 | --- | --- | --- |
-| 🔴 **Crítica** | Impide avanzar. Ej.: la cédula del vendedor no coincide con la del certificado de tradición. | Use **Corregir en el asistente** y ejecute de nuevo las reglas. |
-| 🟡 **Advertencia** | Exige revisión. Ej.: hipoteca vigente no mencionada. | Corrija el dato o escriba una **justificación** (mínimo 15 caracteres). |
-| 🔵 **Informativa** | Sugerencia. Ej.: el paz y salvo vence en 5 días. | Tómela en cuenta. |
+| 🔴 **Crítica** | Impide otorgar o cambia el negocio. | Gravamen vigente en el certificado; quien vende no es el titular inscrito. |
+| 🟡 **Advertencia** | Hay que revisarlo. | Certificado de más de 30 días, datos «FALTA», áreas distintas entre documentos. |
+| 🔵 **Informativa** | Decisiones de la IA para confirmar. | Párrafos retirados o repetidos. |
 
-- Las observaciones de **reglas** se cierran solas cuando el dato queda corregido y se vuelve a ejecutar la revisión.
-- Las de la **IA** se marcan "Corregí el dato", "Justificar" o "Descartar (falsa alarma)". Si fue una falsa alarma, márquelo: así se mide la calidad de la IA.
-- Las críticas de la IA solo puede descartarlas un revisor.
+Las marcadas **(verificación automática)** las hace el sistema sin IA: números o nombres de la plantilla anterior que siguen en la escritura y no aparecen en los documentos, valores en letras que no corresponden a la cifra y cambios que no se pudieron aplicar.
 
-## 4. Borrador
+## 3. Para el revisor: la biblioteca de plantillas
 
-- Lo **redacta la IA** tomando como base la **plantilla aprobada por el notario**, con los datos del expediente, de los documentos y sus respuestas. No copia los datos del modelo.
-- Lo que la IA no encuentra queda marcado **«FALTA: dato»** y aparece como observación crítica: complete el dato (o escríbalo en *Indicaciones para la redacción*) y redacte de nuevo.
-- La página del borrador muestra el resumen de la redacción y lo que el revisor debe mirar con cuidado (cláusulas agregadas o adaptadas). **Lea siempre el texto completo**.
-- No se redacta si hay otras observaciones críticas abiertas. Si cambia un dato después de redactar, redacte de nuevo antes de enviar a revisión.
-- Cada descarga queda registrada.
+En **Biblioteca de plantillas** el revisor alimenta la base:
 
-### Revisar una escritura de sucesión ya hecha
+- **Agregar plantillas**: elija uno o varios .docx, la **categoría** (puede escribir una nueva), el banco o subcategoría y, si quiere, la fecha (si la deja vacía, se usa la de modificación del archivo).
+- En la vista previa de una plantilla, **Editar datos, retirar o eliminar**: corrija nombre, categoría o fecha; **Retirar** la oculta para los digitadores sin borrarla; **Eliminar** la borra.
+- El revisor ve todas las escrituras; trabaja como un digitador en las suyas.
 
-En el menú lateral, **Revisar escritura** sirve para escrituras de sucesión ya redactadas:
+## 4. Buenas prácticas
 
-1. Cargue **un solo PDF** con la escritura y todos sus documentos soporte (registros civiles, cédulas, poder, certificados de tradición, paz y salvos, edicto y publicaciones, respuestas de la DIAN y la UGPP…). Elija el tipo (p. ej. *Sucesión intestada*): su plantilla aprobada es la referencia y da el formato de la escritura generada. Opcionalmente escriba qué quiere que se revise en especial.
-2. La IA trabaja por etapas (entre 5 y 15 minutos; puede salir de la página y le llega un aviso al terminar): ubica la escritura y cada soporte en el PDF, transcribe la escritura y la **compara con los soportes y con la plantilla**. Recomienda **cambios puntuales de texto** —nombres, cédulas, fechas, matrículas, linderos, avalúos, sumas de las hijuelas, redacción— cada uno con **dónde**, **por qué** y la **fuente** (documento y página). **No toca la estructura**: no reordena ni reescribe cláusulas. Lo que no tiene un cambio seguro (p. ej. una parte que falta) queda en *Para revisar a mano*.
-3. Marque los cambios que quiere y pulse **Generar la escritura**. Se genera en Word, con el formato de la notaría, con los cambios a la vista: **lo agregado resaltado en amarillo** y **lo eliminado tachado en rojo**, cada uno con su número; al final va la **relación de cambios** (qué se cambió, dónde, por qué y con qué soporte) y lo pendiente de revisar a mano. Puede cambiar la selección y generarla de nuevo.
-4. Descargue la versión **con los cambios marcados** para revisarla, o la versión **sin marcas** (los mismos cambios, lista para usar). Compare la escritura con el PDF y **revísela completa en Word** antes de firmar.
-
-El digitador ve sus propias revisiones; el revisor y el administrador ven todas.
-
-## 5. Para el revisor
-
-- Usted también puede crear y elaborar expedientes, igual que un digitador.
-- En **Inicio** aparecen los expedientes pendientes de revisión.
-- Lea el borrador completo y las observaciones resueltas (con sus justificaciones).
-- **Aprobar** lo deja listo para firma. **Devolver** exige un comentario que explique qué corregir.
-- Usted no puede aprobar expedientes que elaboró.
-- Después de la firma del notario, registre el número de escritura con **"Marcar como firmada"**.
-- En **Plantillas** puede ver cada plantilla (modelo de redacción), cargar una versión nueva y leer la revisión de la IA. La aprobación la hace el administrador por indicación del notario.
-
-## 6. Buenas prácticas
-
-- Verifique siempre contra el documento original: la IA puede equivocarse.
-- No cargue documentos de un caso en otro expediente.
+- **Lea siempre la escritura completa** y verifíquela contra los documentos originales: la IA puede equivocarse.
+- Elija la plantilla más parecida al negocio (mismo acto, banco, tipo de inmueble y estado civil): entre menos cambios necesite, mejor queda la escritura.
+- No cargue documentos de un caso en otra escritura.
 - No comparta su usuario. Toda acción queda registrada a su nombre.
 - Si algo se ve extraño (un equipo desconocido, un mensaje de bloqueo inesperado), avise al administrador.

@@ -4,7 +4,20 @@
  */
 import 'server-only';
 import { db } from './db';
-import { NOTARIA_POR_DEFECTO, type ConfigNotaria } from './escritura/contexto';
+/** Datos de la notaría que la IA usa al adaptar la plantilla (titular y resolución de tarifas vigentes) */
+export interface ConfigNotaria {
+  codigo: string; // 410010001
+  titular: string; // LUIS IGNACIO VIVAS CEDEÑO
+  resolucion_tarifas: string; // "2026-000964-6 del 20 de Enero de 2026"
+  encargado_genero?: 'M' | 'F';
+}
+
+export const NOTARIA_POR_DEFECTO: ConfigNotaria = {
+  codigo: '410010001',
+  titular: 'LUIS IGNACIO VIVAS CEDEÑO',
+  resolucion_tarifas: '2026-000964-6 del 20 de Enero de 2026',
+  encargado_genero: 'F',
+};
 
 export interface Configuraciones {
   'red.ips_oficina': string[];
@@ -13,9 +26,6 @@ export interface Configuraciones {
   'acceso.intentos_maximos': number;
   'acceso.bloqueo_minutos': number;
   'acceso.horario': { activo: boolean; dias: number[]; desde: string; hasta: string };
-  'reglas.dias_vigencia_certificado': number;
-  'reglas.dias_aviso_paz_salvo': number;
-  'reglas.dias_vigencia_cert_existencia': number;
   notaria: ConfigNotaria;
   'ia.creditos': { saldoUSD: number; fecha: string };
 }
@@ -27,9 +37,6 @@ export const POR_DEFECTO: Configuraciones = {
   'acceso.intentos_maximos': 5,
   'acceso.bloqueo_minutos': 30,
   'acceso.horario': { activo: false, dias: [1, 2, 3, 4, 5, 6], desde: '07:00', hasta: '19:00' },
-  'reglas.dias_vigencia_certificado': 30,
-  'reglas.dias_aviso_paz_salvo': 5,
-  'reglas.dias_vigencia_cert_existencia': 30,
   notaria: NOTARIA_POR_DEFECTO,
   'ia.creditos': { saldoUSD: 0, fecha: '' },
 };
@@ -41,9 +48,6 @@ export const DESCRIPCIONES: Record<keyof Configuraciones, string> = {
   'acceso.intentos_maximos': 'Intentos fallidos de contraseña antes de bloquear la cuenta.',
   'acceso.bloqueo_minutos': 'Minutos de bloqueo tras superar los intentos.',
   'acceso.horario': 'Horario permitido de acceso para el personal (el administrador no tiene restricción de horario).',
-  'reglas.dias_vigencia_certificado': 'Antigüedad máxima del certificado de tradición antes de advertir (umbral a definir por el notario).',
-  'reglas.dias_aviso_paz_salvo': 'Días antes del vencimiento del paz y salvo para avisar.',
-  'reglas.dias_vigencia_cert_existencia': 'Antigüedad máxima del certificado de existencia y representación antes de advertir.',
   notaria: 'Datos fijos de la notaría usados en las plantillas (código, notario titular, resolución de tarifas del año).',
   'ia.creditos': 'Saldo de créditos de la API de Claude (US$) tal como aparece en la consola de Anthropic (Billing) y la fecha en que se tomó (AAAA-MM-DD). Actualícelo cada vez que recargue. El saldo restante se calcula restando el costo real desde esa fecha.',
 };

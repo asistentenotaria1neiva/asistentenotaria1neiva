@@ -1,27 +1,45 @@
-import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { ESQUEMAS } from '@/lib/escritura/esquemas';
-import { cargarActosDePlantillas } from '@/lib/servicios/actos-plantilla';
+import { Buscador } from '../../plantillas/Buscador';
+import { FormularioAccion } from '../formularios';
 import { accionCrearExpediente } from '../acciones';
-import { FormularioNuevo } from '../formularios';
 
-export default async function NuevoExpediente() {
-  await requerirSesion({ roles: ['ADMINISTRADOR', 'REVISOR', 'DIGITADOR'] });
-  // Cada tipo con plantilla aprobada es un acto disponible, con el formulario armado desde su plantilla
-  await cargarActosDePlantillas();
-  const aprobadas = await db.plantilla.findMany({ where: { estado: 'APROBADA' }, select: { tipoId: true } });
-  const actos = Object.values(ESQUEMAS)
-    .map((e) => ({ id: e.tipo, nombre: e.titulo, estadoPlantilla: aprobadas.some((a) => a.tipoId === e.tipo) ? 'APROBADA' : 'PENDIENTE' }))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  const sinAprobar = await db.tipoEscritura.count({ where: { esBloque: false, activo: true, plantillas: { none: { estado: 'APROBADA' } } } });
+const CampoTitulo = () => (
+  <div className="campo">
+    <label htmlFor="titulo">Título de la escritura (opcional)</label>
+    <input id="titulo" name="titulo" type="text" maxLength={200} placeholder="p. ej. Compraventa casa Las Granjas – Pérez a Gómez" />
+  </div>
+);
+
+export default async function NuevaEscritura({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const s = await requerirSesion();
+  const parametros = await searchParams;
   return (
     <>
-      <h1>Nuevo expediente</h1>
-      <div className="aviso info">
-        Elija los actos de la escritura. Hay {actos.length} acto(s) disponibles: los que tienen una plantilla aprobada por el notario. La IA llena los datos con los documentos que cargue y pregunta lo que falte.
-        {sinAprobar > 0 && ` Otros ${sinAprobar} tipos de escritura aparecerán aquí cuando su plantilla se apruebe (ver Plantillas).`}
+      <div className="encabezado">
+        <h1>Nueva escritura</h1>
+        <p className="suave">Busque la plantilla que necesita, revísela en la vista previa y úsela. Después cargará los documentos y escribirá sus observaciones; la IA adapta la plantilla con esos datos, sin cambiar su estructura.</p>
       </div>
-      <FormularioNuevo accion={accionCrearExpediente} actos={actos} />
+      <details className="tarjeta">
+        <summary><strong>¿Tiene su propia plantilla?</strong> Cárguela en Word (.docx)</summary>
+        <div style={{ marginTop: 12 }}>
+          <FormularioAccion accion={accionCrearExpediente} texto="Crear con mi plantilla" textoPendiente="Creando…">
+            <div className="campo">
+              <label htmlFor="archivo">Plantilla personal (.docx)</label>
+              <input id="archivo" name="archivo" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required />
+              <div className="ayuda">Una escritura modelo completa. Queda solo en esta escritura (no se agrega a la biblioteca).</div>
+            </div>
+            <CampoTitulo />
+          </FormularioAccion>
+        </div>
+      </details>
+      <Buscador s={s} parametros={parametros} base="/expedientes/nuevo" acciones={(p) => (
+        <div className="acciones-plantilla">
+          <FormularioAccion accion={accionCrearExpediente} texto="Usar esta plantilla" textoPendiente="Creando…" clase="exito">
+            <input type="hidden" name="plantillaId" value={p.id} />
+            <CampoTitulo />
+          </FormularioAccion>
+        </div>
+      )} />
     </>
   );
 }

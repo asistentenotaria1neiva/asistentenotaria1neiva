@@ -1,12 +1,9 @@
 /**
  * Cliente de la API de Claude (solo servidor). La clave vive en ANTHROPIC_API_KEY.
- * Cada tarea usa el modelo más económico que la resuelve bien; el modelo y el esfuerzo de
- * razonamiento se pueden cambiar por variables de entorno, sin cambiar código:
- *   - EXTRACCION (leer documentos): Haiku, CLAUDE_MODELO_DOCUMENTOS / CLAUDE_ESFUERZO_DOCUMENTOS;
- *   - REVISION (asistente, revisión y corrección del expediente): Sonnet, CLAUDE_MODELO_EXPEDIENTE / CLAUDE_ESFUERZO_EXPEDIENTE;
- *   - REDACCION (redactar la escritura sobre la plantilla aprobada): Sonnet, CLAUDE_MODELO_REDACCION / CLAUDE_ESFUERZO_REDACCION;
- *   - PLANTILLA (revisar y corregir plantillas): Sonnet, CLAUDE_MODELO_PLANTILLAS / CLAUDE_ESFUERZO_PLANTILLAS.
- *   - ESCRITURA (revisar escrituras ya hechas): Sonnet, CLAUDE_MODELO_ESCRITURAS / CLAUDE_ESFUERZO_ESCRITURAS.
+ * Dos tareas, cada una con el modelo más económico que la resuelve bien (se cambian por variables de
+ * entorno, sin cambiar código):
+ *   - LECTURA (leer los documentos soporte una sola vez): Haiku, CLAUDE_MODELO_DOCUMENTOS / CLAUDE_ESFUERZO_DOCUMENTOS;
+ *   - REDACCION (adaptar la plantilla con lo leído y revisar): Sonnet, CLAUDE_MODELO_REDACCION / CLAUDE_ESFUERZO_REDACCION.
  * Si Haiku declina el contenido, se repite una vez con CLAUDE_MODELO_RESPALDO.
  */
 import 'server-only';
@@ -15,14 +12,11 @@ import { db } from '../db';
 import { costoEstimadoUSD } from './precios';
 
 type Esfuerzo = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-export type Proposito = 'EXTRACCION' | 'REVISION' | 'REDACCION' | 'PLANTILLA' | 'ESCRITURA';
+export type Proposito = 'LECTURA' | 'REDACCION';
 
 const PREDETERMINADOS: Record<Proposito, { variable: string; modelo: string; esfuerzo: Esfuerzo }> = {
-  EXTRACCION: { variable: 'DOCUMENTOS', modelo: 'claude-haiku-5-5', esfuerzo: 'medium' },
-  REVISION: { variable: 'EXPEDIENTE', modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' },
+  LECTURA: { variable: 'DOCUMENTOS', modelo: 'claude-haiku-5-5', esfuerzo: 'medium' },
   REDACCION: { variable: 'REDACCION', modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' },
-  PLANTILLA: { variable: 'PLANTILLAS', modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' },
-  ESCRITURA: { variable: 'ESCRITURAS', modelo: 'claude-sonnet-5-5', esfuerzo: 'medium' },
 };
 const RESPALDO = 'claude-sonnet-5-5';
 
@@ -109,8 +103,8 @@ interface OpcionesLlamada {
   /** Esfuerzo de razonamiento para esta llamada (p. ej. 'low' para identificar un documento); si no, el del propósito */
   esfuerzo?: Esfuerzo;
   /**
-   * Cantidad de bloques iniciales de `contenido` que se repiten igual en llamadas seguidas (p. ej. los
-   * documentos del negocio en cada parte de una redacción): quedan en caché 5 minutos y la siguiente
+   * Cantidad de bloques iniciales de `contenido` que se repiten igual en llamadas seguidas (p. ej. la
+   * plantilla y los documentos al continuar una redacción): quedan en caché 5 minutos y la siguiente
    * llamada los paga al 10 %. Escribir la caché cuesta un 25 % más, así que solo conviene si hay
    * otra llamada con el mismo inicio antes de 5 minutos.
    */
@@ -122,10 +116,8 @@ interface OpcionesLlamada {
 export interface RegistroConsumo {
   usuarioId?: string | null;
   expedienteId?: string | null;
-  plantillaId?: string | null;
-  analisisId?: string | null;
-  /** Revisión de una escritura ya hecha (src/lib/servicios/revision-escrituras.ts) */
-  revisionId?: string | null;
+  /** La generación de la escritura (tabla generaciones) */
+  generacionId?: string | null;
 }
 
 /** Guarda los tokens y el costo de una llamada. Un fallo al registrar nunca interrumpe el trabajo. */
@@ -140,9 +132,7 @@ async function registrarConsumo(opciones: OpcionesLlamada, mensaje: Anthropic.Be
       data: {
         usuarioId: opciones.registro.usuarioId ?? null,
         expedienteId: opciones.registro.expedienteId ?? null,
-        plantillaId: opciones.registro.plantillaId ?? null,
-        analisisId: opciones.registro.analisisId ?? null,
-        revisionId: opciones.registro.revisionId ?? null,
+        analisisId: opciones.registro.generacionId ?? null,
         proposito: opciones.proposito,
         modelo: mensaje.model,
         tokensEntrada: entrada,

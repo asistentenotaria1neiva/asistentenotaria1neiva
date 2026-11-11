@@ -2,14 +2,15 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { consumoIA, type Totales } from '@/lib/servicios/consumo-ia';
-import { EtiquetaEstado, Tabla, fecha } from '../../componentes';
+import { Tabla, fecha } from '../../componentes';
 
 const TAREAS: Record<string, string> = {
-  EXTRACCION: 'Lectura de documentos',
-  REVISION: 'Asistente, revisión y corrección',
-  REDACCION: 'Redacción de la escritura',
-  PLANTILLA: 'Revisión de plantillas',
-  ESCRITURA: 'Revisión de escrituras',
+  LECTURA: 'Lectura de documentos (Haiku)',
+  EXTRACCION: 'Lectura de documentos (sistema anterior)',
+  REDACCION: 'Adaptación de la plantilla y revisión (Sonnet)',
+  REVISION: 'Asistente y revisión (sistema anterior)',
+  PLANTILLA: 'Revisión de plantillas (sistema anterior)',
+  ESCRITURA: 'Revisión de escrituras (sistema anterior)',
 };
 
 const n = (x: number) => x.toLocaleString('es-CO');
@@ -228,7 +229,7 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
             <thead><tr>
               <Th campo="expediente" tabla="orden">Expediente</Th>
               <Th campo="escritura" tabla="orden">Escritura</Th>
-              <Th campo="actos" tabla="orden">Actos</Th>
+              <Th campo="actos" tabla="orden">Escritura y plantilla</Th>
               <Th campo="estado" tabla="orden">Estado</Th>
               <Th campo="responsable" tabla="orden">Responsable</Th>
               <Encabezados tabla="orden" />
@@ -238,8 +239,8 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
               <tr key={e.expedienteId}>
                 <td className="principal-celda">{e.existe ? <Link href={`/expedientes/${e.expedienteId}`} className="radicado">{e.numeroInterno}</Link> : <span className="suave">{e.numeroInterno}</span>}</td>
                 <td data-etiqueta="Escritura">{e.numeroEscritura ? `N.º ${e.numeroEscritura}` : <span className="suave">—</span>}</td>
-                <td data-etiqueta="Actos">{e.actos}</td>
-                <td data-etiqueta="Estado">{e.estado ? <EtiquetaEstado estado={e.estado} /> : '—'}</td>
+                <td data-etiqueta="Escritura y plantilla">{e.actos}</td>
+                <td data-etiqueta="Estado">{e.estado ?? '—'}</td>
                 <td data-etiqueta="Responsable">{e.responsable}</td>
                 <Columnas t={e} />
                 <td data-etiqueta="Último uso" className="suave">{fecha(e.ultima)}</td>
@@ -267,7 +268,7 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
               </tr></thead>
               <tbody>{datos.revisiones.map((r) => (
                 <tr key={r.revisionId}>
-                  <td className="principal-celda">{r.existe ? <Link href={`/revisiones/${r.revisionId}`}>{r.nombre}</Link> : <span className="suave">{r.nombre}</span>}{r.tipo && <div className="suave">{r.tipo}</div>}</td>
+                  <td className="principal-celda"><span className="suave">{r.nombre}</span>{r.tipo && <div className="suave">{r.tipo}</div>}</td>
                   <td data-etiqueta="Estado">{r.estado ? <span className={`etiqueta ${r.estado === 'COMPLETADA' ? 'ok' : r.estado === 'ERROR' ? 'critica' : 'informativa'}`}>{r.estado === 'COMPLETADA' ? 'Revisada' : r.estado === 'ERROR' ? 'Error' : 'En curso'}</span> : '—'}</td>
                   <td data-etiqueta="Páginas" className="numero">{r.paginas ?? '—'}</td>
                   <td data-etiqueta="Cambios" className="numero">{r.cambios ?? '—'}</td>

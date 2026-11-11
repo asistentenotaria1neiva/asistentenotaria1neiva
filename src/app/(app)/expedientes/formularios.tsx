@@ -1,5 +1,5 @@
 'use client';
-/** Formularios pequeños de cliente para las acciones de los expedientes */
+/** Formularios de cliente de las escrituras */
 import { useActionState, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Resultado } from './acciones';
@@ -14,7 +14,7 @@ export function Mensaje({ r }: { r?: Resultado }) {
   );
 }
 
-/** Botón que ejecuta una acción sin formulario (p. ej. analizar, revisar, generar) */
+/** Botón que ejecuta una acción sin formulario (p. ej. retirar, leer de nuevo) */
 export function BotonAccion({ accion, texto, textoPendiente, clase, confirmar }: {
   accion: () => Promise<Resultado>; texto: string; textoPendiente?: string; clase?: string; confirmar?: string;
 }) {
@@ -26,7 +26,7 @@ export function BotonAccion({ accion, texto, textoPendiente, clase, confirmar }:
         if (confirmar && !window.confirm(confirmar)) return;
         iniciar(async () => setR(await accion()));
       }}>{pendiente && <span className="girador pequeno" aria-hidden="true" />}{pendiente ? (textoPendiente ?? 'Procesando…') : texto}</button>
-      <Mensaje r={r} />
+      {r?.error && <Mensaje r={r} />}
     </div>
   );
 }
@@ -41,65 +41,23 @@ export function RefrescoAutomatico({ segundos = 5 }: { segundos?: number }) {
   return null;
 }
 
-const sinTildes =(x: string) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-
-export function FormularioNuevo({ accion, actos }: { accion: (r: Resultado, f: FormData) => Promise<Resultado>; actos: { id: string; nombre: string; estadoPlantilla: string }[] }) {
+/** Formulario que llama una acción del servidor y muestra su resultado */
+export function FormularioAccion({ accion, children, texto, textoPendiente, clase, confirmar }: {
+  accion: (r: Resultado, f: FormData) => Promise<Resultado>;
+  children?: React.ReactNode;
+  texto: string;
+  textoPendiente?: string;
+  clase?: string;
+  confirmar?: string;
+}) {
   const [r, enviar, pendiente] = useActionState(accion, {});
-  const [seleccion, setSeleccion] = useState<string[]>([]);
-  const mover = (i: number, d: -1 | 1) => setSeleccion((s) => { const n = [...s]; [n[i], n[i + d]] = [n[i + d], n[i]]; return n; });
-  const [busqueda, setBusqueda] = useState('');
-  const terminos = sinTildes(busqueda).split(/\s+/).filter(Boolean);
-  // Cada palabra escrita debe aparecer en el nombre, en cualquier orden
-  const visibles = actos.filter((a) => terminos.every((t) => sinTildes(a.nombre).includes(t)));
   return (
-    <form action={enviar}>
+    <form action={enviar} onSubmit={(e) => { if (confirmar && !window.confirm(confirmar)) e.preventDefault(); }}>
       <Mensaje r={r} />
-      <input type="hidden" name="actos" value={seleccion.join(',')} />
-      <div className="rejilla dos">
-        <div className="tarjeta">
-          <h2>1. Actos disponibles</h2>
-          <p className="suave">Seleccione los actos de la escritura. Si la escritura combina varios (p. ej. cancelación de patrimonio + compraventa), agréguelos en el orden en que deben aparecer.</p>
-          <div className="campo buscar-actos">
-            <label htmlFor="buscar-acto">Buscar acto</label>
-            <div className="fila" style={{ gap: '0.5rem', flexWrap: 'nowrap' }}>
-              <input id="buscar-acto" type="search" value={busqueda} placeholder="Escriba parte del nombre (p. ej. hipoteca)" autoComplete="off"
-                onChange={(e) => setBusqueda(e.target.value)}
-                // Enter no envía el formulario: si hay un solo resultado, lo selecciona
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter') return;
-                  e.preventDefault();
-                  if (visibles.length === 1 && !seleccion.includes(visibles[0].id)) { setSeleccion((s) => [...s, visibles[0].id]); setBusqueda(''); }
-                }} />
-              {busqueda && <button type="button" className="secundario" onClick={() => setBusqueda('')}>Limpiar</button>}
-            </div>
-            <div className="ayuda" aria-live="polite">{busqueda ? `${visibles.length} de ${actos.length} actos` : `${actos.length} actos disponibles`}{seleccion.length ? ` · ${seleccion.length} seleccionado(s)` : ''}</div>
-          </div>
-          {!visibles.length && <p className="suave vacio">Ningún acto coincide con «{busqueda}».</p>}
-          {visibles.map((a) => (
-            <label key={a.id} className="casilla opcion">
-              <input type="checkbox" checked={seleccion.includes(a.id)} onChange={(e) => setSeleccion((s) => e.target.checked ? [...s, a.id] : s.filter((x) => x !== a.id))} />
-              <span>{a.nombre}</span> {a.estadoPlantilla !== 'APROBADA' && <span className="etiqueta advertencia">plantilla pendiente de aprobación</span>}
-            </label>
-          ))}
-        </div>
-        <div className="tarjeta" style={{ alignSelf: 'start', position: 'sticky', top: '1rem' }}>
-          <h2>2. Orden en la escritura</h2>
-          {!seleccion.length && <p className="suave">Aún no ha seleccionado actos.</p>}
-          <ol className="lista-orden">
-            {seleccion.map((id, i) => (
-              <li key={id}>
-                <div className="fila">
-                  <span>{actos.find((a) => a.id === id)?.nombre}</span>
-                  <span className="botones-orden">
-                    <button type="button" className="secundario pequeno" disabled={i === 0} onClick={() => mover(i, -1)} aria-label="Subir" title="Subir">↑</button>
-                    <button type="button" className="secundario pequeno" disabled={i === seleccion.length - 1} onClick={() => mover(i, 1)} aria-label="Bajar" title="Bajar">↓</button>
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <button type="submit" disabled={pendiente || !seleccion.length} style={{ width: '100%' }}>{pendiente ? 'Creando…' : 'Crear expediente'}</button>        </div>
-      </div>
+      {children}
+      <button type="submit" className={clase} disabled={pendiente} aria-busy={pendiente}>
+        {pendiente && <span className="girador pequeno" aria-hidden="true" />}{pendiente ? (textoPendiente ?? 'Procesando…') : texto}
+      </button>
     </form>
   );
 }
@@ -129,13 +87,13 @@ async function subirParte(expedienteId: string, carga: string, indice: number, p
 
 /**
  * Carga de documentos sin límite de tamaño: cada archivo se envía en partes de 3 MB, varias a la vez,
- * y el servidor las une, lo valida y lo cifra al recibir todas.
+ * y el servidor las une, lo valida y lo cifra al recibir todas. La IA lo lee enseguida.
  */
-export function FormularioCarga({ expedienteId, completar, tipos }: {
+export function FormularioCarga({ expedienteId, completar }: {
   expedienteId: string;
-  completar: (carga: string, partes: number, nombre: string, tipo: string) => Promise<Resultado>;
-  tipos: [string, string][];
+  completar: (carga: string, partes: number, nombre: string) => Promise<Resultado>;
 }) {
+  const router = useRouter();
   const [r, setR] = useState<Resultado>();
   const [avance, setAvance] = useState<string>();
   const [pendiente, iniciar] = useTransition();
@@ -143,9 +101,7 @@ export function FormularioCarga({ expedienteId, completar, tipos }: {
     <form onSubmit={(ev) => {
       ev.preventDefault();
       const formulario = ev.currentTarget;
-      const datos = new FormData(formulario);
-      const tipo = String(datos.get('tipo') ?? 'OTRO');
-      const archivos = datos.getAll('archivo').filter((x): x is File => x instanceof File && x.size > 0);
+      const archivos = new FormData(formulario).getAll('archivo').filter((x): x is File => x instanceof File && x.size > 0);
       iniciar(async () => {
         let cargados = 0;
         const fallo = (a: File, error: string) => setR({ error: cargados ? `${cargados} documento(s) cargado(s). Falló «${a.name}»: ${error}` : `«${a.name}»: ${error}` });
@@ -157,7 +113,6 @@ export function FormularioCarga({ expedienteId, completar, tipos }: {
           let siguiente = 0;
           let hechas = 0;
           let error: string | null = null;
-          // Cada trabajador toma la siguiente parte libre hasta que no queden (o una falle)
           await Promise.all(Array.from({ length: Math.min(PARTES_EN_PARALELO, partes) }, async () => {
             while (!error && siguiente < partes) {
               const i = siguiente++;
@@ -168,211 +123,25 @@ export function FormularioCarga({ expedienteId, completar, tipos }: {
           }));
           if (error) { setAvance(undefined); return fallo(a, error); }
           setAvance(`Cifrando «${a.name}» (${n + 1} de ${archivos.length})…`);
-          const res = await completar(carga, partes, a.name, tipo);
+          const res = await completar(carga, partes, a.name);
           if (res.error) { setAvance(undefined); return fallo(a, res.error); }
           cargados++;
         }
         setAvance(undefined);
         formulario.reset();
-        setR({ ok: `${cargados} documento(s) cargado(s) y cifrado(s).` });
+        setR({ ok: `${cargados} documento(s) cargado(s). La IA los está leyendo.` });
+        router.refresh();
       });
     }}>
       {pendiente && avance ? <div className="aviso info" role="status">{avance}</div> : <Mensaje r={r} />}
       <div className="filtros">
-        <div><label htmlFor="tipo">Tipo de documento</label>
-          <select id="tipo" name="tipo" required>{tipos.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-        <div className="ancho"><label htmlFor="archivo">Archivo(s) PDF o imagen</label><input id="archivo" name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple required /></div>
-        <div className="acciones-filtro"><button type="submit" disabled={pendiente} aria-busy={pendiente}>{pendiente && <span className="girador pequeno" aria-hidden="true" />}{pendiente ? 'Cargando y cifrando…' : 'Cargar'}</button></div>
-      </div>
-    </form>
-  );
-}
-
-export function FormularioResolver({ accion, observacionId, nivel, origen, puedeDescartarCritica }: {
-  accion: (r: Resultado, f: FormData) => Promise<Resultado>; observacionId: string; nivel: string; origen: string; puedeDescartarCritica: boolean;
-}) {
-  const [r, enviar, pendiente] = useActionState(accion, {});
-  const critica = nivel === 'CRITICA';
-  if (critica && origen === 'REGLA') return <p className="suave">Corrija el dato con «Corregir en el asistente» y ejecute de nuevo la revisión.</p>;
-  return (
-    <form action={enviar}>
-      <Mensaje r={r} />
-      <input type="hidden" name="observacionId" value={observacionId} />
-      <div className="campo"><label htmlFor={`j-${observacionId}`}>Justificación</label>
-        <textarea id={`j-${observacionId}`} name="justificacion" minLength={0} placeholder="Explique la decisión (obligatorio para justificar o descartar)" /></div>
-      <label className="casilla"><input type="checkbox" name="falsaAlarma" /> Fue una falsa alarma</label>
-      <div className="fila" style={{ marginTop: '0.5rem' }}>
-        {origen === 'IA' && <button type="submit" name="decision" value="CORREGIDA" className="exito pequeno" disabled={pendiente}>Corregí el dato</button>}
-        {!critica && <button type="submit" name="decision" value="JUSTIFICADA" className="secundario pequeno" disabled={pendiente}>Justificar</button>}
-        {(!critica || puedeDescartarCritica) && <button type="submit" name="decision" value="DESCARTADA" className="secundario pequeno" disabled={pendiente}>Descartar (falsa alarma)</button>}
-      </div>
-    </form>
-  );
-}
-
-const NIVELES: Record<string, string> = { CRITICA: 'Crítica', ADVERTENCIA: 'Advertencia', INFORMATIVA: 'Informativa' };
-const CLASE_NIVEL: Record<string, string> = { CRITICA: 'critica', ADVERTENCIA: 'advertencia', INFORMATIVA: 'informativa' };
-
-export interface PropuestaVista { indice: number; observacion: string; etiqueta: string; antes: string; despues: string; explicacion: string; fuente: string }
-
-/**
- * Corrección con IA de las observaciones: primero se eligen las observaciones y, cuando la IA
- * responde, se eligen las propuestas que se aplican. El mensaje de resultado vive aquí para que
- * no se pierda al pasar de un paso al otro (la página se vuelve a renderizar en el servidor).
- */
-export interface ElementoCorregible { id: string; nivel: string; mensaje: string; categoria?: string; detalle?: string }
-
-const TEXTOS_EXPEDIENTE = {
-  seleccion: 'Elija las observaciones que quiere arreglar. La IA propone los cambios de datos con su fuente; usted decide cuáles aplicar.',
-  propuesta: 'Al aplicar, los datos se guardan en el expediente y las reglas se ejecutan de nuevo.',
-  sinCorreccion: 'No se corrigen con datos',
-};
-
-export function PanelCorreccionIA({ proponer, aplicar, observaciones, propuesta, enCurso, error, textos = TEXTOS_EXPEDIENTE }: {
-  proponer: (ids: string[]) => Promise<Resultado>;
-  aplicar?: (indices: number[]) => Promise<Resultado>;
-  observaciones: ElementoCorregible[];
-  propuesta?: { id: string; fecha: string; propuestas: PropuestaVista[]; sinCorreccion: { observacion: string; motivo: string }[] };
-  /** Fecha de inicio si la IA está preparando una propuesta en segundo plano */
-  enCurso?: string;
-  /** Error del último intento, si falló */
-  error?: string;
-  /** Textos propios de cada pantalla (expediente o plantilla) */
-  textos?: typeof TEXTOS_EXPEDIENTE;
-}) {
-  const [r, setR] = useState<Resultado>();
-  return (
-    <>
-      <h2 style={{ marginTop: 0 }}>{propuesta ? 'Correcciones propuestas por la IA' : 'Arreglar con IA'}</h2>
-      <p className="suave">{propuesta
-        ? `Revise cada cambio antes de aplicarlo (propuesta del ${propuesta.fecha}): la IA puede equivocarse. ${textos.propuesta}`
-        : textos.seleccion}</p>
-      <Mensaje r={r} />
-      {enCurso ? (
-        <div className="aviso info" role="status">
-          <span className="girador pequeno" aria-hidden="true" /> La IA está preparando las correcciones (iniciada {enCurso}). Puede salir de esta página; la propuesta aparecerá aquí al terminar.
+        <div className="ancho">
+          <label htmlFor="archivo">Documentos (PDF, imagen o Word)</label>
+          <input id="archivo" name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple required />
+          <div className="ayuda">Cédulas, certificado de tradición, escritura anterior, paz y salvos, poderes, minuta o carta del banco… Puede cargar varios a la vez, o un PDF con todos.</div>
         </div>
-      ) : propuesta && aplicar ? (
-        <PropuestasCorreccion key={propuesta.id} accion={aplicar} propuestas={propuesta.propuestas} sinCorreccion={propuesta.sinCorreccion} tituloSinCorreccion={textos.sinCorreccion} alResultado={setR} />
-      ) : observaciones.length > 0 && (
-        <>
-          {error && !r && <div className="aviso error">El último intento no se completó: {error}</div>}
-          <SeleccionCorreccionIA accion={proponer} observaciones={observaciones} alResultado={setR} />
-        </>
-      )}
-    </>
-  );
-}
-
-/** Elige las observaciones abiertas que la IA intentará corregir (por defecto, todas las advertencias) */
-function SeleccionCorreccionIA({ accion, observaciones, alResultado }: {
-  accion: (ids: string[]) => Promise<Resultado>; observaciones: ElementoCorregible[]; alResultado: (r?: Resultado) => void;
-}) {
-  const [marcadas, setElegidas] = useState<string[]>(() => observaciones.filter((o) => o.nivel === 'ADVERTENCIA').map((o) => o.id));
-  // Solo cuentan las que siguen abiertas (la lista cambia al ejecutar las reglas)
-  const elegidas = marcadas.filter((id) => observaciones.some((o) => o.id === id));
-  const [pendiente, iniciar] = useTransition();
-  const marcar = (nivel?: string) => setElegidas(observaciones.filter((o) => !nivel || o.nivel === nivel).map((o) => o.id));
-  const advertencias = observaciones.filter((o) => o.nivel === 'ADVERTENCIA').length;
-  return (
-    <div>
-      <div className="fila" style={{ gap: '0.5rem', marginBottom: '0.5rem' }}>
-        {advertencias > 0 && <button type="button" className="secundario pequeno" onClick={() => marcar('ADVERTENCIA')} disabled={pendiente}>Todas las advertencias ({advertencias})</button>}
-        <button type="button" className="secundario pequeno" onClick={() => marcar()} disabled={pendiente}>Todas ({observaciones.length})</button>
-        <button type="button" className="secundario pequeno" onClick={() => setElegidas([])} disabled={pendiente}>Ninguna</button>
+        <div className="acciones-filtro"><button type="submit" disabled={pendiente} aria-busy={pendiente}>{pendiente && <span className="girador pequeno" aria-hidden="true" />}{pendiente ? 'Cargando…' : 'Cargar'}</button></div>
       </div>
-      <ul className="lista-seleccion">
-        {observaciones.map((o) => (
-          <li key={o.id}>
-            <label className="casilla">
-              <input type="checkbox" checked={elegidas.includes(o.id)} disabled={pendiente}
-                onChange={(e) => setElegidas((x) => (e.target.checked ? [...x, o.id] : x.filter((y) => y !== o.id)))} />
-              <span>
-                <span className={`etiqueta ${CLASE_NIVEL[o.nivel]}`}>{NIVELES[o.nivel]}</span>{o.categoria && <span className="suave"> {o.categoria}</span>} {o.mensaje}
-                {o.detalle && <blockquote>{o.detalle}</blockquote>}
-              </span>
-            </label>
-          </li>
-        ))}
-      </ul>
-      <div className="accion">
-        <button type="button" disabled={pendiente || !elegidas.length} aria-busy={pendiente} onClick={() => {
-          alResultado(undefined);
-          // Si se inicia bien, la página pasa a mostrar el avance; solo se informa el error
-          iniciar(async () => { const res = await accion(elegidas); if (res.error) alResultado(res); });
-        }}>
-          {pendiente && <span className="girador pequeno" aria-hidden="true" />}
-          {pendiente ? 'Enviando a la IA…' : `Arreglar con IA (${elegidas.length})`}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Propuestas de la IA: el usuario elige cuáles aplicar (todas marcadas al inicio) */
-function PropuestasCorreccion({ accion, propuestas, sinCorreccion, tituloSinCorreccion, alResultado }: {
-  accion: (indices: number[]) => Promise<Resultado>; propuestas: PropuestaVista[]; sinCorreccion: { observacion: string; motivo: string }[]; tituloSinCorreccion: string; alResultado: (r: Resultado) => void;
-}) {
-  const [elegidas, setElegidas] = useState<number[]>(() => propuestas.map((p) => p.indice));
-  const [pendiente, iniciar] = useTransition();
-  const enviar = (indices: number[]) => iniciar(async () => alResultado(await accion(indices)));
-  return (
-    <div>
-      {propuestas.length > 0 && (
-        <>
-          <ul className="lista-seleccion propuestas">
-            {propuestas.map((p) => (
-              <li key={p.indice}>
-                <label className="casilla">
-                  <input type="checkbox" checked={elegidas.includes(p.indice)} disabled={pendiente}
-                    onChange={(e) => setElegidas((x) => (e.target.checked ? [...x, p.indice] : x.filter((y) => y !== p.indice)))} />
-                  <span>
-                    <strong>{p.etiqueta}</strong>
-                    <span className="cambio"><del>{p.antes}</del> <span aria-hidden="true">→</span><span className="solo-lectores"> cambia a </span> <ins>{p.despues}</ins></span>
-                    <span className="suave">{p.explicacion}{p.fuente && ` Fuente: ${p.fuente}`}</span>
-                    <span className="suave">Observación: {p.observacion}</span>
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-          <div className="fila">
-            <button type="button" className="exito" disabled={pendiente || !elegidas.length} aria-busy={pendiente} onClick={() => enviar(elegidas)}>
-              {pendiente && <span className="girador pequeno" aria-hidden="true" />}
-              {elegidas.length === propuestas.length ? `Aplicar todas (${propuestas.length})` : `Aplicar ${elegidas.length} de ${propuestas.length}`}
-            </button>
-            <button type="button" className="secundario" disabled={pendiente} onClick={() => { if (window.confirm('¿Descartar todas las propuestas? No se cambiará ningún dato.')) enviar([]); }}>Descartar propuesta</button>
-          </div>
-        </>
-      )}
-      {sinCorreccion.length > 0 && (
-        <details className="sin-correccion" open={!propuestas.length}>
-          <summary>{tituloSinCorreccion} ({sinCorreccion.length})</summary>
-          <ul>{sinCorreccion.map((x, i) => <li key={i}><strong>{x.observacion}</strong><div className="suave">{x.motivo}</div></li>)}</ul>
-          {!propuestas.length && <button type="button" className="secundario pequeno" disabled={pendiente} onClick={() => enviar([])}>Entendido</button>}
-        </details>
-      )}
-    </div>
-  );
-}
-
-export function FormularioFlujo({ accion, botones, campos }: {
-  accion: (r: Resultado, f: FormData) => Promise<Resultado>;
-  botones: { valor: string; texto: string; clase?: string }[];
-  campos?: { nombre: string; etiqueta: string; tipo: 'texto' | 'numero' | 'area' | 'select'; opciones?: [string, string][] }[];
-}) {
-  const [r, enviar, pendiente] = useActionState(accion, {});
-  return (
-    <form action={enviar}>
-      <Mensaje r={r} />
-      {campos?.map((c) => (
-        <div className="campo" key={c.nombre}><label htmlFor={c.nombre}>{c.etiqueta}</label>
-          {c.tipo === 'area' ? <textarea id={c.nombre} name={c.nombre} /> : c.tipo === 'select'
-            ? <select id={c.nombre} name={c.nombre}>{c.opciones?.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
-            : <input id={c.nombre} name={c.nombre} type={c.tipo === 'numero' ? 'number' : 'text'} />}
-        </div>
-      ))}
-      <div className="fila">{botones.map((b) => <button key={b.valor} type="submit" name="accion" value={b.valor} className={b.clase} disabled={pendiente}>{b.texto}</button>)}</div>
     </form>
   );
 }

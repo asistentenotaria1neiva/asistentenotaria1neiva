@@ -1,6 +1,6 @@
 # Asistente de escrituración – Notaría Primera del Círculo de Neiva
 
-Aplicación web que asiste la elaboración de escrituras públicas: analiza los documentos soporte con la API de Claude (Anthropic), precarga los datos con su fuente y nivel de confianza, verifica cruces y advierte inconsistencias, y **redacta el borrador con IA tomando como base las plantillas aprobadas por el notario** (cada plantilla es el modelo de redacción de su tipo de escritura: no se llenan variables).
+Aplicación web que asiste la elaboración de escrituras públicas: el digitador **busca en la biblioteca la escritura modelo (plantilla) que necesita**, la revisa en vista previa (o carga una plantilla personal), carga los documentos del negocio y escribe sus observaciones; la IA (Claude, de Anthropic) **adapta la plantilla con los datos de los documentos sin cambiar su estructura ni inventar nada** (lo que no encuentra queda «FALTA» resaltado en amarillo) y entrega la revisión con sus advertencias. El revisor alimenta la biblioteca.
 
 > La aplicación prepara, verifica y advierte. **No reemplaza al notario**: la firma, el control de legalidad y la responsabilidad siguen en cabeza del notario.
 
@@ -13,37 +13,27 @@ Desarrollado por Automind. Documentación: [`docs/`](docs/).
 | Ruta | Qué hay |
 | --- | --- |
 | `src/` | Aplicación Next.js 16 (React 19 + TypeScript). Lógica de negocio en `src/lib/` |
-| `src/lib/escritura/` | Datos del expediente, esquemas por tipo (definen las preguntas del asistente), fórmulas de personas e inmuebles, armado del Word redactado y formato notarial |
-| `src/lib/reglas/` | Reglas fijas de validación y cruce (sin IA) |
-| `src/lib/ia/` | Integración con Claude: esquemas de extracción, instrucciones, cliente |
-| `src/lib/servicios/` | Expedientes, documentos, asistente, redacción con IA (`redaccion.ts`), revisión, borradores, plantillas, aprendizaje |
+| `src/lib/escritura/` | La plantilla en Word como párrafos numerados y los cambios de la IA aplicados sobre ella (`docx.ts`), formato de impresión de la notaría, verificaciones sin IA, datos de la biblioteca |
+| `src/lib/ia/` | Integración con Claude: instrucciones y esquemas (lectura de documentos, redacción, búsqueda de faltantes), cliente, precios |
+| `src/lib/servicios/` | Biblioteca de plantillas, escrituras, documentos, generación por etapas (`generacion.ts`), notificaciones, consumo |
 | `src/lib/seguridad/` | Cifrado, contraseñas, doble factor, red, límites de peticiones |
-| `plantillas/fuentes/` | Fuente de las plantillas iniciales de la compraventa (sus `{{etiquetas}}` solo orientan a la IA sobre qué dato va en cada lugar) |
-| `plantillas/docx/` | Plantillas .docx generadas (se cargan a la base como **pendientes de aprobación**) |
-| `plantillas/modelos/` | **Un modelo limpio por tipo de escritura** (el mejor ejemplo de la carpeta, sin datos personales): fuentes, .docx e `INDICE.md` |
 | `prisma/` | Modelo de datos y migraciones (incluye el disparador que hace inmodificable la auditoría) |
-| `docs/plantillas/` | **Fase 0**: checklist (xlsx y md) y fichas por tipo de escritura |
+| `scripts/` | Carga de la biblioteca (`cargar-biblioteca.ts`) y limpieza de los archivos del sistema anterior |
+| `pruebas/` | Pruebas unitarias |
 | `docs/` | Seguridad (OWASP), manuales, decisiones pendientes |
-| `herramientas/fase0/` | Scripts reproducibles del inventario y la anonimización de la carpeta de plantillas |
-| `herramientas/plantillas/` | Constructor de las plantillas .docx |
-| `scripts/` | Carga de datos de prueba |
-| `pruebas/` | Pruebas unitarias, de integración y de punta a punta |
-| `datos_prueba/` | Casos **ficticios** para pruebas y capacitación |
-| `datos_locales/` | Copias de trabajo con datos reales anonimizados – **excluida del repositorio** |
 
 ## Requisitos
 
 - Node.js 24 y npm
-- Un proyecto de Supabase (base de datos PostgreSQL y Storage para los documentos)
+- Un proyecto de Supabase (base de datos PostgreSQL y Storage para los archivos cifrados)
 - Una cuenta de Vercel (producción)
-- Una clave de la API de Claude (consola de Anthropic), para el análisis con IA
+- Una clave de la API de Claude (consola de Anthropic)
 
 ## Instalación para desarrollo
 
 ```bash
 npm ci
 cp .env.ejemplo .env            # complete las claves y las cadenas de Supabase (ver abajo)
-npm run plantillas:construir
 npm run dev                     # http://localhost:3000
 ```
 
@@ -62,94 +52,66 @@ La primera vez, la aplicación abre **/instalacion** para crear el administrador
 | Variable | Uso |
 | --- | --- |
 | `DATABASE_URL` | Conexión a PostgreSQL de Supabase por el *Transaction pooler* (solo desde el servidor) |
-| `SUPABASE_URL`, `SUPABASE_CLAVE_SERVICIO`, `SUPABASE_BUCKET` | Storage de Supabase para los documentos cifrados (vacías = carpeta local `RUTA_ALMACENAMIENTO`) |
-| `CLAVE_MAESTRA` | Cifra documentos, borradores y secretos TOTP (AES-256-GCM). **Si se pierde, no se recuperan los documentos.** |
-| `CLAVE_FIRMA` | Firma de los tokens de sesión y de equipo |
+| `SUPABASE_URL`, `SUPABASE_CLAVE_SERVICIO`, `SUPABASE_BUCKET` | Storage de Supabase para los archivos cifrados (vacías = carpeta local `RUTA_ALMACENAMIENTO`) |
+| `CLAVE_MAESTRA` | Cifra plantillas, documentos, escrituras y secretos TOTP (AES-256-GCM). **Si se pierde, no se recuperan los archivos.** |
+| `CLAVE_FIRMA` | Firma de los tokens de sesión, de equipo y de las etapas en segundo plano |
 | `ANTHROPIC_API_KEY` | Clave de la API de Claude. **Solo en el servidor** |
 | `ANTHROPIC_WORKSPACE_ID` | Opcional. ID del workspace (`wrkspc_...`) cuando la clave no está asignada a uno |
-| `ANTHROPIC_ADMIN_KEY` | Opcional. Clave de administrador (`sk-ant-admin...`) para mostrar el costo real y los créditos restantes en Estadísticas |
-| `CLAUDE_MODELO_DOCUMENTOS`, `CLAUDE_MODELO_EXPEDIENTE`, `CLAUDE_MODELO_REDACCION`, `CLAUDE_MODELO_PLANTILLAS` | Modelo por tarea (predeterminados: `claude-haiku-5-5` para leer documentos; `claude-sonnet-5-5` para el expediente, la redacción de la escritura y las plantillas) |
+| `ANTHROPIC_ADMIN_KEY` | Opcional. Clave de administrador (`sk-ant-admin...`) para mostrar el costo real y los créditos restantes |
+| `CLAUDE_MODELO_DOCUMENTOS`, `CLAUDE_MODELO_REDACCION` | Modelo por tarea (predeterminados: `claude-haiku-5-5` para leer cada documento una sola vez; `claude-sonnet-5-5` para adaptar la plantilla y revisar) |
 | `CLAUDE_MODELO_RESPALDO` | Modelo que repite la lectura si Haiku declina el documento (predeterminado `claude-sonnet-5-5`) |
-| `CLAUDE_ESFUERZO_DOCUMENTOS`, `CLAUDE_ESFUERZO_EXPEDIENTE`, `CLAUDE_ESFUERZO_REDACCION`, `CLAUDE_ESFUERZO_PLANTILLAS` | `low` · `medium` · `high` · `xhigh` · `max` (predeterminados: `medium`, `medium`, `medium`, `medium`; `low` en la redacción omite cláusulas largas) |
-| `CLAUDE_REDACCION_DOCUMENTOS` | `datos` (predeterminado: la redacción recibe lo ya extraído de cada documento; los pendientes se analizan antes) · `originales` (los PDF completos, más caro) |
+| `CLAUDE_ESFUERZO_DOCUMENTOS`, `CLAUDE_ESFUERZO_REDACCION` | `low` · `medium` · `high` · `xhigh` · `max` (predeterminado `medium`) |
 | `CLAUDE_FALLBACKS` | `default` activa el respaldo del servidor de Anthropic ante rechazos por política; vacío lo desactiva |
+| `CLAUDE_CONCURRENCIA` | Documentos que se leen a la vez al generar (1 a 8; 5 por defecto) |
 | `IPS_OFICINA` | IP públicas de la oficina (valor inicial; luego se administra en el panel) |
 | `CONFIAR_EN_PROXY` | `true` en Vercel (toma la IP real de `X-Real-IP`) |
-| `URL_APLICACION` | Dirección pública de la aplicación; los análisis largos la usan para encadenar sus etapas (vacío = el dominio de la petición) |
+| `URL_APLICACION` | Dirección pública de la aplicación; la generación la usa para encadenar sus etapas (vacío = el dominio de la petición) |
 | `PDF_CONVERSOR_URL` | URL de un servicio Gotenberg externo (vacío = solo Word) |
 
 ## Despliegue en Vercel + Supabase
 
-Base de datos PostgreSQL y documentos cifrados en Supabase (proyecto en `us-east-1`); la aplicación en Vercel (`vercel.json`, región `iad1`, junto a la base: si se cambia la región de una, cambie la de la otra).
+Base de datos PostgreSQL y archivos cifrados en Supabase (proyecto en `us-east-1`); la aplicación en Vercel (`vercel.json`, región `iad1`, junto a la base: si se cambia la región de una, cambie la de la otra).
 
-1. **Supabase**: crear el proyecto y un bucket **privado** llamado `documentos` (Storage). No se usa la autenticación de Supabase: el acceso lo controla la aplicación, y la migración `bloquear_api_publica` retira el acceso de la API REST de Supabase a las tablas.
+1. **Supabase**: crear el proyecto y un bucket **privado** llamado `documentos` (Storage). No se usa la autenticación de Supabase: el acceso lo controla la aplicación, y las migraciones retiran el acceso de la API REST de Supabase a las tablas.
 2. **Migraciones** (desde un equipo de administración, con la cadena *Session pooler* o *Direct* de Supabase, puerto 5432):
    ```bash
    DATABASE_URL="postgresql://...:5432/postgres" npx prisma migrate deploy
    ```
    Vercel no aplica migraciones: repita este paso cada vez que se agregue una.
-3. **Vercel**: importar el repositorio y definir las variables de entorno:
-
-   | Variable | Valor |
-   | --- | --- |
-   | `DATABASE_URL` | Cadena *Transaction pooler* (puerto 6543) terminada en `?pgbouncer=true&connection_limit=1` |
-   | `CLAVE_MAESTRA`, `CLAVE_FIRMA` | Nuevas, generadas para producción (no las de desarrollo) |
-   | `SUPABASE_URL`, `SUPABASE_CLAVE_SERVICIO` | URL del proyecto y clave *secret* / *service_role* |
-   | `CONFIAR_EN_PROXY` | `true` (Vercel entrega la IP real en `X-Real-IP`) |
-   | `IPS_OFICINA` | IP pública de la oficina. **Obligatoria**: sin ella nadie puede ingresar en producción |
-   | `ANTHROPIC_API_KEY` y `CLAUDE_*` | Como en desarrollo |
-   | `PDF_CONVERSOR_URL` | Vacío: en Vercel los borradores se entregan solo en Word |
+3. **Vercel**: importar el repositorio y definir las variables de entorno (`DATABASE_URL` con el *Transaction pooler*, puerto 6543, terminada en `?pgbouncer=true&connection_limit=1`; `CLAVE_MAESTRA` y `CLAVE_FIRMA` nuevas para producción; `SUPABASE_URL` y `SUPABASE_CLAVE_SERVICIO`; `CONFIAR_EN_PROXY=true`; `IPS_OFICINA` obligatoria; `ANTHROPIC_API_KEY` y `CLAUDE_*`).
 4. Ingresar a `/instalacion` desde la oficina, crear el administrador, configurar el doble factor, registrar la IP de la oficina en **Configuración**, crear usuarios y aprobar los equipos.
-5. El notario revisa y el administrador **aprueba las plantillas** (Administración → Plantillas). Sin plantillas aprobadas no se redactan escrituras.
+5. Cargar la biblioteca de plantillas desde la carpeta de minutas (volver a ejecutarlo solo agrega lo nuevo; sin `--confirmar` solo muestra lo que cargaría):
+   ```bash
+   npm run biblioteca:cargar -- "C:\ruta\milan" --confirmar
+   ```
+   La carpeta va organizada por `<año>/<CATEGORÍA>/[<BANCO o subcategoría>/]archivo.docx`: la categoría y el año salen de las carpetas y la fecha de la última modificación del archivo. Después el **revisor** alimenta la biblioteca desde la aplicación.
 
-Al iniciar, la app carga el catálogo y las plantillas (pendientes de aprobación); las migraciones no se aplican solas.
-
-Copias de seguridad: dependen del plan de Supabase (el plan gratuito **no** incluye copias descargables; el Pro incluye copias diarias). Los documentos del bucket ya están cifrados con `CLAVE_MAESTRA`, que debe custodiarse fuera de Vercel.
+Copias de seguridad: dependen del plan de Supabase. Los archivos del bucket ya están cifrados con `CLAVE_MAESTRA`, que debe custodiarse fuera de Vercel.
 
 ## Pruebas
 
 ```bash
-npm run prueba               # 89 pruebas: validaciones, números a letras, concordancia, cruces, generación
-npm run prueba:integracion   # 11 pruebas con PostgreSQL (base exclusiva *_prueba, se recrea; nunca la de producción)
-npm run prueba:e2e           # 3 recorridos en navegador real (Playwright)
+npm run prueba               # unitarias: edición del Word, verificaciones, formato notarial, números a letras, precios
 npm run tipos                # verificación de tipos
 ```
 
-Las pruebas de integración y de punta a punta exigen `DATABASE_URL_PRUEBA` con una base cuyo nombre termine en `_prueba`; se niegan a correr contra otra base.
+## Cómo se genera una escritura (y por qué gasta pocos tokens)
 
-## Fase 0 (inventario de plantillas)
+1. **Lectura** (Haiku, centavos): cada documento se lee una sola vez, apenas se carga, y lo leído se guarda; generar otra versión no lo vuelve a pagar.
+2. **Redacción** (Sonnet): recibe los párrafos numerados de la plantilla (sin los guiones de relleno), lo leído y las observaciones, y devuelve **solo los cambios** (fragmentos a reemplazar, párrafos a reescribir, eliminar o repetir) y la revisión. La salida es una fracción de la escritura; la plantilla y lo leído van en caché.
+3. **Faltantes** (Haiku): lo que quedó «FALTA» se busca en los documentos originales.
+4. **Word**: los cambios se aplican sobre el Word de la plantilla (estilos, tablas y encabezados intactos), se aplica el formato de la notaría (márgenes, Arial 12, 1,5, guiones de relleno) y se suman verificaciones sin IA: datos de la plantilla anterior que siguen en la escritura, valores en letras que no cuadran con la cifra y marcas pendientes.
 
-```bash
-npm run fase0 -- "C:\Users\...\Plantillas Notaria 1"
-```
-
-Lee la carpeta (sin modificarla), clasifica cada archivo según el catálogo de `herramientas/fase0/catalogo.js`, anonimiza las copias de trabajo en `datos_locales/` y regenera la checklist y las fichas en `docs/plantillas/`. Cuando la notaría agregue minutas, se actualiza el catálogo y se vuelve a ejecutar.
-
-### Modelos limpios por tipo de escritura
-
-```bash
-npm run plantillas:modelos
-```
-
-Para cada tipo encontrado toma el mejor ejemplo, reemplaza todos los datos del caso por `{{marcadores}}` conservando el texto literal de la notaría y genera `plantillas/modelos/` (fuente, .docx e índice con la elección y lo que hay que revisar). Las tablas de reemplazo contienen datos reales y viven solo en `datos_locales/modelos/`, por lo que este comando solo se puede ejecutar en el equipo que tiene esa carpeta. Cada ejecución verifica que no quede ningún dato real; si encuentra uno, no regenera el índice y termina con error.
-
-## Agregar o modificar una plantilla
-
-La plantilla es el **modelo de redacción** del tipo de escritura: una escritura de la notaría, tal como está en Word. **No lleva variables.**
-
-1. Cargue la escritura modelo en Plantillas: queda **pendiente de aprobación del notario**. Puede pedir la revisión de la IA (tipo, partes del acto, redacción, cambios frente a la versión aprobada).
-2. Al aprobarla, el tipo queda disponible como acto. Su formulario solo pide quiénes comparecen, los inmuebles (si el acto recae sobre inmuebles) e indicaciones opcionales.
-3. El funcionario solo elige el tipo de escritura y carga los documentos. Al pulsar **Generar escritura**, la IA lee los documentos originales (PDF e imágenes) con la plantilla del tipo como referencia y redacta la escritura completa, sin preguntas: lo dudoso queda «[VERIFICAR: …]» y lo ausente «FALTA: …», con alertas para el revisor (observaciones; las «FALTA» son críticas por la regla R12). Con **Indicaciones** se corrige y se genera una nueva versión. El asistente de preguntas queda como opción.
-4. La compraventa conserva su formulario propio (`src/lib/escritura/esquemas.ts` y `actos.ts`): sus datos calculados (comparecencias, valores en letras, afectación…) se entregan a la IA, que redacta sobre la carátula, la compraventa, el cierre y los oficios aprobados.
+Cada etapa corre en su propia invocación (Vercel corta a los 5 minutos) y se encadena por `/api/tareas`; si una se corta, la página de la escritura la reanuda.
 
 ## Arquitectura
 
 ```
 Navegador (equipo registrado) ──HTTPS──► Vercel (TLS, HSTS) ──► App Next.js (Node 24)
-                                                               │  sesiones, roles, reglas, plantillas
+                                                               │  sesiones, roles, biblioteca de plantillas
                                                                ├──► Supabase PostgreSQL (sin acceso por su API pública)
                                                                ├──► Supabase Storage (bucket privado, archivos cifrados AES-256-GCM)
-                                                               └──► API de Claude (solo análisis y revisión)
+                                                               └──► API de Claude (lectura de documentos y redacción)
 ```
 
-Flujo de cada escritura: crear expediente y elegir actos → cargar documentos → el asistente de IA analiza, advierte inconsistencias y pregunta lo que falta → reglas + revisión de la IA (críticas bloquean) → borrador sobre plantilla aprobada → revisor aprueba o devuelve → lista para firma del notario.
+Roles: el **digitador** crea y genera sus escrituras; el **revisor** además ve todas las escrituras y alimenta la biblioteca (agrega, corrige, retira o elimina plantillas); el **administrador** gestiona usuarios, equipos, configuración y auditoría.

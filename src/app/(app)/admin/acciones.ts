@@ -10,7 +10,6 @@ import { db } from '@/lib/db';
 import { requerirSesion, datosAuditoria } from '@/lib/sesion';
 import { auditar, verificarCadena } from '@/lib/auditoria';
 import { hashContrasena } from '@/lib/seguridad/contrasenas';
-import { ErrorPlantilla } from '@/lib/servicios/plantillas';
 import { POR_DEFECTO, invalidarConfig, type Configuraciones } from '@/lib/configuracion';
 
 export interface ResultadoAdmin { error?: string; ok?: string; secreto?: string }
@@ -24,7 +23,7 @@ async function hacer(ruta: string, fn: () => Promise<ResultadoAdmin | string>): 
     revalidatePath(ruta);
     return typeof r === 'string' ? { ok: r } : r;
   } catch (e) {
-    if (e instanceof ErrorPlantilla || e instanceof ErrorAdmin) return { error: e.message };
+    if (e instanceof ErrorAdmin) return { error: e.message };
     console.error('[admin]', e);
     return { error: 'No se pudo completar la acción.' };
   }
@@ -116,8 +115,8 @@ export async function accionUsuario(_: ResultadoAdmin, f: FormData): Promise<Res
         await cerrarSesiones('doble factor restablecido');
         break;
       case 'eliminar': {
-        const uso = await db.expediente.count({ where: { OR: [{ responsableId: id }, { revisorId: id }] } });
-        if (uso) throw new ErrorAdmin(`El usuario tiene ${uso} expediente(s) asociados: suspéndalo en lugar de eliminarlo (la trazabilidad debe conservarse).`);
+        const uso = await db.expediente.count({ where: { responsableId: id } });
+        if (uso) throw new ErrorAdmin(`El usuario tiene ${uso} escritura(s) asociadas: suspéndalo en lugar de eliminarlo (la trazabilidad debe conservarse).`);
         await cerrarSesiones('usuario eliminado');
         await db.usuario.delete({ where: { id } });
         break;
@@ -126,37 +125,6 @@ export async function accionUsuario(_: ResultadoAdmin, f: FormData): Promise<Res
     }
     await auditar({ ...datosAuditoria(s), accion: `USUARIO_${op.toUpperCase()}`, entidad: 'usuario', entidadId: id, detalle: { usuario: u.usuario, ...(op === 'rol' ? { rol: t(f, 'rol') } : {}) } });
     return resultado;
-  });
-}
-
-// ------------------------------------------------------------------ instrucciones de la IA
-// (las plantillas se gestionan en src/app/(app)/plantillas/acciones.ts, también abiertas al revisor)
-
-export async function accionInstruccion(_: ResultadoAdmin, f: FormData): Promise<ResultadoAdmin> {
-  const s = await admin();
-  return hacer('/admin/entrenamiento', async () => {
-    const op = t(f, 'operacion');
-    if (op === 'crear') {
-      const tipoId = t(f, 'tipoId') || null;
-      const proposito = ['REVISION', 'REDACCION'].includes(t(f, 'proposito')) ? t(f, 'proposito') : 'EXTRACCION';
-      const contenido = t(f, 'contenido');
-      if (contenido.length < 20) throw new ErrorAdmin('La instrucción es demasiado corta.');
-      const ultima = await db.instruccionIA.findFirst({ where: { tipoId, proposito }, orderBy: { version: 'desc' } });
-      const i = await db.instruccionIA.create({ data: { tipoId, proposito, version: (ultima?.version ?? 0) + 1, contenido, motivo: t(f, 'motivo') || null, creadoPorId: s.usuario.id } });
-      await auditar({ ...datosAuditoria(s), accion: 'INSTRUCCION_IA_CREADA', entidad: 'instruccion_ia', entidadId: i.id, detalle: { tipoId, proposito, version: i.version } });
-      return `Instrucción versión ${i.version} creada (pendiente de aprobación).`;
-    }
-    const id = t(f, 'id');
-    const i = await db.instruccionIA.findUniqueOrThrow({ where: { id } });
-    if (op === 'aprobar') {
-      await db.$transaction([
-        db.instruccionIA.updateMany({ where: { tipoId: i.tipoId, proposito: i.proposito, estado: 'APROBADA' }, data: { estado: 'RETIRADA' } }),
-        db.instruccionIA.update({ where: { id }, data: { estado: 'APROBADA' } }),
-      ]);
-    } else if (op === 'retirar') await db.instruccionIA.update({ where: { id }, data: { estado: 'RETIRADA' } });
-    else throw new ErrorAdmin('Operación no válida.');
-    await auditar({ ...datosAuditoria(s), accion: `INSTRUCCION_IA_${op.toUpperCase()}`, entidad: 'instruccion_ia', entidadId: id, detalle: { version: i.version } });
-    return 'Hecho.';
   });
 }
 

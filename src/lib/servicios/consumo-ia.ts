@@ -52,12 +52,10 @@ export async function consumoIA(filtro: { desde?: Date; hasta?: Date; usuarioId?
     db.usuario.findMany({ where: { id: { in: idsUsuarios } }, select: { id: true, nombreCompleto: true, rol: true } }),
     db.expediente.findMany({
       where: { id: { in: idsExpedientes } },
-      select: { id: true, numeroInterno: true, numeroEscritura: true, estado: true, actos: true, tipo: { select: { nombre: true } }, responsable: { select: { nombreCompleto: true } } },
+      select: { id: true, numeroInterno: true, titulo: true, plantillaNombre: true, responsable: { select: { nombreCompleto: true } } },
     }),
-    db.revisionEscritura.findMany({
-      where: { id: { in: porRevision.map((g) => g.revisionId!).filter(Boolean) } },
-      select: { id: true, nombreArchivo: true, estado: true, paginas: true, resultado: true, cargadaPor: { select: { nombreCompleto: true } } },
-    }),
+    // Las revisiones de escrituras ya hechas se retiraron: sus registros de consumo se conservan
+    Promise.resolve([] as { id: string; nombreArchivo: string; estado: string; paginas: number | null; resultado: unknown; cargadaPor: { nombreCompleto: string } }[]),
   ]);
   const revision = new Map(revisionesBD.map((r) => [r.id, r]));
   const nombre = new Map(usuarios.map((u) => [u.id, u]));
@@ -77,10 +75,10 @@ export async function consumoIA(filtro: { desde?: Date; hasta?: Date; usuarioId?
       return {
         expedienteId: g.expedienteId!,
         existe: !!e,
-        numeroInterno: e?.numeroInterno ?? 'Expediente eliminado',
-        numeroEscritura: e?.numeroEscritura ?? null,
-        estado: e?.estado ?? null,
-        actos: Array.isArray(e?.actos) ? (e.actos as string[]).map((a) => a.replace(/_/g, ' ')).join(' + ') : e?.tipo.nombre ?? '—',
+        numeroInterno: e?.numeroInterno ?? 'Escritura eliminada',
+        numeroEscritura: null as number | null,
+        estado: null as string | null,
+        actos: e ? [e.titulo, e.plantillaNombre].filter(Boolean).join(' · ') : '—',
         responsable: e?.responsable.nombreCompleto ?? '—',
         ultima: g._max.creadoEn,
         ...totales(g),
