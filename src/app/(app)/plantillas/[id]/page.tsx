@@ -9,7 +9,7 @@ import { estadoCorreccionPlantilla } from '@/lib/servicios/correccion-plantillas
 import { nombreVariante } from '@/lib/servicios/plantillas';
 import { accionCargarPlantilla, accionPlantilla, accionEliminarPlantilla, accionRevisarPlantilla, accionProponerCorreccionesPlantilla, accionAplicarCorreccionesPlantilla, accionVariante, accionAprobarVariantes, accionCambiarVariantes } from '../acciones';import { FormAdmin } from '../../admin/formularios';
 import { PanelCorreccionIA, RefrescoAutomatico } from '../../expedientes/formularios';
-import { Tabla, fecha } from '../../componentes';
+import { fecha } from '../../componentes';
 import { CATEGORIA, ESTADO_PLANTILLA, PanelRevision, VistaDocumento, hallazgosOrdenados } from '../componentes';
 
 const TEXTOS_CORRECCION = {
@@ -18,6 +18,7 @@ const TEXTOS_CORRECCION = {
   sinCorreccion: 'Se corrigen a mano en Word',
 };
 import { VisorDocx } from '../VisorDocx';
+import { TablaVariantes } from './variantes';
 
 // La revisión de la IA puede tardar uno o dos minutos
 export const maxDuration = 300;
@@ -83,22 +84,9 @@ export default async function VersionPlantilla({ params, searchParams }: { param
         <details className="tarjeta" open={variantes.length <= 12}>
           <summary><strong>Variantes de «{p.tipo.nombre}»</strong> <span className="suave">({variantes.length} · {variantes.filter((v) => v.vigente).length} aprobadas{pendientesVariantes ? ` · ${pendientesVariantes} pendientes` : ''})</span></summary>
           <p className="suave">La estructura de esta escritura cambia según el banco, la obra o la constructora. Al generar cada escritura, la IA lee los documentos y elige la variante aprobada que corresponde (el funcionario también puede indicarla). Cada variante tiene sus propias versiones.</p>
-          <Tabla>
-            <thead><tr><th>Variante</th><th>Estado</th><th>Cuándo usarla</th></tr></thead>
-            <tbody>{variantes.map((v) => (
-              <tr key={v.nombre}>
-                <td className="principal-celda">{v.principal.id === p.id ? <strong>{v.nombre}</strong> : <Link href={`/plantillas/${v.principal.id}`}>{v.nombre}</Link>}</td>
-                <td data-etiqueta="Estado">
-                  <div className="fila" style={{ gap: '0.25rem' }}>
-                    {v.vigente && <span className="etiqueta ok">Aprobada v{v.vigente.version}</span>}
-                    {v.pendiente && <span className="etiqueta advertencia">Pendiente v{v.pendiente.version}</span>}
-                    {!v.vigente && !v.pendiente && <span className="etiqueta">No aprobada</span>}
-                  </div>
-                </td>
-                <td data-etiqueta="Cuándo usarla" className="suave">{v.criterios ?? '—'}</td>
-              </tr>
-            ))}</tbody>
-          </Tabla>
+          <TablaVariantes actualId={p.id} variantes={variantes.map((v) => ({
+            nombre: v.nombre, principalId: v.principal.id, vigente: v.vigente?.version, pendiente: v.pendiente?.version, criterios: v.criterios,
+          }))} />
           {admin && pendientesVariantes > 0 && (
             <FormAdmin accion={accionAprobarVariantes} ocultos={{ tipoId: p.tipoId }}
               campos={[{ nombre: 'confirmacion', etiqueta: `Para aprobar las ${pendientesVariantes} variantes pendientes escriba: APROBADA POR EL NOTARIO`, ayuda: 'Apruebe en bloque solo si el notario revisó todas. Si una variante tiene una versión aprobada, esta queda retirada y la reemplaza la pendiente.' }]}
