@@ -7,7 +7,7 @@
  * los repetidos (mismo contenido) se cargan una sola vez. Se omiten los temporales de Word (~$…), los
  * .doc antiguos, los PDF y los demás archivos. Volver a ejecutarlo solo agrega lo nuevo.
  *
- * Uso: npx tsx --tsconfig tsconfig.scripts.json --env-file=.env scripts/cargar-biblioteca.ts "<carpeta>" [--confirmar]
+ * Uso: npx tsx --tsconfig tsconfig.scripts.json --env-file=.env scripts/cargar-biblioteca.ts "<carpeta>" [--confirmar] [--local]
  * Sin --confirmar solo muestra lo que se cargaría.
  */
 import fs from 'node:fs/promises';
@@ -44,6 +44,10 @@ async function principal() {
   const raiz = process.argv.slice(2).find((x) => !x.startsWith('--'));
   if (!raiz) throw new Error('Indique la carpeta: scripts/cargar-biblioteca.ts "C:\\ruta\\milan" [--confirmar]');
   const confirmar = process.argv.includes('--confirmar');
+  // Sin Supabase los archivos quedarían en la carpeta local y la aplicación publicada no los encontraría
+  if (confirmar && !(process.env.SUPABASE_URL && process.env.SUPABASE_CLAVE_SERVICIO) && !process.argv.includes('--local')) {
+    throw new Error('Defina SUPABASE_URL y SUPABASE_CLAVE_SERVICIO en el .env (las mismas de Vercel) o use --local para cargar solo en este equipo.');
+  }
   const { archivos, omitidos } = await listar(path.resolve(raiz));
   const existentes = new Set((await db.plantilla.findMany({ select: { hashSha256: true } })).map((p) => p.hashSha256));
   console.log(`Archivos .docx: ${archivos.length}. Ya en la biblioteca: ${existentes.size}. Omitidos (no .docx): ${omitidos.length}.`);
