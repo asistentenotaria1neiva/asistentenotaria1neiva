@@ -15,6 +15,7 @@ import { aprobarPlantilla, retirarPlantilla, eliminarVersionPlantilla, eliminarP
 import { db } from '@/lib/db';
 import { iniciarRevisionPlantilla, ErrorRevision } from '@/lib/servicios/revision-plantillas';
 import { cargarYRevisarPlantilla } from '@/lib/servicios/carga-plantillas';
+import { generarCriteriosVariantes } from '@/lib/servicios/criterios-variantes';
 import { proponerCorreccionesPlantilla, aplicarCorreccionesPlantilla } from '@/lib/servicios/correccion-plantillas';
 import type { ResultadoAdmin } from '../admin/acciones';
 
@@ -27,12 +28,17 @@ export async function accionCargarPlantilla(_: ResultadoAdmin, f: FormData): Pro
   if (!(archivo instanceof File) || !archivo.size) return { error: 'Seleccione un archivo .docx.' };
   let id: string;
   try {
-    // Si el archivo es un caso real, la IA cambia sus datos por variables antes de guardarlo
-    ({ id } = await cargarYRevisarPlantilla(s, {
+    const r = await cargarYRevisarPlantilla(s, {
       tipoId: t(f, 'tipoId'), nombreArchivo: archivo.name.slice(0, 120), archivo: Buffer.from(await archivo.arrayBuffer()), notas: t(f, 'notas') || undefined,
       // Tipos con variantes: a qué variante pertenece (o, con nuevaVariante, una variante nueva)
       variante: t(f, 'variante') || undefined, criterios: t(f, 'criterios') || undefined, nuevaVariante: t(f, 'nuevaVariante') === '1',
-    }));
+    });
+    id = r.id;
+    // Variante sin «cuándo usarla»: la IA escribe su nombre (si quedó el del archivo) y cuándo usarla.
+    // Si falla, la variante queda cargada igual y se puede escribir en su página.
+    if (r.variante && !r.conCriterios) {
+      await generarCriteriosVariantes(s, t(f, 'tipoId'), [r.id]).catch((e) => console.error('[plantillas] criterios de la variante', e));
+    }
   } catch (e) {
     if (e instanceof ErrorPlantilla) return { error: e.message };
     console.error('[plantillas]', e);

@@ -223,11 +223,11 @@ export default async function VersionPlantilla({ params, searchParams }: { param
               <p className="suave">Para un banco, una obra o una combinación de actos que aún no tiene modelo. Queda pendiente de aprobación; las variantes aprobadas siguen vigentes.</p>
               <FormAdmin accion={accionCargarPlantilla} ocultos={{ tipoId: p.tipoId, nuevaVariante: '1' }} campos={[
                 { nombre: 'archivo', etiqueta: 'Escritura modelo (.docx)', tipo: 'archivo' },
-                { nombre: 'variante', etiqueta: 'Nombre de la variante', ayuda: 'P. ej. «Davivienda · RDG Construcciones Villa Santa». Sin nombre se usa el del archivo.' },
-                { nombre: 'criterios', etiqueta: 'Cuándo usarla', tipo: 'area', ayuda: 'Banco o entidad, obra o constructora, actos que van juntos, subsidio. Si lo deja vacío, la IA se guía por la carátula del modelo.' },
+                { nombre: 'variante', etiqueta: 'Nombre de la variante (opcional)', ayuda: 'P. ej. «Davivienda · RDG Construcciones Villa Santa». Si lo deja vacío, la IA lo escribe al cargar.' },
+                { nombre: 'criterios', etiqueta: 'Cuándo usarla (opcional)', tipo: 'area', ayuda: 'Banco o entidad, obra o constructora, actos que van juntos, subsidio. Si lo deja vacío, la IA lo escribe al cargar, comparando el modelo con las demás variantes.' },
                 { nombre: 'notas', etiqueta: 'Notas', tipo: 'area' },
               ]} botones={[{ texto: 'Agregar variante' }]}
-              mensajePendiente="Cargando la variante…" />
+              mensajePendiente="Cargando la variante (si no escribió nombre o cuándo usarla, la IA los está escribiendo)…" />
             </section>
           )}
 

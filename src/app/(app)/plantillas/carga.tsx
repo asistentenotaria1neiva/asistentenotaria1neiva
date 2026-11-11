@@ -256,7 +256,7 @@ export function CargaRapida({ tipoId, nombre }: { tipoId: string; nombre: string
     if (!hechas.length) return setEstado({ fase: 'error', error: errores.join(' ') });
 
     const ids = sinCriterios(hechas.map((r) => ({ tipoId, r }))).get(tipoId) ?? [];
-    if (varias && ids.length) {
+    if (ids.length) {
       setEstado({ fase: 'cargando', texto: 'La IA está escribiendo cuándo usar cada variante…' });
       const g = await generarCriterios(tipoId, ids);
       if (g.ok) for (const v of g.variantes) { const h = hechas.find((x) => x.id === v.id); if (h) Object.assign(h, { variante: v.variante, criterios: v.criterios }); }

@@ -50,8 +50,8 @@ export async function generarCriteriosVariantes(s: SesionActiva, tipoId: string,
   for (const p of [...todas.filter((x) => ids.includes(x.id)), ...todas]) if (!porVariante.has(clave(nombreVariante(p)))) porVariante.set(clave(nombreVariante(p)), p);
   const lista = [...porVariante.values()].slice(0, MAXIMO_VARIANTES);
   const completar = lista.filter((p) => ids.includes(p.id) && !p.criterios?.trim());
+  // Con una sola variante también se escribe (no hay con qué compararla, pero sí se ve cuándo usarla)
   if (!completar.length) return [];
-  if (lista.length < 2) throw new ErrorPlantilla('Para escribir cuándo usar cada variante hacen falta al menos dos.');
 
   const codigo = (i: number) => `V${i + 1}`;
   const bloques = lista.map((p, i) => {
