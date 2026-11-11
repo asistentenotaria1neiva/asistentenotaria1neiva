@@ -53,7 +53,7 @@ import { estadoAsistente, esAdicional } from './asistente';
 import { instruccionesAprobadas, analizarDocumento } from './documentos';
 import { ejecutarRevision } from './revision';
 import { notificar } from './notificaciones';
-import { firmaEtapa, LIMITE_SIN_LATIDO_MS } from './tareas';
+import { pedirEtapa, LIMITE_SIN_LATIDO_MS } from './tareas';
 
 /** Observaciones con las alertas de la redacción */
 export const CODIGO_REDACCION = 'IA-REDACCION';
@@ -68,6 +68,8 @@ const MAX_REANUDACIONES = 3;
 /** Veces que una parte cortada por longitud se continúa (cada vez en su propia invocación) */
 const MAX_CONTINUACIONES = 4;
 const LIMITE_MODELO = 120_000; // caracteres de cada plantilla enviados a la IA
+// Con modelos más largos la escritura casi siempre supera la salida de una llamada y se continúa
+const MODELO_LARGO = 60_000;
 /** Límites de una solicitud con documentos (la API admite 100 páginas de PDF y 32 MB) */
 const MAX_PAGINAS = 100;
 const MAX_BYTES_EN_LINEA = 22 * 1024 * 1024;
@@ -461,16 +463,7 @@ async function analizarPendientes(expedienteId: string, p: ProgresoRedaccion, gu
 /** Pide a la aplicación que ejecute la siguiente etapa en una invocación nueva (con su propio límite de tiempo) */
 async function encadenar(id: string, p: ProgresoRedaccion) {
   if (!p.base) return ejecutarParteRedaccion(id, p.turno); // pruebas: sigue en la misma invocación
-  try {
-    const r = await fetch(`${p.base}/api/tareas`, {
-      method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, turno: p.turno, firma: firmaEtapa(id, p.turno) }),
-    });
-    if (!r.ok) throw new Error(`respondió ${r.status}`);
-  } catch (e) {
-    // La página la reanuda cuando deje de avanzar
-    console.error('[redaccion] no se pudo encadenar la siguiente parte; la página la reanudará', e);
-  }
+  await pedirEtapa(p.base, id, p.turno, 'redaccion'); // si falla, la página la reanuda cuando deje de avanzar
 }
 
 const ORDINALES = ['PRIMER', 'SEGUNDO', 'TERCER', 'CUARTO', 'QUINTO', 'SEXTO', 'SÉPTIMO', 'OCTAVO', 'NOVENO', 'DÉCIMO'];
@@ -623,6 +616,10 @@ async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantil
       : `<modelo_llenado tipo="${l.tipoId}" origen="datos del expediente">\nAsí queda este modelo llenado por el sistema con los datos que diligenció el funcionario. Es la base: copia su texto, completa lo marcado «FALTA» con los documentos y corrige solo lo que los documentos contradigan.\n${l.texto}\n</modelo_llenado>`,
   }));
   const docs = await documentosParaIA(expedienteId);
+  // Lo fijo (modelos, documentos y caso) se deja en caché si otra llamada lo va a repetir: las demás
+  // partes o, con un modelo largo, la continuación de una respuesta cortada por longitud (sin caché,
+  // la continuación volvía a pagar toda la entrada: en un modelo de 130.000 caracteres, ~70.000 tokens)
+  const cachear = p.partes > 1 || continua || modelos.reduce((n, m) => n + m.texto.length, 0) > MODELO_LARGO;
   let r: ResultadoLlamada<RespuestaRedaccion>;
   let completa = true;
   try {
@@ -637,7 +634,7 @@ async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantil
         ...llenados,
         ...docs.contenido,
         // Hasta aquí es igual en todas las partes: las siguientes lo leen de la caché
-        { type: 'text', text: `<caso>\n${JSON.stringify(caso)}\n</caso>`, ...(p.partes > 1 ? { cache_control: { type: 'ephemeral' as const } } : {}) },
+        { type: 'text', text: `<caso>\n${JSON.stringify(caso)}\n</caso>`, ...(cachear ? { cache_control: { type: 'ephemeral' as const } } : {}) },
         { type: 'text', text: instruccionDeParte(p.hechas, p.partes > 1 ? actos : [], p.parrafos, continua) },
       ],
       esquema: ESQUEMA_REDACCION as unknown as Record<string, unknown>,

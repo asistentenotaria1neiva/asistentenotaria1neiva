@@ -33,7 +33,7 @@ import {
 } from '../ia/instrucciones-revision';
 import { textoDePlantilla } from './revision-plantillas';
 import { notificar } from './notificaciones';
-import { firmaEtapa, LIMITE_SIN_LATIDO_MS } from './tareas';
+import { pedirEtapa, LIMITE_SIN_LATIDO_MS } from './tareas';
 
 export class ErrorRevisionEscritura extends Error {}
 
@@ -270,15 +270,7 @@ async function terminarConError(id: string, p: ProgresoRevision, mensaje: string
 
 async function encadenar(id: string, p: ProgresoRevision) {
   if (!p.base) return ejecutarEtapaRevision(id, p.turno); // pruebas: sigue en la misma invocación
-  try {
-    const r = await fetch(`${p.base}/api/tareas`, {
-      method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, turno: p.turno, firma: firmaEtapa(id, p.turno) }),
-    });
-    if (!r.ok) throw new Error(`respondió ${r.status}`);
-  } catch (e) {
-    console.error('[revision-escrituras] no se pudo encadenar la siguiente etapa; la página la reanudará', e);
-  }
+  await pedirEtapa(p.base, id, p.turno, 'revision-escrituras');
 }
 
 /** Etapa que dejó de avanzar (se cortó o falló el encadenamiento): la página la reanuda */

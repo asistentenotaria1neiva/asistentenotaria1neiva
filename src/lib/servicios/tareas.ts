@@ -161,18 +161,40 @@ async function terminarConError(id: string, expedienteId: string, clase: ClaseTa
   });
 }
 
+/** Esperas antes de cada intento de pedir la siguiente etapa */
+const ESPERAS_ENCADENAR = [0, 2_000, 8_000];
+
+/**
+ * Pide a la aplicación (`base`/api/tareas) que ejecute la etapa `turno` de la tarea `id` en una
+ * invocación nueva, con su propio límite de tiempo. Lo usan el análisis, la redacción y la revisión
+ * de escrituras. Un fallo puntual (p. ej. mientras se publica una versión nueva de la aplicación)
+ * dejaba la tarea quieta hasta que la página la reanudara (6 minutos): se reintenta unas veces.
+ * Repetir la petición no duplica el trabajo: la etapa toma su turno una sola vez.
+ * Devuelve false si no se pudo: la página la reanudará cuando deje de avanzar.
+ */
+export async function pedirEtapa(base: string, id: string, turno: number, origen: string): Promise<boolean> {
+  for (const [i, espera] of ESPERAS_ENCADENAR.entries()) {
+    if (espera) await new Promise((r) => setTimeout(r, espera));
+    try {
+      const r = await fetch(`${base}/api/tareas`, {
+        method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, turno, firma: firma(id, turno) }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (r.ok) return true;
+      console.error(`[${origen}] encadenar: el intento ${i + 1} respondió ${r.status}`);
+      if (r.status === 401) break; // la firma no cambia al reintentar
+    } catch (e) {
+      console.error(`[${origen}] encadenar: el intento ${i + 1} falló`, e);
+    }
+  }
+  console.error(`[${origen}] no se pudo encadenar la siguiente etapa; la página la reanudará`);
+  return false;
+}
+
 /** Pide a la aplicación que ejecute la siguiente etapa en una invocación nueva (con su propio límite de tiempo) */
 async function encadenar(id: string, p: ProgresoTarea) {
-  try {
-    const r = await fetch(`${p.base}/api/tareas`, {
-      method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, turno: p.turno, firma: firma(id, p.turno) }),
-    });
-    if (!r.ok) throw new Error(`respondió ${r.status}`);
-  } catch (e) {
-    console.error('[tareas] no se pudo encadenar la siguiente etapa; la página la reanudará', e);
-    await guardar(id, { ...p, sinEncadenar: true });
-  }
+  if (!(await pedirEtapa(p.base, id, p.turno, 'tareas'))) await guardar(id, { ...p, sinEncadenar: true });
 }
 
 /** Analiza documentos pendientes, varios a la vez, hasta CORTE_MS. true si quedan por analizar. */
