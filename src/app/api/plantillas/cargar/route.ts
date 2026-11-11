@@ -35,6 +35,8 @@ export async function POST(request: NextRequest) {
       // Tipos con variantes: nombre de la variante (vacío: el del archivo) y cuándo usarla
       variante: String(f.get('variante') ?? '').trim().slice(0, 120) || undefined,
       criterios: String(f.get('criterios') ?? '').trim().slice(0, 2000) || undefined,
+      // Varios archivos de un tipo con una sola plantilla: el tipo pasa a admitir variantes
+      activarVariantes: f.get('activarVariantes') === '1',
     });
     revalidatePath('/plantillas', 'layout');
     return NextResponse.json(r);

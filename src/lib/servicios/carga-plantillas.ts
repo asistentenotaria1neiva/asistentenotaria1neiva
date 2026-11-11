@@ -10,13 +10,15 @@
  * En un tipo con variantes, `variante` dice a cuál pertenece la versión: con `nuevaVariante` debe ser
  * un nombre que no exista; sin él, si el nombre existe es una versión nueva de esa variante (y hereda
  * sus criterios si no trae otros).
+ * Con `activarVariantes` (al cargar varios archivos de un tipo que aún tiene una sola plantilla), el
+ * tipo pasa a admitir variantes antes de guardar: cada archivo es una variante.
  * La usan la carga de una versión (acción) y la de varias a la vez (api/plantillas/cargar).
  */
 import 'server-only';
 import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
-import { cargarPlantilla, validarDocxPlantilla, nombreVariante, ErrorPlantilla } from './plantillas';
+import { cargarPlantilla, validarDocxPlantilla, nombreVariante, cambiarVariantes, ErrorPlantilla } from './plantillas';
 import { revisarPlantilla } from './revision-plantillas';
 
 export interface ResultadoCarga {
@@ -24,15 +26,21 @@ export interface ResultadoCarga {
   version: number;
   tipo: string;
   variante?: string;
+  /** Tipos con variantes: si la variante tiene criterios de uso (si no, la IA puede escribirlos) */
+  conCriterios?: boolean;
 }
 
 const clave = (x: string) => x.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-export async function cargarYRevisarPlantilla(s: SesionActiva, entrada: { tipoId: string; nombreArchivo: string; archivo: Buffer; notas?: string; variante?: string; criterios?: string; nuevaVariante?: boolean }): Promise<ResultadoCarga> {
-  const tipo = await db.tipoEscritura.findUnique({ where: { id: entrada.tipoId } });
+export async function cargarYRevisarPlantilla(s: SesionActiva, entrada: { tipoId: string; nombreArchivo: string; archivo: Buffer; notas?: string; variante?: string; criterios?: string; nuevaVariante?: boolean; activarVariantes?: boolean }): Promise<ResultadoCarga> {
+  let tipo = await db.tipoEscritura.findUnique({ where: { id: entrada.tipoId } });
   if (!tipo) throw new ErrorPlantilla('Tipo de escritura no válido.');
   const v = validarDocxPlantilla(entrada.archivo);
   if (!v.ok) throw new ErrorPlantilla(v.error);
+  if (entrada.activarVariantes && !tipo.variantes) {
+    tipo = await cambiarVariantes(tipo.id, true);
+    await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_VARIANTES', entidad: 'tipo_escritura', entidadId: tipo.id, detalle: { variantes: true, alCargarVarias: true } });
+  }
   let variante: string | undefined;
   let criterios = entrada.criterios?.trim() || undefined;
   if (tipo.variantes) {
@@ -46,5 +54,5 @@ export async function cargarYRevisarPlantilla(s: SesionActiva, entrada: { tipoId
   const p = await cargarPlantilla(tipo.id, entrada.nombreArchivo, entrada.archivo, s.usuario.id, entrada.notas, { variante, criterios });
   await auditar({ ...datosAuditoria(s), accion: 'PLANTILLA_CARGADA', entidad: 'plantilla', entidadId: p.id, detalle: { tipoId: tipo.id, version: p.version, sha256: p.hashSha256, ...(variante ? { variante } : {}) } });
   await revisarPlantilla(p.id, s, false).catch((e) => { console.error('[carga-plantillas] verificación', e); return null; });
-  return { id: p.id, version: p.version, tipo: tipo.nombre, ...(variante ? { variante } : {}) };
+  return { id: p.id, version: p.version, tipo: tipo.nombre, ...(variante ? { variante, conCriterios: !!criterios } : {}) };
 }
