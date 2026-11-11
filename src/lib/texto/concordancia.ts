@@ -103,3 +103,63 @@ export const filtrosConcordancia = {
   nombres: (g: Grupo) => unirNombres(lista(g).map((p) => p.nombre ?? '')),
   mayus: (s: unknown) => String(s ?? '').toUpperCase(),
 };
+
+/**
+ * Papeles de las partes que se revisan en singular y plural. La IA redacta sobre un modelo de OTRO caso
+ * y a veces le copia el número («LOS VENDEDORES» cuando vende una sola persona): esta revisión lo detecta
+ * en el texto redactado a partir de cuántos otorgantes tiene cada papel.
+ */
+const PAPELES = ['vendedor', 'comprador', 'deudor', 'acreedor', 'donante', 'donatario', 'poderdante', 'heredero', 'usufructuario', 'cedente', 'cesionario', 'hipotecante'];
+
+const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+export interface DiscordanciaNumero {
+  papel: string;
+  /** Cuántos otorgantes tienen ese papel */
+  cantidad: number;
+  /** El texto los nombra en plural (habiendo uno) o en singular (habiendo varios) */
+  escrito: 'PLURAL' | 'SINGULAR';
+  veces: number;
+  /** Fragmentos del texto donde aparece, con un poco de contexto */
+  ejemplos: string[];
+}
+
+/**
+ * Compara el número con que el texto nombra cada papel («el vendedor» / «los vendedores») con cuántos
+ * otorgantes lo tienen. Un apoderado o representante no cuenta: el número es el de su representado.
+ * Los colectivos («la parte vendedora») no se miran: son singulares aunque sean varias personas.
+ */
+/** Cuántos otorgantes tiene cada papel (sin contar apoderados ni representantes); solo los papeles presentes */
+export function contarPorPapel(otorgantes: { papel: string }[]): Record<string, number> {
+  const conteo: Record<string, number> = {};
+  for (const raiz of PAPELES) {
+    const cantidad = otorgantes.filter((o) => {
+      const p = sinTildes(String(o.papel ?? '')).toLowerCase().trim();
+      return !/^(apoderad|representante|mandatari)/.test(p) && new RegExp(`\\b${raiz}`).test(p);
+    }).length;
+    if (cantidad) conteo[raiz] = cantidad;
+  }
+  return conteo;
+}
+
+export function revisarNumeroPorPapel(texto: string, otorgantes: { papel: string }[]): DiscordanciaNumero[] {
+  const limpio = texto.replace(/\*\*/g, '').replace(/\s+/g, ' ');
+  const resultado: DiscordanciaNumero[] = [];
+  for (const [raiz, cantidad] of Object.entries(contarPorPapel(otorgantes))) {
+    const singular = [flexionar(raiz, 'M', false), flexionar(raiz, 'F', false)];
+    const plural = [flexionar(raiz, 'M', true), flexionar(raiz, 'F', true)];
+    const [escrito, patron] = cantidad === 1
+      ? ['PLURAL' as const, new RegExp(`\\b(?:los|las)\\s+(?:${plural.join('|')})\\b`, 'gi')]
+      : ['SINGULAR' as const, new RegExp(`\\b(?:el|la|del|al)\\s+(?:${[...new Set(singular)].join('|')})\\b`, 'gi')];
+    const hallados = [...limpio.matchAll(patron)];
+    if (!hallados.length) continue;
+    const ejemplos = hallados.slice(0, 3).map((m) => {
+      const i = m.index ?? 0;
+      const ini = Math.max(0, i - 40);
+      const fin = Math.min(limpio.length, i + m[0].length + 40);
+      return `${ini > 0 ? '…' : ''}${limpio.slice(ini, fin).trim()}${fin < limpio.length ? '…' : ''}`;
+    });
+    resultado.push({ papel: raiz, cantidad, escrito, veces: hallados.length, ejemplos });
+  }
+  return resultado;
+}

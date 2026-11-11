@@ -35,11 +35,15 @@ import { ACTOS } from '../escritura/actos';
 import { ESQUEMAS } from '../escritura/esquemas';
 import { CAMPO_INDICACIONES, valoresAutomaticos } from '../escritura/actos-plantilla';
 import { armarEscritura, convertirAPdf, type ParrafoRedactado } from '../escritura/generar';
+import { revisarNumeroPorPapel, contarPorPapel } from '../texto/concordancia';
 import { datosVacios, type DatosExpediente } from '../escritura/tipos';
 import { obtenerConfig } from '../configuracion';
 import { abrirPdf } from '../pdf';
 import { llamarEstructurado, configuracionModelo, prepararDocumento, ErrorIA, type ResultadoLlamada } from '../ia/cliente';
-import { SISTEMA_REDACCION, ESQUEMA_REDACCION } from '../ia/instrucciones';
+import { SISTEMA_REDACCION, ESQUEMA_REDACCION, SISTEMA_CONCORDANCIA, ESQUEMA_CONCORDANCIA, SISTEMA_COMPLETAR_FALTANTES, esquemaCompletarFaltantes } from '../ia/instrucciones';
+import { faltantesEn, normalizarMarcas } from '../escritura/generar';
+import { guiaEtiquetas } from '../ia/guia-etiquetas';
+import { plantillasLlenadas } from '../escritura/ejemplo-plantilla';
 import { TIPOS_DOCUMENTALES, compactarHechos, type TipoDocumental } from '../ia/documentos';
 import { plantillasAprobadas, nombreVariante, ErrorPlantilla } from './plantillas';
 import { textoDePlantilla } from './revision-plantillas';
@@ -143,6 +147,8 @@ interface ProgresoRedaccion {
   continuaciones?: number;
   /** Los documentos pendientes ya se analizaron (etapa previa a la primera parte) */
   preparados?: boolean;
+  /** Los «FALTA» del texto ya se buscaron en los documentos originales (etapa previa al Word) */
+  faltantesBuscados?: boolean;
   /** Documentos que la etapa previa ya intentó analizar: no se repiten aunque hayan fallado */
   intentados?: string[];
   noEnviados: string[];
@@ -245,7 +251,13 @@ async function plantillasDe(actos: string[], forzadas: Record<string, string> = 
       if (obligatoria || !(e instanceof ErrorPlantilla)) throw e;
     }
   };
-  const conBloques = actos.some((a) => ACTOS[a] && !ACTOS[a].porPlantilla);
+  // La carátula y el cierre comunes solo van con un acto cuya plantilla es un fragmento con etiquetas {{…}}:
+  // una escritura modelo completa (sin etiquetas) ya trae su propia carátula y su propio cierre
+  const esFragmento = async (a: string) => {
+    if (!ACTOS[a] || ACTOS[a].porPlantilla) return false;
+    try { return (await plantillasAprobadas(a)).some((p) => /\{\{[\s\S]*?\}\}/.test(textoDePlantilla(p.archivo))); } catch { return true; }
+  };
+  const conBloques = (await Promise.all(actos.map(esFragmento))).some(Boolean);
   if (conBloques) await agregar('caratula', false);
   for (const a of actos) await agregar(a, true);
   if (conBloques) {
@@ -358,9 +370,9 @@ const leidoComoDatos = (d: { estadoAnalisis: string; tipoDocumental: string }) =
  * enviaOriginales). Un PDF separado en partes va parte por parte. Lo que no cabe en la solicitud va
  * como el texto que ya se leyó de él, si se analizó; si no, se reporta como no enviado.
  */
-async function documentosParaIA(expedienteId: string) {
+async function documentosParaIA(expedienteId: string, forzarOriginales = false) {
   const docs = await db.documento.findMany({ where: { expedienteId, origenId: null }, orderBy: { creadoEn: 'asc' } });
-  const originales = enviaOriginales();
+  const originales = forzarOriginales || enviaOriginales();
   const contenido: Anthropic.Beta.BetaContentBlockParam[] = [];
   const liberar: (() => Promise<void>)[] = [];
   const leidos: { documento: string; datos: unknown }[] = [];
@@ -556,6 +568,15 @@ export async function ejecutarParteRedaccion(id: string, turno: number): Promise
       if (!(await guardar(id, p))) return;
       return encadenar(id, p); // cada parte (y el Word) en su propia invocación
     }
+    // Lo que quedó «FALTA» se busca en los documentos originales antes de armar el Word (su propia etapa)
+    if (!p.faltantesBuscados) {
+      p.faltantesBuscados = true;
+      if (!enviaOriginales() && faltantesDe(p.parrafos).length) {
+        await completarFaltantes(a.expedienteId, p);
+        if (!(await guardar(id, p))) return;
+        return encadenar(id, p);
+      }
+    }
     await armarBorrador(a.expedienteId, id, p, plantillas);
   } catch (err) {
     const mensaje = err instanceof ErrorIA || err instanceof ErrorNegocio ? err.message : 'Error inesperado al redactar la escritura.';
@@ -592,6 +613,15 @@ async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantil
     situaciones_aceptadas_por_el_funcionario: justificadas.map((o) => ({ situacion: o.mensaje, decision: o.justificacion })),
   };
 
+  const modelos = plantillas.map((m) => ({ ...m, texto: textoDePlantilla(m.archivo).slice(0, LIMITE_MODELO) }));
+  const guia = guiaEtiquetas(modelos.map((m) => m.texto));
+  // El modelo llenado por el sistema: la redacción exacta de cada etiqueta, para copiarla
+  const llenados = plantillasLlenadas(modelos, actos, notaria, calculados).map((l) => ({
+    type: 'text' as const,
+    text: l.origen === 'EJEMPLO'
+      ? `<modelo_llenado tipo="${l.tipoId}" origen="caso ficticio de ejemplo">\nAsí queda este modelo llenado por el sistema con un caso FICTICIO de ejemplo. Sus nombres, cédulas, matrículas, linderos, fechas y valores NO son de este negocio: nunca los copies. Copia su REDACCIÓN, palabra por palabra, con los datos de este negocio.\n${l.texto}\n</modelo_llenado>`
+      : `<modelo_llenado tipo="${l.tipoId}" origen="datos del expediente">\nAsí queda este modelo llenado por el sistema con los datos que diligenció el funcionario. Es la base: copia su texto, completa lo marcado «FALTA» con los documentos y corrige solo lo que los documentos contradigan.\n${l.texto}\n</modelo_llenado>`,
+  }));
   const docs = await documentosParaIA(expedienteId);
   let r: ResultadoLlamada<RespuestaRedaccion>;
   let completa = true;
@@ -601,7 +631,10 @@ async function redactarParte(expedienteId: string, p: ProgresoRedaccion, plantil
       registro: { usuarioId: s.usuario.id, expedienteId },
       sistema: SISTEMA_REDACCION + (instr.texto ? `\n\nInstrucciones adicionales aprobadas por la notaría:\n${instr.texto}` : ''),
       contenido: [
-        ...plantillas.map((m) => ({ type: 'text' as const, text: `<modelo tipo="${m.tipoId}" nombre="${m.nombre}" version="${m.version}"${m.variante ? ` variante="${m.variante.replace(/"/g, "'")}"` : ''}>\n${textoDePlantilla(m.archivo).slice(0, LIMITE_MODELO)}\n</modelo>` })),
+        ...modelos.map((m) => ({ type: 'text' as const, text: `<modelo tipo="${m.tipoId}" nombre="${m.nombre}" version="${m.version}"${m.variante ? ` variante="${m.variante.replace(/"/g, "'")}"` : ''}>\n${m.texto}\n</modelo>` })),
+        // Qué texto lleva cada etiqueta {{…}} del modelo (fórmulas fijas de la notaría)
+        ...(guia ? [{ type: 'text' as const, text: guia }] : []),
+        ...llenados,
         ...docs.contenido,
         // Hasta aquí es igual en todas las partes: las siguientes lo leen de la caché
         { type: 'text', text: `<caso>\n${JSON.stringify(caso)}\n</caso>`, ...(p.partes > 1 ? { cache_control: { type: 'ephemeral' as const } } : {}) },
@@ -660,12 +693,116 @@ export function sinCaratula(plantillas: { archivo: Buffer }[], parrafos: Parrafo
   return !INICIO_CARATULA.test(inicio);
 }
 
+/** Datos marcados «FALTA: …» en los párrafos redactados (con las marcas ya en su forma única) */
+export function faltantesDe(parrafos: ParrafoRedactado[]): string[] {
+  return [...new Set(parrafos.flatMap((x) => faltantesEn(normalizarMarcas(x.texto))))].slice(0, 40);
+}
+
+/**
+ * Pone el valor en lugar de cada «FALTA: dato» encontrado. `encontrados`: dato → texto que lo reemplaza.
+ * Devuelve los párrafos nuevos (los demás quedan iguales).
+ */
+export function aplicarEncontrados(parrafos: ParrafoRedactado[], encontrados: Map<string, string>): ParrafoRedactado[] {
+  return parrafos.map((x) => {
+    const texto = normalizarMarcas(x.texto).replace(/«FALTA:\s*([^»]*)»/g, (m, dato: string) => encontrados.get(dato.trim().replace(/\s+/g, ' ')) ?? m);
+    return texto === normalizarMarcas(x.texto) ? x : { ...x, texto };
+  });
+}
+
+/**
+ * La redacción trabaja con los datos ya leídos de los documentos, y la lectura no siempre trae todo
+ * (p. ej. el estado civil con que adquirió el vendedor, que está en la comparecencia de la escritura
+ * anterior). Antes de armar el Word, cada «FALTA» se busca en los documentos ORIGINALES y, si está, se
+ * escribe en su lugar: no se le pregunta al funcionario lo que ya está en lo que cargó. Lo que no
+ * aparezca sigue como «FALTA». Si la búsqueda falla, el texto queda como estaba.
+ */
+async function completarFaltantes(expedienteId: string, p: ProgresoRedaccion) {
+  const faltantes = faltantesDe(p.parrafos);
+  if (!faltantes.length) return;
+  const ids = faltantes.map((_, i) => `F${i + 1}`);
+  const consulta = faltantes.map((dato, i) => {
+    const parrafo = p.parrafos.map((x) => normalizarMarcas(x.texto)).find((t) => t.includes(`«FALTA: ${dato}»`)) ?? '';
+    return { id: ids[i], dato, parrafo: parrafo.replace(/\*\*/g, '').slice(0, 1200) };
+  });
+  const docs = await documentosParaIA(expedienteId, true);
+  try {
+    if (!docs.contenido.length) return;
+    const r = await llamarEstructurado<{ encontrados: { id: string; texto: string; documento: string; pagina: number; fragmento: string }[] }>({
+      proposito: 'REDACCION',
+      registro: { usuarioId: p.sesion.usuario.id, expedienteId },
+      sistema: SISTEMA_COMPLETAR_FALTANTES,
+      contenido: [...docs.contenido, { type: 'text', text: `<faltantes>\n${JSON.stringify({ otorgantes: p.otorgantes ?? [], faltantes: consulta })}\n</faltantes>` }],
+      esquema: esquemaCompletarFaltantes(ids),
+      esfuerzo: 'low',
+      maxTokens: 8000,
+    });
+    p.tokensEntrada += r.tokensEntrada;
+    p.tokensSalida += r.tokensSalida;
+    p.tokensCacheLectura += r.tokensCacheLectura;
+    p.duracionMs += r.duracionMs;
+    const encontrados = new Map<string, string>();
+    for (const e of r.datos.encontrados ?? []) {
+      const i = ids.indexOf(e.id);
+      const texto = typeof e?.texto === 'string' ? e.texto.trim() : '';
+      if (i < 0 || !texto || /FALTA|VERIFICAR/i.test(texto) || texto.length > 2000) continue;
+      encontrados.set(faltantes[i], texto);
+      p.datosExtraidos.push({ grupo: 'Completado de los documentos', dato: faltantes[i].slice(0, 200), valor: texto.slice(0, 2000), fuente: `${e.documento} pág. ${e.pagina}: ${e.fragmento}`.slice(0, 300) });
+    }
+    if (encontrados.size) p.parrafos = aplicarEncontrados(p.parrafos, encontrados);
+  } catch (err) {
+    console.error('[redaccion] faltantes', err);
+  } finally {
+    await docs.liberar();
+  }
+}
+
+const contarMarcas = (s: string) => (s.match(/FALTA:|VERIFICAR:|\*\*/g) ?? []).length;
+
+/**
+ * Corrige el singular y el plural de los papeles (vendedor, comprador, deudor…) que la IA copió del modelo:
+ * se buscan los párrafos que nombran un papel en un número distinto al de sus otorgantes y la IA los
+ * reescribe cambiando solo la concordancia. Sin alertas: si algo falla, queda el texto como estaba.
+ */
+export async function corregirConcordancia(expedienteId: string, p: ProgresoRedaccion): Promise<ParrafoRedactado[]> {
+  const otorgantes = p.otorgantes ?? [];
+  const afectados = p.parrafos.map((x, indice) => ({ indice, texto: x.texto })).filter((x) => revisarNumeroPorPapel(x.texto, otorgantes).length).slice(0, 60);
+  if (!afectados.length) return p.parrafos;
+  try {
+    const r = await llamarEstructurado<{ parrafos: { indice: number; texto: string }[] }>({
+      proposito: 'REDACCION',
+      registro: { usuarioId: p.sesion.usuario.id, expedienteId },
+      sistema: SISTEMA_CONCORDANCIA,
+      contenido: [{ type: 'text', text: JSON.stringify({ personas_por_papel: contarPorPapel(otorgantes), otorgantes: otorgantes.map((o) => ({ nombre: o.nombre, papel: o.papel })), parrafos: afectados }) }],
+      esquema: ESQUEMA_CONCORDANCIA as unknown as Record<string, unknown>,
+      esfuerzo: 'low',
+      maxTokens: 16000,
+    });
+    p.tokensEntrada += r.tokensEntrada;
+    p.tokensSalida += r.tokensSalida;
+    p.tokensCacheLectura += r.tokensCacheLectura;
+    p.duracionMs += r.duracionMs;
+    const corregidos = p.parrafos.slice();
+    for (const c of r.datos.parrafos ?? []) {
+      const original = afectados.find((a) => a.indice === c.indice);
+      const nuevo = typeof c?.texto === 'string' ? c.texto.trim() : '';
+      // Solo se acepta un cambio de concordancia: casi la misma longitud y las mismas marcas y negrillas
+      if (!original || !nuevo || Math.abs(nuevo.length - original.texto.length) > Math.max(40, original.texto.length * 0.15) || contarMarcas(nuevo) !== contarMarcas(original.texto)) continue;
+      corregidos[c.indice] = { ...corregidos[c.indice], texto: nuevo };
+    }
+    return corregidos;
+  } catch (err) {
+    console.error('[redaccion] concordancia', err);
+    return p.parrafos;
+  }
+}
+
 /** Última etapa: arma el Word con todas las partes, guarda la versión y registra las alertas */
 async function armarBorrador(expedienteId: string, analisisId: string, p: ProgresoRedaccion, plantillas: Plantilla[]) {
   const s = p.sesion;
   const e = await obtenerExpediente(s, expedienteId);
   const indicaciones = p.indicaciones;
-  const parrafos = p.parrafos;
+  // El modelo es de otro caso: si quedó «LOS VENDEDORES» cuando vende una sola persona (o al revés), se corrige
+  const parrafos = await corregirConcordancia(expedienteId, p);
   if (parrafos.filter((x) => x.texto.trim()).length < 5) throw new ErrorIA('La IA no devolvió el texto de la escritura. Intente de nuevo.', 'FORMATO');
 
   // El paquete de la primera plantilla (estilos, encabezado «Hoja No.», página) es la base del Word

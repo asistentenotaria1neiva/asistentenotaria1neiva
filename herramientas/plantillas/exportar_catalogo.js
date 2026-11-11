@@ -8,11 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const { TIPOS, ARCHIVOS } = require('../fase0/catalogo');
 
-const BLOQUES = [
-  { id: 'caratula', categoria: 'Bloques comunes', nombre: 'Carátula y encabezado', prioridad: 'Alta', esBloque: true },
-  { id: 'cierre', categoria: 'Bloques comunes', nombre: 'Comprobantes, advertencias, otorgamiento y firmas', prioridad: 'Alta', esBloque: true },
-  { id: 'oficios_registro', categoria: 'Bloques comunes', nombre: 'Oficios a registro civil (anexo de actos de familia)', prioridad: 'Media', esBloque: true },
-];
+// La carátula, el cierre y los oficios ya no son bloques aparte: cada escritura modelo los trae completos
+const BLOQUES = [];
 
 const catalogo = [
   ...BLOQUES,

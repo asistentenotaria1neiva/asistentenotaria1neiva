@@ -1,26 +1,5 @@
 [
   {
-    "id": "caratula",
-    "categoria": "Bloques comunes",
-    "nombre": "Carátula y encabezado",
-    "prioridad": "Alta",
-    "esBloque": true
-  },
-  {
-    "id": "cierre",
-    "categoria": "Bloques comunes",
-    "nombre": "Comprobantes, advertencias, otorgamiento y firmas",
-    "prioridad": "Alta",
-    "esBloque": true
-  },
-  {
-    "id": "oficios_registro",
-    "categoria": "Bloques comunes",
-    "nombre": "Oficios a registro civil (anexo de actos de familia)",
-    "prioridad": "Media",
-    "esBloque": true
-  },
-  {
     "id": "compraventa",
     "categoria": "A. Actos sobre inmuebles",
     "nombre": "Compraventa de inmueble",

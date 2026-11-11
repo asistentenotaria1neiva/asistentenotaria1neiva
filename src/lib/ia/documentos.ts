@@ -217,6 +217,7 @@ const ESQUEMAS: Record<TipoDocumental, Esquema> = {
     notaria: dato('string', ''),
     actos: dato('string', 'Actos que contiene'),
     adquirentes: dato('string', 'Nombres e identificación de quienes adquirieron'),
+    adquirentes_estado_civil: dato('string', 'Estado civil que declaró cada adquirente en la comparecencia (con sociedad conyugal vigente, unión marital de hecho…), con su nombre: «JUAN PÉREZ: soltero sin unión marital de hecho»'),
     tradentes: dato('string', 'Nombres de quienes transfirieron'),
     // Una escritura puede describir varios inmuebles (p. ej. un loteo o casa y parqueadero): cada uno con sus datos
     inmuebles: lista(objeto({
