@@ -49,6 +49,13 @@ const CORTE_MS = 100_000;
 const MAXIMO_SALIDA = 20_000;
 /** Faltantes que no están en los documentos: se asignan en la notaría al otorgar */
 const NO_SE_BUSCA = /fecha de(l)? otorgamiento|n[uú]mero de (la )?escritura|derechos notariales|\biva\b|recaudo|retenci[oó]n|aporte|superintendencia|fondo (cuenta|especial)/i;
+/**
+ * Avisos de la IA sobre los datos que el digitador llena a mano (van «EN BLANCO»): precio, forma de
+ * pago, derechos, IVA, retención, hojas de papel notarial. No se muestran.
+ */
+const DATO_A_MANO = /\bprecio\b|forma de pago|recibido en su totalidad|derechos notariales|\biva\b|retenci[oó]n|recaudo|papel notarial|\bhojas\b/i;
+const AVISO_DE_FALTA = /\bfalta|\bfaltan|no (?:se )?(?:indica|especifica|trae|aparece|est[aá])|sin (?:dato|informaci)|confirme|en blanco/i;
+const avisoDeDatoAMano = (a: Advertencia) => a.origen === 'IA' && a.nivel !== 'CRITICA' && DATO_A_MANO.test(a.detalle) && AVISO_DE_FALTA.test(a.detalle);
 
 interface Progreso {
   etapa: Etapa;
@@ -653,7 +660,7 @@ async function terminar(id: string, expedienteId: string, version: number, p: Pr
     ...valoresEnLetras(texto),
     ...medidasEnLetras(textosPorParrafo(c.plantilla), r.textos),
   ];
-  const advertencias = [...p.advertencias, ...automaticas].sort((a, b) => ORDEN_NIVEL[a.nivel] - ORDEN_NIVEL[b.nivel]);
+  const advertencias = [...p.advertencias.filter((a) => !avisoDeDatoAMano(a)), ...automaticas].sort((a, b) => ORDEN_NIVEL[a.nivel] - ORDEN_NIVEL[b.nivel]);
   const resultado: ResultadoGeneracion = {
     resumen: p.resumen, otorgantes: p.otorgantes, advertencias, faltantes, verificar, completados: p.completados,
     cambios: { aplicados: r.aplicados, eliminados: r.eliminados, insertados: r.insertados, noAplicados: r.noAplicados.length },

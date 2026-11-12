@@ -175,7 +175,10 @@ export function conFormato(rPr: string, agregar: Record<string, string>): string
   return hijos.length ? `<w:rPr>${hijos.map((h) => h.xml).join('')}</w:rPr>` : '';
 }
 
-const MARCAS = /(«FALTA:[^»]*»|\[VERIFICAR:[^\]]*\])/;
+/** Dato que el digitador llena a mano (precio, forma de pago, derechos…): en el Word va una raya resaltada, sin texto */
+export const EN_BLANCO = '«EN BLANCO»';
+const RAYA_EN_BLANCO = '_'.repeat(20);
+const MARCAS = /(«FALTA:[^»]*»|\[VERIFICAR:[^\]]*\]|«EN BLANCO»)/;
 const NEGRILLA = { b: '<w:b/>', bCs: '<w:bCs/>' };
 const RESALTADO = { highlight: '<w:highlight w:val="yellow"/>' };
 
@@ -190,6 +193,8 @@ export function normalizarMarcas(s: string): string {
     return nombre.toUpperCase() === 'FALTA' ? `«FALTA: ${d}»` : `[VERIFICAR: ${d}]`;
   };
   return s
+    // «EN BLANCO», [EN BLANCO], «BLANCO», «EN BLANCO: precio» → «EN BLANCO»
+    .replace(/(?:«|\[|<<|\()\s*(?:EN\s+)?BLANCO\s*(?::[^»\]>)]*)?(?:»|\]|>>|\))/g, EN_BLANCO)
     .replace(/«\s*(FALTA|VERIFICAR)\s*:\s*([^»]*)»/gi, (m, n, d) => forma(m, n, d))
     .replace(/\[\s*(FALTA|VERIFICAR)\s*:\s*([^\]]*)\]/gi, (m, n, d) => forma(m, n, d))
     .replace(/<<\s*(FALTA|VERIFICAR)\s*:\s*([\s\S]*?)>>/gi, (m, n, d) => forma(m, n, d))
@@ -207,7 +212,7 @@ export function runsDe(rPr: string, texto: string): string {
     if (!x) return '';
     const marca = MARCAS.test(x);
     const props = { ...(i % 2 === 1 || x.startsWith('«FALTA:') ? NEGRILLA : {}), ...(marca ? RESALTADO : {}) };
-    const c = contenido(x);
+    const c = contenido(x === EN_BLANCO ? RAYA_EN_BLANCO : x);
     return c ? `<w:r>${Object.keys(props).length ? conFormato(rPr, props) : rPr}${c}</w:r>` : '';
   })).join('');
 }
@@ -383,6 +388,39 @@ function editarParrafo(p: ParrafoDocx, c: CambioParrafo, noAplicados: NoAplicado
   return { xml, aplicados, eliminado: false };
 }
 
+/** Encabezado de las firmas: «LOS OTORGANTES,», «EL COMPARECIENTE,», «LA VENDEDORA,» */
+const ENCABEZADO_FIRMAS = /^(?:LOS|LAS|EL|LA)\s+(?:OTORGANTES?|COMPARECIENTES?|VENDEDOR(?:A|ES|AS)?|COMPRADOR(?:A|ES|AS)?|DEUDOR(?:A|ES|AS)?|PODERDANTES?|APODERAD[OA]S?)\s*,?\s*$/i;
+/** Rótulos que van debajo de cada firma y se llenan a mano al firmar */
+const ROTULO_FIRMA = /^(?:C\.?\s*C\.?\s*No|C[EÉ]DULA|Estado Civil|Direcci[oó]n|Tel[eé]fono|Actividad Econ[oó]mica|E-?mail|Correo|Persona expuesta|Nacional\s+_|Es c[oó]nyuge|Fecha de (?:des)?vinculaci[oó]n|Huella)/i;
+
+/** Número del primer párrafo de la zona de firmas (null si la plantilla no la tiene) */
+export function inicioZonaFirmas(parrafos: { n: number; texto: string }[]): number | null {
+  const cedula = (t: string) => /^C\.?\s*C\.?\s*No\b/i.test(t.trim());
+  // El encabezado («LOS OTORGANTES,») con un «C.C. No.» poco después (puede haber anexos detrás de las firmas)
+  const i = parrafos.findIndex((p, k) => ENCABEZADO_FIRMAS.test(p.texto.trim()) && parrafos.slice(k + 1, k + 12).some((x) => cedula(x.texto)));
+  if (i >= 0) return parrafos[i].n;
+  // Sin encabezado: desde el nombre del firmante, justo antes del primer «C.C. No.» de la segunda mitad
+  const j = parrafos.findIndex((p, k) => k >= parrafos.length / 2 && cedula(p.texto));
+  if (j < 0) return null;
+  let k = j - 1;
+  while (k > 0 && !parrafos[k].texto.trim()) k--;
+  return parrafos[Math.max(0, k)].n;
+}
+
+/**
+ * En la zona de firmas no hay rayas para llenar: el espacio queda en blanco, como en las plantillas.
+ * «EN BLANCO» se quita, y en los rótulos («C.C. No.», «Estado Civil:»…) también las marcas «FALTA»
+ * y las rayas que la IA haya escrito.
+ */
+export function limpiarZonaFirmas(texto: string, esRotulo = false): string {
+  return normalizarMarcas(texto).split('\n').map((linea) => {
+    const quitar = esRotulo || ROTULO_FIRMA.test(linea.trim())
+      ? /\s*(?:«EN BLANCO»|«FALTA:[^»]*»|_{6,})/g
+      : /\s*«EN BLANCO»/g;
+    return quitar.test(linea) ? linea.replace(quitar, '').replace(/[ \t]+$/, '') : linea;
+  }).join('\n');
+}
+
 /**
  * Aplica los cambios de la IA a la plantilla. Un número de párrafo que no existe o no es editable se
  * reporta como no aplicado; lo demás de la plantilla queda igual.
@@ -421,6 +459,15 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
       reubicados++;
       return false;
     });
+  }
+  // En la zona de firmas el espacio para llenar a mano queda en blanco, sin rayas
+  const firmas = inicioZonaFirmas(parrafos);
+  if (firmas !== null) for (const c of unidos.values()) {
+    if (c.p < firmas) continue;
+    const rotulo = ROTULO_FIRMA.test(porNumero.get(c.p)?.texto.trim() ?? '');
+    c.texto = limpiarZonaFirmas(c.texto ?? '', rotulo);
+    c.reemplazos = (c.reemplazos ?? []).map((r) => ({ ...r, nuevo: limpiarZonaFirmas(r.nuevo ?? '', rotulo) }));
+    c.insertar_despues = (c.insertar_despues ?? []).map((t) => limpiarZonaFirmas(t));
   }
   const textos = new Map<number, string>();
   // De atrás hacia adelante, para que las posiciones en el XML sigan siendo válidas
