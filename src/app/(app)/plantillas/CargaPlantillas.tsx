@@ -3,8 +3,9 @@
  * El revisor alimenta la biblioteca: uno o varios .docx con su categoría (y banco o subcategoría).
  * La fecha de cada plantilla es la de modificación del archivo, salvo que se indique otra.
  */
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { Icono } from '../../Icono';
 
 interface Estado { nombre: string; estado: 'pendiente' | 'ok' | 'error'; mensaje?: string }
 
@@ -13,7 +14,10 @@ const fechaArchivo = (a: File) => new Date(a.lastModified).toLocaleDateString('e
 export function CargaPlantillas({ categorias, subcategorias }: { categorias: string[]; subcategorias: string[] }) {
   const router = useRouter();
   const [lista, setLista] = useState<Estado[]>([]);
+  const [elegidos, setElegidos] = useState(0);
+  const [sobre, setSobre] = useState(false);
   const [pendiente, iniciar] = useTransition();
+  const campo = useRef<HTMLInputElement>(null);
   return (
     <form onSubmit={(ev) => {
       ev.preventDefault();
@@ -45,41 +49,56 @@ export function CargaPlantillas({ categorias, subcategorias }: { categorias: str
           }
         }));
         formulario.reset();
+        setElegidos(0);
         router.refresh();
       });
     }}>
-      <div className="filtros">
-        <div className="ancho">
-          <label htmlFor="archivos">Plantillas (.docx)</label>
-          <input id="archivos" name="archivos" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple required />
-          <div className="ayuda">Escrituras modelo completas en Word. Si son varias, todas quedan en la misma categoría y cada una con el nombre de su archivo.</div>
-        </div>
+      <label
+        className={`zona-carga${sobre ? ' sobre' : ''}${pendiente ? ' ocupada' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); if (!sobre) setSobre(true); }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setSobre(false); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setSobre(false);
+          if (!campo.current || !e.dataTransfer.files.length) return;
+          campo.current.files = e.dataTransfer.files;
+          setElegidos(e.dataTransfer.files.length);
+        }}
+      >
+        <span className="icono-zona"><Icono nombre="plantilla" tamano={24} /></span>
+        <strong>{elegidos ? `${elegidos} archivo(s) elegido(s)` : <>Arrastre aquí las plantillas o <span className="elegir">elíjalas</span></>}</strong>
+        <span className="tenue">Escrituras modelo completas en Word (.docx). Si son varias, todas quedan en la misma categoría y cada una con el nombre de su archivo.</span>
+        <input ref={campo} id="archivos" name="archivos" type="file" aria-label="Elegir plantillas (.docx)" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple required
+          onChange={(e) => setElegidos(e.currentTarget.files?.length ?? 0)} />
+      </label>
+      <div className="filtros mt">
         <div>
           <label htmlFor="categoria-nueva">Categoría</label>
           <input id="categoria-nueva" name="categoria" type="text" list="categorias-biblioteca" required maxLength={80} placeholder="COMPRAVENTA, HIPOTECA…" />
           <datalist id="categorias-biblioteca">{categorias.map((c) => <option key={c} value={c} />)}</datalist>
         </div>
         <div>
-          <label htmlFor="subcategoria-nueva">Banco / subcategoría</label>
-          <input id="subcategoria-nueva" name="subcategoria" type="text" list="subcategorias-biblioteca" maxLength={80} placeholder="Opcional" />
+          <label htmlFor="subcategoria-nueva">Banco / subcategoría <span className="opcional">(opcional)</span></label>
+          <input id="subcategoria-nueva" name="subcategoria" type="text" list="subcategorias-biblioteca" maxLength={80} />
           <datalist id="subcategorias-biblioteca">{subcategorias.map((c) => <option key={c} value={c} />)}</datalist>
         </div>
         <div>
-          <label htmlFor="fecha-plantilla">Fecha</label>
+          <label htmlFor="fecha-plantilla">Fecha <span className="opcional">(vacía: la del archivo)</span></label>
           <input id="fecha-plantilla" name="fecha" type="date" />
-          <div className="ayuda">Vacía: la del archivo.</div>
         </div>
         <div>
-          <label htmlFor="nombre-plantilla">Nombre (si es una sola)</label>
+          <label htmlFor="nombre-plantilla">Nombre <span className="opcional">(si es una sola)</span></label>
           <input id="nombre-plantilla" name="nombre" type="text" maxLength={200} placeholder="El del archivo" />
         </div>
-        <div className="acciones-filtro"><button type="submit" disabled={pendiente} aria-busy={pendiente}>{pendiente && <span className="girador pequeno" aria-hidden="true" />}{pendiente ? 'Agregando…' : 'Agregar a la biblioteca'}</button></div>
+        <div className="acciones-filtro"><button type="submit" disabled={pendiente} aria-busy={pendiente}>{pendiente ? <span className="girador pequeno" aria-hidden="true" /> : <Icono nombre="subir" tamano={18} />}{pendiente ? 'Agregando…' : 'Agregar a la biblioteca'}</button></div>
       </div>
       {lista.length > 0 && (
-        <ul className="hallazgos" aria-live="polite">
+        <ul className="cola-carga" aria-live="polite">
           {lista.map((x, i) => (
-            <li key={i}>
-              <span className={`etiqueta ${x.estado === 'ok' ? 'ok' : x.estado === 'error' ? 'critica' : 'informativa'}`}>{x.estado === 'ok' ? 'Agregada' : x.estado === 'error' ? 'Error' : 'Cargando'}</span> {x.nombre}{x.mensaje ? <span className="suave"> — {x.mensaje}</span> : null}
+            <li key={i} className={x.estado === 'error' ? 'error' : undefined}>
+              <span className="nombre">{x.nombre}</span>
+              <span className={`etiqueta ${x.estado === 'ok' ? 'ok' : x.estado === 'error' ? 'critica' : 'informativa gira'}`}>{x.estado === 'ok' ? 'Agregada' : x.estado === 'error' ? 'Error' : 'Cargando'}</span>
+              {x.mensaje && <span className="mensaje">{x.mensaje}</span>}
             </li>
           ))}
         </ul>

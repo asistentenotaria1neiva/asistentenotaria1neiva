@@ -1,7 +1,12 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { fecha } from '../componentes';
+import { Vacio, fecha } from '../componentes';
+import { Icono } from '../../Icono';
+
+const SEVERIDAD: Record<string, string> = { ALTA: 'critica', MEDIA: 'advertencia' };
+
+export const metadata = { title: 'Panel del administrador' };
 
 export default async function PanelAdmin() {
   await requerirSesion({ roles: ['ADMINISTRADOR'] });
@@ -20,25 +25,39 @@ export default async function PanelAdmin() {
   ]);
   return (
     <>
-      <h1>Panel del administrador</h1>
+      <div className="encabezado">
+        <h1>Panel del administrador</h1>
+        <p className="suave">Estado de la aplicación, los equipos y la seguridad.</p>
+      </div>
       <div className="rejilla cuatro">
-        <Link className="tarjeta" href="/admin/usuarios"><div className="suave">Usuarios activos</div><div className="cifra">{usuarios}</div><div className="suave">{sesiones} sesiones activas</div></Link>
-        <Link className="tarjeta" href="/admin/dispositivos"><div className="suave">Equipos aprobados</div><div className="cifra">{equiposOk}</div><div className="suave">{equiposPend > 0 ? <span className="etiqueta advertencia">{equiposPend} pendientes</span> : 'ninguno pendiente'}</div></Link>
-        <Link className="tarjeta" href="/admin/alertas"><div className="suave">Alertas sin atender</div><div className="cifra" style={alertas ? { color: 'var(--peligro)' } : undefined}>{alertas}</div><div className="suave">ver alertas de seguridad</div></Link>
-        <Link className="tarjeta" href="/plantillas"><div className="suave">Plantillas en la biblioteca</div><div className="cifra">{plantillas.toLocaleString('es-CO')}</div><div className="suave">{plantillasRevisor} agregadas por revisores</div></Link>
+        <Link className="tarjeta compacta indicador" href="/admin/usuarios"><span className="rotulo"><Icono nombre="usuarios" tamano={16} />Usuarios activos</span><span className="cifra">{usuarios}</span><span className="tenue">{sesiones} en sesión ahora</span></Link>
+        <Link className="tarjeta compacta indicador" href="/admin/dispositivos"><span className="rotulo"><Icono nombre="equipo" tamano={16} />Equipos aprobados</span><span className="cifra">{equiposOk}</span><span className="tenue">{equiposPend > 0 ? <span className="etiqueta advertencia">{equiposPend} pendiente(s)</span> : 'ninguno pendiente'}</span></Link>
+        <Link className={`tarjeta compacta indicador${alertas ? ' con-alerta' : ''}`} href="/admin/alertas"><span className="rotulo"><Icono nombre="alerta" tamano={16} />Alertas sin atender</span><span className={`cifra${alertas ? ' peligro' : ''}`}>{alertas}</span><span className="tenue">alertas de seguridad</span></Link>
+        <Link className="tarjeta compacta indicador" href="/plantillas"><span className="rotulo"><Icono nombre="biblioteca" tamano={16} />Plantillas</span><span className="cifra">{plantillas.toLocaleString('es-CO')}</span><span className="tenue">{plantillasRevisor} agregadas por revisores</span></Link>
       </div>
       <div className="rejilla dos">
-        <Link className="tarjeta" href="/expedientes"><div className="suave">Escrituras</div><div className="cifra">{escrituras}</div><div className="suave">{generadas30} versiones generadas en los últimos 30 días</div></Link>
         <section className="tarjeta">
-          <h2>Alertas recientes</h2>
-          {!ultimasAlertas.length && <p className="suave">Sin alertas pendientes.</p>}
-          <ul className="historial">{ultimasAlertas.map((a) => (
-            <li key={a.id}>
-              <span>{a.mensaje}</span>
-              <span className={`etiqueta ${a.severidad === 'ALTA' ? 'critica' : a.severidad === 'MEDIA' ? 'advertencia' : 'informativa'}`}>{a.severidad.toLowerCase()}</span>
-              <time className="suave">{fecha(a.creadaEn)}</time>
-            </li>
-          ))}</ul>
+          <div className="tarjeta-cabecera"><h2>Requiere su atención</h2></div>
+          {!equiposPend && !alertas ? <Vacio icono="check" titulo="Nada pendiente"><p>No hay equipos por aprobar ni alertas sin atender.</p></Vacio> : (
+            <div className="atencion">
+              {alertas > 0 && <Link className="critica" href="/admin/alertas"><Icono nombre="alerta" />{alertas} alerta(s) de seguridad sin atender<Icono nombre="adelante" tamano={16} /></Link>}
+              {equiposPend > 0 && <Link className="alerta" href="/admin/dispositivos"><Icono nombre="equipo" />{equiposPend} equipo(s) esperan aprobación<Icono nombre="adelante" tamano={16} /></Link>}
+            </div>
+          )}
+          <hr />
+          <Link className="indicador" href="/expedientes"><span className="rotulo"><Icono nombre="escrituras" tamano={16} />Escrituras</span><span className="cifra">{escrituras}</span><span className="tenue">{generadas30} versiones generadas en los últimos 30 días</span></Link>
+        </section>
+        <section className="tarjeta">
+          <div className="tarjeta-cabecera"><h2>Alertas recientes</h2><Link className="tenue" href="/admin/alertas">Ver todas</Link></div>
+          {!ultimasAlertas.length ? <Vacio icono="auditoria" titulo="Sin alertas pendientes" /> : (
+            <ul className="historial">{ultimasAlertas.map((a) => (
+              <li key={a.id}>
+                <span>{a.mensaje}</span>
+                <span className={`etiqueta ${SEVERIDAD[a.severidad] ?? 'informativa'}`}>{a.severidad.toLowerCase()}</span>
+                <time>{fecha(a.creadaEn)}</time>
+              </li>
+            ))}</ul>
+          )}
         </section>
       </div>
     </>

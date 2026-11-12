@@ -5,6 +5,9 @@ import { expedienteDePagina, puedeEditar, ErrorNegocio } from '@/lib/servicios/e
 import { Buscador } from '../../../plantillas/Buscador';
 import { FormularioAccion } from '../../formularios';
 import { accionCambiarPlantilla } from '../../acciones';
+import { Icono } from '../../../../Icono';
+
+export const metadata = { title: 'Cambiar la plantilla' };
 
 export default async function CambiarPlantilla({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const s = await requerirSesion();
@@ -16,14 +19,21 @@ export default async function CambiarPlantilla({ params, searchParams }: { param
   return (
     <>
       <div className="encabezado">
-        <p><Link href={`/expedientes/${id}`}>← {e.numeroInterno}</Link></p>
+        <Link className="migas" href={`/expedientes/${id}`}><Icono nombre="atras" tamano={16} /><span className="radicado">{e.numeroInterno}</span></Link>
         <h1>Cambiar la plantilla</h1>
-        <p className="suave">Plantilla actual: <strong>{e.plantillaNombre}</strong>. Los documentos y las observaciones se conservan; las versiones ya generadas también.</p>
+        <p className="suave">Plantilla actual: <strong>{e.plantillaNombre}</strong>. Los documentos, las observaciones y las versiones ya generadas se conservan.</p>
       </div>
-      <details className="tarjeta">
-        <summary><strong>Usar una plantilla personal</strong> (.docx)</summary>
-        <div style={{ marginTop: 12 }}>
-          <FormularioAccion accion={accion} texto="Usar mi plantilla" textoPendiente="Guardando…">
+      <Buscador s={s} parametros={await searchParams} base={`/expedientes/${id}/plantilla`} acciones={(p) => (
+        <div className="acciones-plantilla">
+          <FormularioAccion accion={accion} texto="Usar esta plantilla" textoPendiente="Guardando…" icono="check">
+            <input type="hidden" name="plantillaId" value={p.id} />
+          </FormularioAccion>
+        </div>
+      )} />
+      <details className="tarjeta plantilla-propia mt">
+        <summary>Usar una plantilla personal (.docx)</summary>
+        <div className="contenido">
+          <FormularioAccion accion={accion} texto="Usar mi plantilla" textoPendiente="Guardando…" clase="secundario" icono="subir">
             <div className="campo">
               <label htmlFor="archivo">Plantilla personal (.docx)</label>
               <input id="archivo" name="archivo" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required />
@@ -31,13 +41,6 @@ export default async function CambiarPlantilla({ params, searchParams }: { param
           </FormularioAccion>
         </div>
       </details>
-      <Buscador s={s} parametros={await searchParams} base={`/expedientes/${id}/plantilla`} acciones={(p) => (
-        <div className="acciones-plantilla">
-          <FormularioAccion accion={accion} texto="Usar esta plantilla" textoPendiente="Guardando…" clase="exito">
-            <input type="hidden" name="plantillaId" value={p.id} />
-          </FormularioAccion>
-        </div>
-      )} />
     </>
   );
 }

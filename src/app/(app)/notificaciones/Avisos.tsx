@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { Icono } from '../../Icono';
+import { Pendiente } from '../navegacion';
 
 const CADA_MS = 30_000;
 
@@ -50,15 +52,17 @@ export function Avisos({ inicial }: { inicial: number }) {
   }, [router]);
 
   return (
-    <div className="avisos">
+    <>
       <Link href="/notificaciones" aria-current={ruta === '/notificaciones' ? 'page' : undefined}>
-        Notificaciones {cuenta > 0 && <span className="conteo-avisos" aria-label={`${cuenta} sin leer`}>{cuenta}</span>}
+        <Icono nombre="campana" tamano={18} /><span>Notificaciones</span>
+        {cuenta > 0 && <span className="conteo-avisos" aria-label={`${cuenta} sin leer`}>{cuenta}</span>}
+        <Pendiente />
       </Link>
       {permiso === 'default' && (
-        <button type="button" className="secundario pequeno" onClick={async () => setPermiso(await Notification.requestPermission())}>
+        <button type="button" className="activar-avisos" onClick={async () => setPermiso(await Notification.requestPermission())}>
           Avisarme en este equipo
         </button>
       )}
-    </div>
+    </>
   );
 }

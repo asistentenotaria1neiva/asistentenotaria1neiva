@@ -1,13 +1,13 @@
 import Link from 'next/link';
+import { MarcoAcceso } from './(acceso)/Marco';
+import { Icono } from './Icono';
+
+export const metadata = { title: 'Página no encontrada' };
 
 export default function NoEncontrado() {
   return (
-    <main className="acceso">
-      <div className="tarjeta">
-        <h1>Página no encontrada</h1>
-        <p className="suave">La dirección no existe o no tiene acceso a ese registro.</p>
-        <Link className="boton" href="/" style={{ width: '100%' }}>Ir al inicio</Link>
-      </div>
-    </main>
+    <MarcoAcceso titulo="Página no encontrada" descripcion="La dirección no existe o usted no tiene acceso a ese registro.">
+      <Link className="boton grande bloque" href="/"><Icono nombre="inicio" tamano={18} />Ir al inicio</Link>
+    </MarcoAcceso>
   );
 }

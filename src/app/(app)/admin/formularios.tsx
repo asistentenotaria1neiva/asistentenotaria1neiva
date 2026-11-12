@@ -1,7 +1,9 @@
 'use client';
 /** Formularios de cliente del panel del administrador */
-import { useActionState, useState, useTransition } from 'react';
+import { useActionState, useRef, useState, useTransition } from 'react';
 import type { ResultadoAdmin } from './acciones';
+import { Icono } from '../../Icono';
+import { useConfirmacion } from '../../Confirmar';
 
 type Accion = (r: ResultadoAdmin, f: FormData) => Promise<ResultadoAdmin>;
 
@@ -9,9 +11,9 @@ function Mensaje({ r }: { r?: ResultadoAdmin }) {
   if (!r) return null;
   return (
     <>
-      {r.error && <div className="aviso error" role="alert">{r.error}</div>}
-      {r.ok && <div className="aviso exito" role="status">{r.ok}</div>}
-      {r.secreto && <div className="aviso alerta">Contraseña temporal (se muestra una sola vez): <code>{r.secreto}</code></div>}
+      {r.error && <div className="aviso error" role="alert"><Icono nombre="error" /><div>{r.error}</div></div>}
+      {r.ok && <div className="aviso exito" role="status"><Icono nombre="exito" /><div>{r.ok}</div></div>}
+      {r.secreto && <div className="aviso alerta"><Icono nombre="candado" /><div>Contraseña temporal (se muestra una sola vez; entréguela personalmente): <code>{r.secreto}</code></div></div>}
     </>
   );
 }
@@ -29,12 +31,19 @@ export function FormAdmin({ accion, ocultos = {}, campos = [], botones, confirma
   mensajePendiente?: string;
 }) {
   const [r, enviar, pendiente] = useActionState(accion, {});
+  const [pedir, dialogo] = useConfirmacion();
+  const confirmado = useRef(false);
   return (
     <form action={enviar} onSubmit={(e) => {
-      const op = ((e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value ?? '';
-      if (confirmar?.[op] && !window.confirm(confirmar[op])) e.preventDefault();
+      if (confirmado.current) { confirmado.current = false; return; }
+      const boton = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+      const op = boton?.value ?? '';
+      if (!confirmar?.[op]) return;
+      e.preventDefault();
+      const formulario = e.currentTarget;
+      pedir({ texto: confirmar[op], boton: boton?.textContent ?? undefined }).then((ok) => { if (ok) { confirmado.current = true; formulario.requestSubmit(boton); } });
     }}>
-      {pendiente && mensajePendiente ? <div className="aviso info" role="status">{mensajePendiente}</div> : <Mensaje r={r} />}
+      {pendiente && mensajePendiente ? <div className="aviso info" role="status"><span className="girador pequeno" aria-hidden="true" /><div>{mensajePendiente}</div></div> : <Mensaje r={r} />}
       {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
       <div className={columnas ? 'campos-columnas' : undefined}>{campos.map((c) => (
         <div className="campo" key={c.nombre}>
@@ -46,17 +55,18 @@ export function FormAdmin({ accion, ocultos = {}, campos = [], botones, confirma
           {c.ayuda && <div className="ayuda">{c.ayuda}</div>}
         </div>
       ))}</div>
-      <div className="fila" style={{ gap: '0.5rem' }}>
+      <div className="fila chica">
         {botones.map((b) => <button key={b.texto} type="submit" name="operacion" value={b.operacion ?? ''} className={`pequeno ${b.clase ?? ''}`} disabled={pendiente} aria-busy={pendiente}>{b.texto}</button>)}
-        {pendiente && !mensajePendiente && <span className="girador pequeno" aria-hidden="true" style={{ color: 'var(--primario)' }} />}
+        {pendiente && !mensajePendiente && <span className="girador pequeno" aria-hidden="true" />}
       </div>
+      {dialogo}
     </form>
   );
 }
 
 /** Abre el cuadro de impresión del navegador (desde ahí se guarda como PDF) */
 export function BotonImprimir() {
-  return <button type="button" className="secundario no-imprimir" onClick={() => window.print()}>Imprimir o guardar como PDF</button>;
+  return <button type="button" className="secundario no-imprimir" onClick={() => window.print()}><Icono nombre="imprimir" tamano={18} />Imprimir o guardar como PDF</button>;
 }
 
 export function BotonVerificar({ accion }: { accion: () => Promise<ResultadoAdmin> }) {
@@ -64,8 +74,10 @@ export function BotonVerificar({ accion }: { accion: () => Promise<ResultadoAdmi
   const [pendiente, iniciar] = useTransition();
   return (
     <div>
-      <button type="button" disabled={pendiente} onClick={() => iniciar(async () => setR(await accion()))}>{pendiente ? 'Verificando…' : 'Verificar integridad de la cadena'}</button>
-      <Mensaje r={r} />
+      <button type="button" className="secundario" disabled={pendiente} aria-busy={pendiente} onClick={() => iniciar(async () => setR(await accion()))}>
+        {pendiente ? <span className="girador pequeno" aria-hidden="true" /> : <Icono nombre="auditoria" tamano={18} />}{pendiente ? 'Verificando…' : 'Verificar integridad de la cadena'}
+      </button>
+      {r && <div className="mt-chico"><Mensaje r={r} /></div>}
     </div>
   );
 }

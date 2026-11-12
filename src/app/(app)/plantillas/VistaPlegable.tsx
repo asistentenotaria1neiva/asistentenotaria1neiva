@@ -3,12 +3,18 @@
 import { useState } from 'react';
 import { VisorDocx } from './VisorDocx';
 
-export function VistaPlegable({ url, titulo, abierta = false }: { url: string; titulo: string; abierta?: boolean }) {
+export function VistaPlegable({ url, titulo, abierta = false, leyenda = false }: { url: string; titulo: string; abierta?: boolean; leyenda?: boolean }) {
   const [vista, setVista] = useState(abierta);
   return (
-    <details open={abierta} onToggle={(e) => { if ((e.currentTarget as HTMLDetailsElement).open) setVista(true); }}>
+    <details className="vista-plegable" open={abierta} onToggle={(e) => { if ((e.currentTarget as HTMLDetailsElement).open) setVista(true); }}>
       <summary>{titulo}</summary>
-      {vista && <div style={{ marginTop: 12 }}><VisorDocx url={url} /></div>}
+      {leyenda && (
+        <p className="leyenda-marcas">
+          <span><span className="muestra-falta">FALTA</span> dato que no está en los documentos</span>
+          <span><span className="muestra-verificar">VERIFICAR</span> dato dudoso para confirmar</span>
+        </p>
+      )}
+      {vista && <VisorDocx url={url} />}
     </details>
   );
 }

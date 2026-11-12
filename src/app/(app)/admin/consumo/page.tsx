@@ -119,9 +119,9 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
     const dir: Dir = activo ? (actual.dir === 'asc' ? 'desc' : 'asc') : claves[campo].asc ? 'asc' : 'desc';
     return (
       <th className={numero ? 'numero' : undefined} aria-sort={activo ? (actual.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
-        <Link href={enlace({ [tabla]: `${campo}:${dir}` })} scroll={false} style={{ color: 'inherit', textDecoration: 'none', fontWeight: activo ? 600 : undefined }} title="Ordenar">
+        <Link href={enlace({ [tabla]: `${campo}:${dir}` })} scroll={false} className={`orden-columna${activo ? ' activa' : ''}`} title="Ordenar">
           {children}
-          <span aria-hidden style={{ opacity: activo ? 1 : 0.35, marginLeft: 4 }}>{activo ? (actual.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+          <span aria-hidden className="flecha-orden">{activo ? (actual.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
         </Link>
       </th>
     );
@@ -151,14 +151,17 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
   return (
     <>
       <div className="fila entre encabezado">
-        <h1>Consumo de IA{filtroUsuario ? ` · ${filtroUsuario}` : ''}</h1>
-        <form className="fila" method="get" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
-          <input type="month" name="mes" defaultValue={todo ? '' : periodo} aria-label="Mes" style={{ width: 'auto' }} />
-          <select name="usuario" defaultValue={usuario ?? ''} aria-label="Digitador" style={{ width: 'auto' }}>
+        <div>
+          <h1>Consumo de IA{filtroUsuario ? ` · ${filtroUsuario}` : ''}</h1>
+          <p className="suave">Tokens y costo por usuario, escritura, tarea y modelo.</p>
+        </div>
+        <form className="fila chica filtros-linea" method="get" aria-label="Periodo y filtros">
+          <input type="month" name="mes" defaultValue={todo ? '' : periodo} aria-label="Mes" />
+          <select name="usuario" defaultValue={usuario ?? ''} aria-label="Digitador">
             <option value="">Todos los usuarios</option>
             {personal.map((p) => <option key={p.id} value={p.id}>{p.nombreCompleto}</option>)}
           </select>
-          <select name="tarea" defaultValue={tarea ?? ''} aria-label="Tarea" style={{ width: 'auto' }}>
+          <select name="tarea" defaultValue={tarea ?? ''} aria-label="Tarea">
             <option value="">Todas las tareas</option>
             {Object.entries(TAREAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
@@ -167,26 +170,26 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
           {params.orden && <input type="hidden" name="orden" value={params.orden} />}
           {params.ordenu && <input type="hidden" name="ordenu" value={params.ordenu} />}
           <button type="submit" className="secundario">Ver</button>
-          <Link className="boton secundario" href={enlace({ mes: 'todo' })}>Todo el historial</Link>
+          <Link className="boton fantasma" href={enlace({ mes: 'todo' })}>Todo el historial</Link>
         </form>
       </div>
-      <p className="suave">
+      <p className="tenue">
         {todo ? 'Todo el historial' : `Mes ${periodo}`}
         {filtroUsuario && <> · solo {filtroUsuario} · <Link href={enlace({ usuario: null })}>ver todos</Link></>}
         {tarea && <> · solo {TAREAS[tarea].toLowerCase()} · <Link href={enlace({ tarea: null })}>todas las tareas</Link></>}
       </p>
 
       <div className="rejilla cuatro">
-        <div className="tarjeta"><div className="cifra">{usd(datos.total.costoUSD)}</div><div className="suave">costo estimado</div></div>
-        <div className="tarjeta"><div className="cifra">{n(datos.total.tokensEntrada + datos.total.tokensCache + datos.total.tokensSalida)}</div><div className="suave">tokens ({n(datos.total.tokensSalida)} de salida)</div></div>
-        <div className="tarjeta"><div className="cifra">{n(datos.total.llamadas)}</div><div className="suave">llamadas a la IA · {datos.escrituras.length} escrituras{datos.revisiones.length ? ` · ${datos.revisiones.length} revisiones` : ''}</div></div>
-        <div className="tarjeta"><div className="cifra">{datos.promedioPorEscrituraUSD === null ? '—' : usd(datos.promedioPorEscrituraUSD)}</div><div className="suave">promedio por escritura</div></div>
+        <div className="tarjeta compacta indicador"><span className="rotulo">Costo estimado</span><span className="cifra">{usd(datos.total.costoUSD)}</span><span className="tenue">tarifa de cada modelo</span></div>
+        <div className="tarjeta compacta indicador"><span className="rotulo">Tokens</span><span className="cifra">{n(datos.total.tokensEntrada + datos.total.tokensCache + datos.total.tokensSalida)}</span><span className="tenue">{n(datos.total.tokensSalida)} de salida</span></div>
+        <div className="tarjeta compacta indicador"><span className="rotulo">Llamadas a la IA</span><span className="cifra">{n(datos.total.llamadas)}</span><span className="tenue">{datos.escrituras.length} escrituras{datos.revisiones.length ? ` · ${datos.revisiones.length} revisiones` : ''}</span></div>
+        <div className="tarjeta compacta indicador"><span className="rotulo">Promedio por escritura</span><span className="cifra">{datos.promedioPorEscrituraUSD === null ? '—' : usd(datos.promedioPorEscrituraUSD)}</span><span className="tenue">costo medio</span></div>
       </div>
 
       <section className="tarjeta">
         <h2>Por digitador</h2>
         {!digitadores.length ? <p className="suave">Sin consumo en este periodo.</p> : (
-          <Tabla>
+          <Tabla fija etiqueta="Consumo por digitador">
             <thead><tr>
               <Th campo="nombre" tabla="ordenu">Usuario</Th>
               <Th campo="escrituras" tabla="ordenu" numero>Escrituras</Th>
@@ -208,12 +211,12 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
       </section>
 
       <section className="tarjeta">
-        <div className="fila entre" style={{ gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>Por escritura</h2>
-          <form className="fila" method="get" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="tarjeta-cabecera">
+          <h2>Por escritura</h2>
+          <form className="fila chica filtros-linea" method="get" role="search" aria-label="Filtrar escrituras">
             {Object.entries({ mes: todo ? 'todo' : periodo, usuario, tarea, orden: params.orden, ordenu: params.ordenu }).map(([k, v]) => v && <input key={k} type="hidden" name={k} value={v} />)}
-            <input type="search" name="q" defaultValue={q ?? ''} placeholder="Buscar expediente, escritura, acto o responsable" aria-label="Buscar" style={{ width: 'min(340px, 100%)' }} />
-            <select name="estado" defaultValue={estado ?? ''} aria-label="Estado" style={{ width: 'auto' }}>
+            <input type="search" name="q" defaultValue={q ?? ''} placeholder="Buscar expediente, escritura, acto o responsable" aria-label="Buscar" className="busqueda-ancha" />
+            <select name="estado" defaultValue={estado ?? ''} aria-label="Estado">
               <option value="">Todos los estados</option>
               {estados.map((e) => <option key={e} value={e}>{e.replace(/_/g, ' ').toLowerCase()}</option>)}
             </select>

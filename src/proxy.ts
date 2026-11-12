@@ -49,5 +49,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [{ source: '/((?!_next/static|_next/image|favicon.ico).*)' }],
+  // La marca (logo e íconos) es pública: se ve también en el ingreso, antes de tener sesión
+  matcher: [{ source: '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|marca/).*)' }],
 };

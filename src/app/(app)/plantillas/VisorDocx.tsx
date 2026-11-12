@@ -116,9 +116,9 @@ export function VisorDocx({ url }: { url: string }) {
   }, [url]);
 
   return (
-    <div className="visor-docx" ref={contenedor}>
-      {estado === 'cargando' && <p className="suave" style={{ padding: '1rem' }}>Cargando el documento…</p>}
-      {estado === 'error' && <div className="aviso error" style={{ margin: '1rem' }}>No se pudo mostrar el documento: {error}. Descárguelo para revisarlo en Word.</div>}
+    <div className="visor-docx" ref={contenedor} aria-busy={estado === 'cargando'}>
+      {estado === 'cargando' && <p className="estado-visor" role="status"><span className="girador" aria-hidden="true" />Preparando la vista previa del documento…</p>}
+      {estado === 'error' && <div className="aviso error" role="alert">No se pudo mostrar el documento: {error}. Descárguelo para revisarlo en Word.</div>}
       <div ref={estilos} />
       <div ref={cuerpo} />
     </div>

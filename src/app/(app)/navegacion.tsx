@@ -3,11 +3,12 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Icono, type NombreIcono } from '../Icono';
 
-export interface EnlaceMenu { href: string; texto: string; seccion?: string }
+export interface EnlaceMenu { href: string; texto: string; icono: NombreIcono; seccion?: string }
 
 /** Indicador del enlace que se está abriendo: respuesta inmediata al clic mientras llega la página */
-function Pendiente() {
+export function Pendiente() {
   const { pending } = useLinkStatus();
   return <span className={`pendiente${pending ? ' activo' : ''}`} aria-hidden="true" />;
 }
@@ -19,66 +20,57 @@ function enlaceActivo(ruta: string, hrefs: string[]): string | undefined {
     .sort((a, b) => b.length - a.length)[0];
 }
 
-export function MenuLateral({ enlaces, children }: { enlaces: EnlaceMenu[]; children: React.ReactNode }) {
+export function MenuLateral({ enlaces, avisos, pie }: { enlaces: EnlaceMenu[]; avisos: React.ReactNode; pie: React.ReactNode }) {
   const ruta = usePathname();
   const [abierto, setAbierto] = useState(false);
+  const boton = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
   // Al cambiar de página el menú se cierra
   const [rutaPrevia, setRutaPrevia] = useState(ruta);
   if (ruta !== rutaPrevia) { setRutaPrevia(ruta); setAbierto(false); }
 
   useEffect(() => {
     if (!abierto) return;
-    const alTeclear = (e: KeyboardEvent) => { if (e.key === 'Escape') setAbierto(false); };
+    // El foco entra al menú al abrirlo y vuelve al botón al cerrarlo con Escape
+    panel.current?.querySelector<HTMLElement>('a, button')?.focus();
+    const alTeclear = (e: KeyboardEvent) => { if (e.key === 'Escape') { setAbierto(false); boton.current?.focus(); } };
     document.addEventListener('keydown', alTeclear);
     document.body.classList.add('sin-desplazamiento');
     return () => { document.removeEventListener('keydown', alTeclear); document.body.classList.remove('sin-desplazamiento'); };
   }, [abierto]);
 
-  const activo = enlaceActivo(ruta, enlaces.map((e) => e.href));
+  const activo = enlaceActivo(ruta, ['/expedientes/nuevo', ...enlaces.map((e) => e.href)]);
   return (
     <>
       <header className="barra-superior">
-        <button type="button" className="boton-menu" aria-expanded={abierto} aria-controls="menu-principal" aria-label={abierto ? 'Cerrar menú' : 'Abrir menú'} onClick={() => setAbierto((a) => !a)}>
-          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            {abierto ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
-          </svg>
+        <button ref={boton} type="button" className="boton-menu" aria-expanded={abierto} aria-controls="menu-principal" aria-label={abierto ? 'Cerrar menú' : 'Abrir menú'} onClick={() => setAbierto((a) => !a)}>
+          <Icono nombre={abierto ? 'cerrar' : 'menu'} tamano={22} />
         </button>
-        <Link href="/" className="marca-superior">Escrituración<small>Notaría Primera de Neiva</small></Link>
+        <Link href="/" className="marca-superior" aria-label="Notaría 1 · Inicio">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/marca/logo-horizontal-blanco.svg" alt="" width={146} height={31} />
+        </Link>
+        <Link href="/expedientes/nuevo" className="boton-superior" aria-label="Nueva escritura"><Icono nombre="mas" tamano={22} /></Link>
       </header>
-      <nav id="menu-principal" className={`lateral${abierto ? ' abierto' : ''}`} aria-label="Menú principal">
-        <div className="marca">Escrituración<small>Notaría Primera de Neiva</small></div>
-        {enlaces.map((e) => (
+      <nav ref={panel} id="menu-principal" className={`lateral${abierto ? ' abierto' : ''}`} aria-label="Menú principal">
+        <Link href="/" className="marca" aria-label="Notaría 1 · Neiva - Huila · Inicio">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/marca/logo-horizontal-blanco.svg" alt="" width={190} height={40} />
+        </Link>
+        <Link href="/expedientes/nuevo" className="boton-nueva" aria-current={activo === '/expedientes/nuevo' ? 'page' : undefined}>
+          <Icono nombre="mas" tamano={18} />Nueva escritura<Pendiente />
+        </Link>
+        {enlaces.map((e, i) => (
           <Fragment key={e.href}>
             {e.seccion && <div className="seccion">{e.seccion}</div>}
-            <Link href={e.href} aria-current={e.href === activo ? 'page' : undefined}>{e.texto}<Pendiente /></Link>
+            <Link href={e.href} aria-current={e.href === activo ? 'page' : undefined}><Icono nombre={e.icono} tamano={18} /><span>{e.texto}</span><Pendiente /></Link>
+            {/* Las notificaciones van con el trabajo diario, después de la biblioteca */}
+            {i === 2 && avisos}
           </Fragment>
         ))}
-        {children}
+        {pie}
       </nav>
       {abierto && <div className="velo" aria-hidden="true" onClick={() => setAbierto(false)} />}
     </>
-  );
-}
-
-/** Pestañas del expediente: la activa es la que coincide exactamente con la página */
-export function PestanasExpediente({ base, pestanas }: { base: string; pestanas: { href: string; texto: React.ReactNode }[] }) {
-  const ruta = usePathname();
-  const lista = useRef<HTMLUListElement>(null);
-  // En móvil las pestañas se desplazan a lo ancho: la activa se lleva a la vista
-  useEffect(() => {
-    const l = lista.current;
-    const activa = l?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!l || !activa || l.scrollWidth <= l.clientWidth) return;
-    l.scrollLeft += activa.getBoundingClientRect().left - l.getBoundingClientRect().left - 16;
-  }, [ruta]);
-  return (
-    <nav aria-label="Secciones del expediente">
-      <ul className="pasos" ref={lista}>
-        {pestanas.map((p) => {
-          const href = `${base}${p.href}`;
-          return <li key={p.href}><Link href={href} aria-current={ruta === href ? 'page' : undefined}>{p.texto}</Link></li>;
-        })}
-      </ul>
-    </nav>
   );
 }
