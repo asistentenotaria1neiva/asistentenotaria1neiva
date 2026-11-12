@@ -711,6 +711,22 @@ progress::-moz-progress-bar { background: var(--primario); border-radius: 8px; }
 .lista-notificaciones li.nueva .icono-aviso { background: var(--info-claro); color: var(--info); }
 .lista-notificaciones .titulo-aviso { font-weight: 700; }
 .lista-notificaciones .mensaje { margin: 4px 0 0; color: var(--texto-suave); font-size: 14px; }
+/* Aviso emergente en la esquina inferior derecha */
+.emergentes { position: fixed; right: 20px; bottom: 20px; z-index: 90; display: grid; gap: 10px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.emergente { pointer-events: auto; display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 14px 14px 14px 16px; background: var(--superficie); border: 1px solid var(--info-linea); border-radius: var(--radio-tarjeta); box-shadow: inset 4px 0 0 var(--info), var(--sombra-elevada); animation: entrar-emergente 220ms var(--curva); }
+.emergente .icono-aviso { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--info-claro); color: var(--info); }
+.emergente .contenido { all: unset; cursor: pointer; display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; border-radius: var(--radio-chico); }
+.emergente .contenido:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+.emergente .contenido strong { font-weight: 700; color: var(--texto); }
+.emergente .contenido span { font-size: 14px; color: var(--texto-suave); }
+.emergente .cerrar { display: grid; place-items: center; width: 28px; height: 28px; min-height: 0; padding: 0; border: 0; box-shadow: none; border-radius: var(--radio-chico); background: transparent; color: var(--texto-tenue); cursor: pointer; }
+.emergente .cerrar:hover { background: var(--superficie-suave); color: var(--texto); }
+.emergente.invitacion { grid-template-columns: 36px minmax(0, 1fr); }
+.emergente.invitacion .contenido { cursor: default; }
+.emergente .acciones-invitacion { gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.activar-avisos.bloqueados { cursor: help; opacity: 0.75; }
+@keyframes entrar-emergente { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (max-width: 640px) { .emergentes { right: 16px; bottom: 16px; } }
 
 /* 5.6 Administración */
 .atencion { display: grid; gap: 8px; }
