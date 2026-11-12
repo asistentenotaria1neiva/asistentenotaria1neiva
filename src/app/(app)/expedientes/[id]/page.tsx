@@ -4,7 +4,7 @@ import { after } from 'next/server';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { expedienteDePagina, puedeEditar, ErrorNegocio } from '@/lib/servicios/expedientes';
-import { generacionEnCurso, generacionPorReanudar, type ResultadoGeneracion } from '@/lib/servicios/generacion';
+import { generacionEnCurso, generacionPorReanudar, cambiosDeVersion, type ResultadoGeneracion } from '@/lib/servicios/generacion';
 import { leerDocumento, LECTURA_CORTADA_MS } from '@/lib/servicios/documentos';
 import { lecturaComoTexto, type Lectura } from '@/lib/ia/instrucciones';
 import { EtiquetaVersion, Tabla, fecha, hace } from '../../componentes';
@@ -12,8 +12,9 @@ import { Icono, type NombreIcono } from '../../../Icono';
 import { VistaPlegable } from '../../plantillas/VistaPlegable';
 import { BotonAccion, FormularioCarga, RefrescoAutomatico } from '../formularios';
 import { FormularioObservaciones } from './Observaciones';
+import { CorregirVersion } from './CorregirVersion';
 import {
-  accionCompletarDocumento, accionEliminarDocumento, accionReleerDocumento, accionGuardarObservaciones, accionGenerar, accionEliminarExpediente,
+  accionCompletarDocumento, accionEliminarDocumento, accionReleerDocumento, accionGuardarObservaciones, accionGenerar, accionEliminarExpediente, accionCancelarGeneracion, accionCorregirVersion,
 } from '../acciones';
 
 // Las acciones de esta página (cargar, generar) siguen trabajando en segundo plano después de responder
@@ -38,6 +39,8 @@ const etapaDe = (porcentaje: number) => (porcentaje <= 30 ? 0 : porcentaje < 85 
 
 const tamano = (b: number) => (b > 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const iconoArchivo = (nombre: string): NombreIcono => (/\.(jpe?g|png|webp)$/i.test(nombre) ? 'imagen' : 'documento');
+/** Versión que corrige una versión hecha con «Corregir esta versión» */
+const correccionDe = (g: { progreso: unknown }) => (g.progreso as { ajuste?: { version?: number } } | null)?.ajuste?.version;
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
 export default async function Escritura({ params }: { params: Promise<{ id: string }> }) {
@@ -60,7 +63,9 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
     after(async () => { for (const d of trabados.slice(0, 3)) await leerDocumento(d.id, s.usuario.id).catch((err) => console.error('[leerDocumento]', err)); });
   }
   const leyendo = documentos.some((d) => d.estadoLectura === 'EN_CURSO' || d.estadoLectura === 'PENDIENTE');
-  const ultima = generaciones.find((g) => g.estado !== 'EN_CURSO');
+  // Una generación cancelada no reemplaza a la versión anterior: se sigue mostrando la última terminada
+  const ultima = generaciones.find((g) => g.estado !== 'EN_CURSO' && g.estado !== 'CANCELADA');
+  const cancelada = !enCurso && generaciones[0]?.estado === 'CANCELADA' ? generaciones[0] : null;
   const resultado = ultima?.estado === 'COMPLETADA' ? (ultima.resultado as unknown as ResultadoGeneracion) : null;
   const version = generaciones[0]?.version ?? 0;
   const advertencias = resultado?.advertencias ?? [];
@@ -103,6 +108,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
     <>
       <h2><span className="tres-lineas" aria-hidden="true" />Siguiente paso</h2>
       <p className="que-sigue">{quePasa}</p>
+      {cancelada && <div className="aviso neutro" role="status"><Icono nombre="info" /><div>Se canceló la generación de la versión {cancelada.version}.{cancelada.error ? ` ${cancelada.error}` : ''} Puede generar de nuevo cuando quiera.</div></div>}
       {enCurso ? (
         <>
           <div className="progreso-general">
@@ -121,6 +127,12 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
             })}
           </ol>
           <div className="aviso info" role="status"><Icono nombre="campana" /><div>Puede salir de esta página o cerrar la pestaña: la generación sigue y le avisaremos en <Link href="/notificaciones">Notificaciones</Link> al terminar.</div></div>
+          {editable && (
+            <BotonAccion
+              accion={accionCancelarGeneracion.bind(null, id)} texto="Cancelar generación" textoPendiente="Cancelando…" icono="cerrar" clase="peligro-suave pequeno"
+              confirmar={`¿Cancelar la generación de la versión ${enCurso.version}? Se detiene y no se crea la escritura. Los documentos ya leídos se conservan y puede generar de nuevo cuando quiera.`}
+            />
+          )}
         </>
       ) : !resultado && conPlantilla && (
         <ul className="lista-requisitos">
@@ -336,6 +348,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
                     </details>
                   )}
                   <VistaPlegable url={`/api/generaciones/${ultima.id}?vista=1`} titulo="Escritura generada (vista previa)" abierta leyenda />
+                  {editable && !enCurso && cambiosDeVersion(ultima) && <CorregirVersion corregir={accionCorregirVersion.bind(null, id)} version={ultima.version} siguiente={version + 1} />}
                 </>
               )}
             </div>
@@ -354,7 +367,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
                   const cuenta = (nivel: string) => r?.advertencias?.filter((a) => a.nivel === nivel).length ?? 0;
                   return (
                     <tr key={g.id}>
-                      <td className="principal-celda"><strong>v{g.version}</strong>{g.id === ultima?.id && <span className="tenue"> · la más reciente</span>}</td>
+                      <td className="principal-celda"><strong>v{g.version}</strong>{correccionDe(g) && <span className="tenue"> · corrección de v{correccionDe(g)}</span>}{g.id === ultima?.id && <span className="tenue"> · la más reciente</span>}</td>
                       <td data-etiqueta="Fecha">{fecha(g.creadaEn)}</td>
                       <td data-etiqueta="Por">{g.generadaPor.nombreCompleto}</td>
                       <td data-etiqueta="Plantilla">{g.plantillaNombre}</td>
@@ -367,7 +380,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
                             {!r?.advertencias?.length && <span className="etiqueta ok">Sin advertencias</span>}
                             {!!r?.faltantes?.length && <span className="etiqueta falta">{r.faltantes.length} FALTA</span>}
                           </span>
-                        ) : g.estado === 'ERROR' ? <span className="etiqueta critica">Error</span> : <span className="etiqueta informativa gira">Generando</span>}
+                        ) : g.estado === 'ERROR' ? <span className="etiqueta critica">Error</span> : g.estado === 'CANCELADA' ? <span className="etiqueta">Cancelada</span> : <span className="etiqueta informativa gira">Generando</span>}
                       </td>
                       <td className="acciones">{g.rutaDocx && <a className="boton secundario pequeno" href={`/api/generaciones/${g.id}`}><Icono nombre="descargar" tamano={16} />Word</a>}</td>
                     </tr>

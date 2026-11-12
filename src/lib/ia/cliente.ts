@@ -109,6 +109,12 @@ interface OpcionesLlamada {
    * otra llamada con el mismo inicio antes de 5 minutos.
    */
   cachearBloques?: number;
+  /**
+   * La caché dura una hora en vez de 5 minutos (escribirla cuesta 2 × en vez de 1,25 ×): para la
+   * redacción, cuya plantilla y documentos se reutilizan en la corrección, en otra versión o en un
+   * ajuste aunque pase más de 5 minutos.
+   */
+  cacheUnaHora?: boolean;
   /** A quién y a qué se carga el consumo de esta llamada (panel Consumo de IA) */
   registro: RegistroConsumo;
 }
@@ -127,6 +133,7 @@ async function registrarConsumo(opciones: OpcionesLlamada, mensaje: Anthropic.Be
   const salida = u.output_tokens ?? 0;
   const cacheLectura = u.cache_read_input_tokens ?? 0;
   const cacheEscritura = u.cache_creation_input_tokens ?? 0;
+  const cacheEscritura1h = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
   try {
     await db.consumoIA.create({
       data: {
@@ -139,7 +146,7 @@ async function registrarConsumo(opciones: OpcionesLlamada, mensaje: Anthropic.Be
         tokensSalida: salida,
         tokensCacheLectura: cacheLectura,
         tokensCacheEscritura: cacheEscritura,
-        costoUSD: costoEstimadoUSD(mensaje.model, entrada, salida, cacheLectura, cacheEscritura),
+        costoUSD: costoEstimadoUSD(mensaje.model, entrada, salida, cacheLectura, cacheEscritura, cacheEscritura1h),
       },
     });
   } catch (e) {
@@ -148,21 +155,23 @@ async function registrarConsumo(opciones: OpcionesLlamada, mensaje: Anthropic.Be
 }
 
 /** Marca el último de los primeros `n` bloques como punto de caché (los bloques no se modifican) */
-function conCache(contenido: Anthropic.Beta.BetaContentBlockParam[], n?: number): Anthropic.Beta.BetaContentBlockParam[] {
+function conCache(contenido: Anthropic.Beta.BetaContentBlockParam[], n: number | undefined, control: Anthropic.Beta.BetaCacheControlEphemeral): Anthropic.Beta.BetaContentBlockParam[] {
   if (!n || n < 1 || n > contenido.length) return contenido;
-  return contenido.map((b, i) => (i === n - 1 ? ({ ...b, cache_control: { type: 'ephemeral' } } as Anthropic.Beta.BetaContentBlockParam) : b));
+  return contenido.map((b, i) => (i === n - 1 ? ({ ...b, cache_control: control } as Anthropic.Beta.BetaContentBlockParam) : b));
 }
 
 async function llamar<T>(opciones: OpcionesLlamada, modelo: string, esfuerzo: Esfuerzo): Promise<ResultadoLlamada<T>> {
   const usarRespaldo = tieneRespaldoServidor(modelo) && (process.env.CLAUDE_FALLBACKS ?? 'default') === 'default';
   const inicio = Date.now();
+  // El sistema y los bloques llevan la misma duración (una caché de una hora no puede ir después de una de 5 minutos)
+  const control: Anthropic.Beta.BetaCacheControlEphemeral = opciones.cacheUnaHora ? { type: 'ephemeral', ttl: '1h' } : { type: 'ephemeral' };
   let mensaje: Anthropic.Beta.BetaMessage;
   try {
     const stream = obtenerCliente().beta.messages.stream({
       model: modelo,
       max_tokens: opciones.maxTokens ?? 32000,
-      system: [{ type: 'text', text: opciones.sistema, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: conCache(opciones.contenido, opciones.cachearBloques) }],
+      system: [{ type: 'text', text: opciones.sistema, cache_control: control }],
+      messages: [{ role: 'user', content: conCache(opciones.contenido, opciones.cachearBloques, control) }],
       output_config: { effort: esfuerzo, format: { type: 'json_schema', schema: opciones.esquema } },
       ...(usarRespaldo ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
     });

@@ -116,9 +116,10 @@ export async function iniciarSesion(usuarioTxt: string, contrasena: string, huel
       ? { ok: false, error: 'Este equipo está pendiente de aprobación por el administrador.' }
       : { ok: false, error: 'Este equipo no está autorizado.', registrarEquipo: !disp };
   }
-  if (disp && huella && disp.huella && disp.huella !== huella) {
-    await alertar('HUELLA_DISTINTA', 'MEDIA', `La huella del navegador del equipo "${disp.nombre}" cambió (usuario ${u.usuario}).`, { ip, dispositivoId: disp.id });
-  }
+  // La huella del navegador cambia sola (actualizaciones del navegador, zoom, monitores, fuentes) y el
+  // equipo ya quedó identificado por su token firmado: no se alerta (eran falsos positivos), solo se
+  // deja constancia en la auditoría y se guarda la huella nueva.
+  const huellaCambio = !!(disp && huella && disp.huella && disp.huella !== huella);
 
   // Sesión única: se cierran las demás sesiones del usuario
   await db.sesion.updateMany({ where: { usuarioId: u.id, revocadaEn: null }, data: { revocadaEn: new Date(), motivoRevocacion: 'nuevo inicio de sesión' } });
@@ -131,7 +132,8 @@ export async function iniciarSesion(usuarioTxt: string, contrasena: string, huel
     },
   });
   await db.usuario.update({ where: { id: u.id }, data: { intentosFallidos: 0, bloqueadoHasta: null, ultimoAcceso: new Date() } });
-  if (disp?.estado === 'APROBADO') await db.dispositivo.update({ where: { id: disp.id }, data: { ultimoAcceso: new Date() } });
+  if (disp?.estado === 'APROBADO') await db.dispositivo.update({ where: { id: disp.id }, data: { ultimoAcceso: new Date(), ...(huellaCambio ? { huella } : {}) } });
+  if (huellaCambio) await auditar({ accion: 'HUELLA_ACTUALIZADA', usuarioId: u.id, usuarioNombre: u.usuario, ip, dispositivoId: disp?.id, entidad: 'dispositivo', entidadId: disp?.id });
   (await cookies()).set(COOKIE_SESION, firmarToken(token), opcionesCookie(horas * 3600));
   await auditar({ accion: 'SESION_INICIADA', usuarioId: u.id, usuarioNombre: u.usuario, ip, dispositivoId: disp?.id, entidad: 'sesion', entidadId: sesion.id, detalle: { remota: !enOficina } });
   if (!enOficina) await alertar('ACCESO_REMOTO', 'MEDIA', `El administrador ${u.usuario} inició sesión desde fuera de la oficina (${ip}).`, { ip });

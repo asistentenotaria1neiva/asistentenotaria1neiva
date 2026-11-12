@@ -13,6 +13,7 @@ export function EtiquetaVersion({ g }: { g?: { version: number; estado: string }
   if (!g) return <span className="etiqueta">Sin generar</span>;
   if (g.estado === 'EN_CURSO') return <span className="etiqueta informativa gira">Generando v{g.version}</span>;
   if (g.estado === 'ERROR') return <span className="etiqueta critica">v{g.version} con error</span>;
+  if (g.estado === 'CANCELADA') return <span className="etiqueta">v{g.version} cancelada</span>;
   return <span className="etiqueta ok">Versión {g.version}</span>;
 }
 

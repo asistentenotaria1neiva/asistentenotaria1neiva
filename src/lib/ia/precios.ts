@@ -1,7 +1,7 @@
 /**
  * Precios de la API de Claude por millón de tokens (USD), tarifa estándar de Anthropic.
  * - cache: leer de la caché (≈10 % de la entrada).
- * - La escritura de caché (5 minutos) cuesta 1,25 × la entrada.
+ * - La escritura de caché cuesta 1,25 × la entrada si dura 5 minutos y 2 × si dura una hora.
  * - Haiku 5.5 cobra más cuando el prompt supera 100.000 tokens ($0,50 / $2,50).
  * Si Anthropic cambia los precios, se ajustan aquí; cada registro de consumo guarda el costo con
  * el precio vigente cuando se hizo la llamada.
@@ -23,6 +23,7 @@ export const PRECIOS_MODELOS: Record<string, Precio> = {
 
 const HAIKU_LARGO: Precio = { entrada: 0.5, salida: 2.5, cache: 0.05 };
 const FACTOR_ESCRITURA_CACHE = 1.25;
+const FACTOR_ESCRITURA_CACHE_1H = 2;
 
 function precioDe(modelo: string, promptTotal: number): Precio {
   if (modelo.startsWith('claude-haiku-5-5') && promptTotal > 100_000) return HAIKU_LARGO;
@@ -30,8 +31,13 @@ function precioDe(modelo: string, promptTotal: number): Precio {
   return PRECIOS_MODELOS[modelo] ?? PRECIOS_MODELOS[Object.keys(PRECIOS_MODELOS).find((k) => modelo.startsWith(k)) ?? 'claude-opus-5-5'];
 }
 
-/** Costo en USD de una llamada (tokens de entrada sin caché, salida, lectura y escritura de caché) */
-export function costoEstimadoUSD(modelo: string, entrada: number, salida: number, cacheLectura: number, cacheEscritura = 0): number {
+/**
+ * Costo en USD de una llamada (tokens de entrada sin caché, salida, lectura y escritura de caché).
+ * `cacheEscritura` es el total escrito en caché; `cacheEscritura1h`, la parte que dura una hora.
+ */
+export function costoEstimadoUSD(modelo: string, entrada: number, salida: number, cacheLectura: number, cacheEscritura = 0, cacheEscritura1h = 0): number {
   const p = precioDe(modelo, entrada + cacheLectura + cacheEscritura);
-  return (entrada * p.entrada + salida * p.salida + cacheLectura * p.cache + cacheEscritura * p.entrada * FACTOR_ESCRITURA_CACHE) / 1_000_000;
+  const unaHora = Math.min(cacheEscritura1h, cacheEscritura);
+  const escritura = (cacheEscritura - unaHora) * FACTOR_ESCRITURA_CACHE + unaHora * FACTOR_ESCRITURA_CACHE_1H;
+  return (entrada * p.entrada + salida * p.salida + cacheLectura * p.cache + escritura * p.entrada) / 1_000_000;
 }

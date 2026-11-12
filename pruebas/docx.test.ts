@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import PizZip from 'pizzip';
-import { plantillaNumerada, aplicarCambios, textoDocx, parrafosDe, documentoXml, faltantesEn, patronFragmento, formatoNotaria, normalizarMarcas } from '@/lib/escritura/docx';
-import { datosDeLaPlantillaAnterior, valoresEnLetras, pendientes } from '@/lib/escritura/verificaciones';
+import { plantillaNumerada, aplicarCambios, textoDocx, parrafosDe, documentoXml, faltantesEn, patronFragmento, formatoNotaria, formatoPagina, normalizarMarcas } from '@/lib/escritura/docx';
+import { datosDeLaPlantillaAnterior, restosDelNegocioAnterior, valoresEnLetras, pendientes } from '@/lib/escritura/verificaciones';
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 const r = (t: string, negrilla = false) => `<w:r>${negrilla ? '<w:rPr><w:b/></w:rPr>' : ''}<w:t xml:space="preserve">${t}</w:t></w:r>`;
@@ -75,6 +75,64 @@ describe('cambios de la IA sobre la plantilla', () => {
     const final = formatoNotaria(salida);
     expect(textoDocx(final)).toContain('200-99999');
     expect(documentoXml(final)).toContain('<w:pgMar');
+  });
+});
+
+describe('la escritura conserva la forma de la plantilla', () => {
+  const tab = '<w:r><w:tab/></w:r>';
+  const CARATULA = docx([
+    p(r('PERSONAS QUE INTERVIENEN EN EL ACTO')),
+    p(r('REPRESENTADA POR ALIX CAÑON LAMILLA', true), tab, tab, r('1.075.212.554', true)),
+    p(r('ANTECEDENTES')),
+    p(r('PARÁGRAFO PRIMERO: Texto del parágrafo. ---------------------')),
+    p(r('PARÁGRAFO SEGUNDO: Otro texto sin guiones.')),
+  ].join(''));
+  const textos = (b: Buffer) => parrafosDe(documentoXml(b)).map((x) => x.texto);
+
+  it('no agrega renglones, líneas de guiones ni guiones a lo que no cambió', () => {
+    const { docx: salida } = aplicarCambios(CARATULA, [{ p: 4, accion: 'REEMPLAZAR', reemplazos: [{ original: 'Texto del parágrafo', nuevo: 'Texto nuevo bastante más largo del parágrafo' }], texto: '', insertar_despues: [] }]);
+    const t = textos(formatoPagina(salida));
+    expect(t).toHaveLength(5);
+    expect(t[0]).toBe('PERSONAS QUE INTERVIENEN EN EL ACTO');
+    expect(t[2]).toBe('ANTECEDENTES');
+    expect(t[4]).toBe('PARÁGRAFO SEGUNDO: Otro texto sin guiones.');
+    // El párrafo cambiado tenía relleno: se recalcula (los guiones viejos no quedan sueltos)
+    expect(t[3]).toMatch(/^PARÁGRAFO PRIMERO: Texto nuevo bastante más largo del parágrafo\. -{10,}\t$/);
+  });
+
+  it('en la carátula el valor nuevo queda contra el margen, en negrilla como en la plantilla', () => {
+    const { docx: salida } = aplicarCambios(CARATULA, [{ p: 2, accion: 'REEMPLAZAR', reemplazos: [{ original: 'ALIX CAÑON LAMILLA 1.075.212.554', nuevo: 'MARIA ISABEL QUINTERO 36.111.222' }], texto: '', insertar_despues: [] }]);
+    const x = parrafosDe(documentoXml(salida))[1];
+    expect(x.texto).toBe('REPRESENTADA POR MARIA ISABEL QUINTERO\t36.111.222');
+    expect(x.xml).toMatch(/<w:tabs><w:tab w:val="right" w:pos="\d+"\/><\/w:tabs>/);
+    expect(x.runs.filter((y) => y.texto?.trim()).every((y) => y.rPr.includes('<w:b/>'))).toBe(true);
+  });
+});
+
+describe('cambios ubicados en otro párrafo', () => {
+  // Un renglón «Hoja No 2.» parte la comparecencia: la IA pide el cambio en el párrafo 1, pero el comprador está en el 3
+  const PARTIDA = docx([
+    p(r('Comparecieron a. ALIX CAÑON LAMILLA, quien obra en representación de la sociedad constituida mediante Acta, ')),
+    p(r('Hoja No 2. -----------------------')),
+    p(r('inscrita en la Cámara de Comercio. c. CESAR ALFONSO LEAL VALENZUELA, mayor de edad, identificado con cédula número 1.075.306.559.')),
+  ].join(''));
+
+  it('aplica el reemplazo en el párrafo vecino que tiene el texto', () => {
+    const r = aplicarCambios(PARTIDA, [{ p: 1, accion: 'REEMPLAZAR', reemplazos: [{ original: 'CESAR ALFONSO LEAL VALENZUELA, mayor de edad, identificado con cédula número 1.075.306.559', nuevo: 'DANIELA XIMENA CARDOZO JIMENEZ, mayor de edad, identificada con cédula número 1.080.937.337' }], texto: '', insertar_despues: [] }]);
+    expect(r.noAplicados).toHaveLength(0);
+    expect(r.reubicados).toBe(1);
+    expect(textoDocx(r.docx)).toContain('c. DANIELA XIMENA CARDOZO JIMENEZ, mayor de edad, identificada con cédula número 1.080.937.337.');
+    expect(r.textos.get(3)).toContain('DANIELA');
+  });
+});
+
+describe('restos del negocio anterior por párrafo', () => {
+  it('señala en cada párrafo los datos de la plantilla que no están en los documentos', () => {
+    const plantilla = new Map([[1, 'Compareció CESAR ALFONSO LEAL VALENZUELA, mayor de edad, con cédula 1.075.306.559'], [2, 'Subsidio de COLSUBSIDIO para CESAR ALFONSO LEAL VALENZUELA'], [3, 'Fiduciaria con NIT 800.155.413-6']]);
+    const actuales = new Map([[1, 'Compareció DANIELA XIMENA CARDOZO JIMENEZ, mayor de edad, con cédula 1.080.937.337'], [2, 'Subsidio de COLSUBSIDIO para CESAR ALFONSO LEAL VALENZUELA'], [3, 'Fiduciaria con NIT 800.155.413-6']]);
+    const restos = restosDelNegocioAnterior(plantilla, actuales, 'DANIELA XIMENA CARDOZO JIMENEZ 1.080.937.337 Fiduciaria NIT 800.155.413-6');
+    expect([...restos.keys()]).toEqual([2]);
+    expect(restos.get(2)![0]).toContain('CESAR ALFONSO LEAL VALENZUELA');
   });
 });
 

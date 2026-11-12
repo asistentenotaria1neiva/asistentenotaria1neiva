@@ -13,4 +13,8 @@ describe('costo de la IA', () => {
   it('estima un modelo desconocido al precio de Opus 5.5', () => {
     expect(costoEstimadoUSD('modelo-nuevo', 1_000_000, 0, 0)).toBe(4);
   });
+  it('la escritura de caché de una hora cuesta el doble de la entrada (la de 5 minutos, 1,25 veces)', () => {
+    // Sonnet 5.5: entrada $2 por millón; 1M escrito, la mitad por una hora
+    expect(costoEstimadoUSD('claude-sonnet-5-5', 0, 0, 0, 1_000_000, 500_000)).toBeCloseTo(0.5 * 2 * 1.25 + 0.5 * 2 * 2);
+  });
 });

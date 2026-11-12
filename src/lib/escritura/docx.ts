@@ -13,7 +13,7 @@
  * guiones de relleno de cada párrafo.
  */
 import PizZip from 'pizzip';
-import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, aplicarMargenes, anchoTextoDe } from './formato-notarial';
+import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, aplicarMargenes, anchoTextoDe, rellenarParrafo, tabDerecha } from './formato-notarial';
 
 const decodificar = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, '&');
 const escapar = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -284,6 +284,19 @@ export interface ResultadoCambios {
   noAplicados: NoAplicado[];
   eliminados: number;
   insertados: number;
+  /** Texto final de cada párrafo cambiado de la plantilla (con los insertados después, uno por renglón; '' si se eliminó) */
+  textos: Map<number, string>;
+  /** Reemplazos que no estaban en su párrafo y se aplicaron en otro (la IA se equivocó de número) */
+  reubicados: number;
+}
+
+/** Párrafos (vecinos primero) donde aparece un fragmento que la IA ubicó en otro número */
+function parrafoCon(fragmento: string, n: number, parrafos: ParrafoDocx[], porNumero: Map<number, ParrafoDocx>): number | null {
+  const tiene = (p: ParrafoDocx | undefined) => !!p && p.editable && patronFragmento(fragmento).test(p.texto);
+  // Un renglón «Hoja No …» o una línea de guiones puede partir un párrafo de la plantilla en dos
+  for (let d = 1; d <= 6; d++) for (const k of [n + d, n - d]) if (tiene(porNumero.get(k))) return k;
+  const todos = parrafos.filter(tiene);
+  return todos.length === 1 ? todos[0].n : null;
 }
 
 const sinRelleno = (t: string) => t.replace(/[ \t]*-{3,}[ \t]*(?=\n)/g, '').replace(/[ \t]*-{3,}[ \t]*$/, '');
@@ -294,6 +307,38 @@ function parrafoNuevo(base: ParrafoDocx, texto: string): string {
   const pPr = pPrDe(base.xml).replace(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g, '').replace(/<w:pPrChange\b[\s\S]*?<\/w:pPrChange>/g, '');
   const i = corridaBase(base.runs);
   return `${abre.replace(/\s+w14:paraId="[^"]*"|\s+w14:textId="[^"]*"/g, '')}${pPr}${runsDe(i >= 0 ? base.runs[i].rPr : '', texto)}</w:p>`;
+}
+
+/**
+ * Renglón de la carátula con el valor alineado a la derecha con tabulaciones («REPRESENTADA POR … ⇥⇥ 1.075.212.554»,
+ * «COMPRAVENTA ⇥⇥ $192.172.500»): grupo 1, el rótulo; grupo 2, el valor.
+ */
+const VALOR_TABULADO = /^(.+?)[\t ]*\t[\t ]*((?:NIT\.?\s*)?\d[\d.]*(?:-\d+)?|\$\s?[\d.]+|SIN CUANT[IÍ]A)\s*$/i;
+const VALOR_NUEVO = /^(.+?)\s+((?:NIT\.?\s*)?(?:C\.?C\.?\s*)?\d[\d.]*(?:-\d+)?|\$\s?[\d.]+|SIN CUANT[IÍ]A|«FALTA:[^»]*»)\s*$/i;
+
+/**
+ * Un párrafo cambiado (o agregado después de `original`) con la forma que tenía en la plantilla:
+ *  - si era un renglón de la carátula con el valor a la derecha, el valor nuevo queda contra el margen
+ *    (las tabulaciones de la plantilla estaban medidas para otro nombre);
+ *  - si terminaba con guiones de relleno, se recalculan para el texto nuevo;
+ *  - si no, queda como lo dejó el cambio (sin guiones ni renglones que la plantilla no tenía).
+ */
+function comoEnLaPlantilla(original: ParrafoDocx, xml: string): string {
+  if (!xml || original.enTabla) return xml;
+  const ancho = anchoTextoDe();
+  if (VALOR_TABULADO.test(original.texto.replace(/[ \t]*-{3,}[ \t]*$/, ''))) {
+    const texto = leerParrafo(xml, 0, 0, false).texto.replace(/[ \t]*-{3,}[ \t]*$/, '');
+    const v = VALOR_NUEVO.exec(texto);
+    if (v) {
+      const abre = /^<w:p\b[^>]*>/.exec(xml)?.[0] ?? '<w:p>';
+      const pPr = pPrDe(xml);
+      const rPr = original.runs.find((r) => r.texto?.trim())?.rPr ?? '';
+      const derecho = Number(/<w:ind\b[^>]*\bw:right="(-?\d+)"/.exec(pPr)?.[1] ?? 0);
+      return `${abre}${tabDerecha(pPr, ancho - derecho)}${runsDe(rPr, v[1].replace(/[\t ]+$/, ''))}<w:r>${rPr}<w:tab/></w:r>${runsDe(rPr, v[2])}</w:p>`;
+    }
+  }
+  if (/-{3,}[ \t]*$/.test(original.texto) || /w:leader="hyphen"/.test(original.xml)) return rellenarParrafo(xml, ancho);
+  return xml;
 }
 
 /** Aplica los cambios de un párrafo; devuelve su XML nuevo (vacío si se elimina) */
@@ -359,24 +404,61 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
     else if (c.accion === 'REEMPLAZAR' && previo.accion !== 'ELIMINAR' && previo.accion !== 'REESCRIBIR') { previo.accion = 'REEMPLAZAR'; previo.reemplazos.push(...(c.reemplazos ?? [])); }
     previo.insertar_despues.push(...(c.insertar_despues ?? []));
   }
+  // Un fragmento que no está en su párrafo se aplica en el vecino (o el único párrafo) que lo tiene
+  let reubicados = 0;
+  for (const c of [...unidos.values()]) {
+    const p = porNumero.get(c.p);
+    if (c.accion !== 'REEMPLAZAR' || !p?.editable) continue;
+    c.reemplazos = c.reemplazos.filter((r) => {
+      if (!r.original?.trim() || patronFragmento(r.original).test(p.texto)) return true;
+      const destino = parrafoCon(r.original, c.p, parrafos, porNumero);
+      if (destino === null) return true;
+      let d = unidos.get(destino);
+      if (d && (d.accion === 'ELIMINAR' || d.accion === 'REESCRIBIR')) return true;
+      if (!d) { d = { p: destino, accion: 'REEMPLAZAR', reemplazos: [], texto: '', insertar_despues: [] }; unidos.set(destino, d); }
+      d.accion = 'REEMPLAZAR';
+      d.reemplazos.push(r);
+      reubicados++;
+      return false;
+    });
+  }
+  const textos = new Map<number, string>();
   // De atrás hacia adelante, para que las posiciones en el XML sigan siendo válidas
   for (const c of [...unidos.values()].sort((a, b) => b.p - a.p)) {
     const p = porNumero.get(c.p);
     if (!p || !p.editable) { noAplicados.push({ p: c.p, original: '', motivo: p ? 'El párrafo no se puede editar (cuadro de texto).' : 'El párrafo no existe en la plantilla.' }); continue; }
     const r = editarParrafo(p, c, noAplicados);
-    const nuevos = (c.insertar_despues ?? []).filter((t) => typeof t === 'string' && t.trim()).map((t) => parrafoNuevo(p, t.trim()));
+    if (r.aplicados && !r.eliminado) r.xml = comoEnLaPlantilla(p, r.xml);
+    const nuevos = (c.insertar_despues ?? []).filter((t) => typeof t === 'string' && t.trim()).map((t) => comoEnLaPlantilla(p, parrafoNuevo(p, t.trim())));
     aplicados += r.aplicados;
     if (r.eliminado) eliminados++;
     insertados += nuevos.length;
+    if (r.aplicados || nuevos.length) textos.set(c.p, [r.xml, ...nuevos].filter(Boolean).map((x) => textoParaIA(leerParrafo(x, 0, 0, false).texto)).filter(Boolean).join('\n'));
     xml = xml.slice(0, p.inicio) + r.xml + nuevos.join('') + xml.slice(p.fin);
   }
   zip.file('word/document.xml', xml);
-  return { docx: zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer, aplicados, noAplicados: noAplicados.reverse(), eliminados, insertados };
+  return { docx: zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer, aplicados, noAplicados: noAplicados.reverse(), eliminados, insertados, textos, reubicados };
+}
+
+/**
+ * Formato de la escritura generada sobre una plantilla: la plantilla ya trae el formato de la notaría
+ * (es una escritura de la notaría), así que se conserva tal cual —renglones, títulos, carátula, líneas
+ * de guiones— y solo se ponen el tamaño carta y los márgenes simétricos de la notaría. Los guiones de
+ * los párrafos que cambiaron ya los recalculó aplicarCambios.
+ */
+export function formatoPagina(docx: Buffer): Buffer {
+  const zip = new PizZip(docx);
+  zip.file('word/document.xml', aplicarMargenes(documentoXml(docx)));
+  const ajustes = zip.file('word/settings.xml');
+  if (ajustes) zip.file('word/settings.xml', aplicarAjustesNotariales(ajustes.asText()));
+  return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
 /**
  * Formato de impresión de la notaría sobre el documento completo (márgenes, Arial 12, interlineado 1,5,
- * justificado, sin renglones en blanco y guiones de relleno recalculados): formato-notarial.ts
+ * justificado, sin renglones en blanco y guiones de relleno recalculados): formato-notarial.ts.
+ * Rehace la carátula, los títulos y las líneas de guiones: es para un documento sin ese formato, no
+ * para una plantilla que ya lo trae (para esa, formatoPagina).
  */
 export function formatoNotaria(docx: Buffer): Buffer {
   const zip = new PizZip(docx);

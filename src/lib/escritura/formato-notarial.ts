@@ -321,6 +321,57 @@ export function tabRelleno(pPr: string, pos: number): string {
   return `<w:pPr>${nuevo}</w:pPr>`;
 }
 
+/** pPr con una sola tabulación derecha en `pos` (twips), en lugar de las que traía: el valor queda contra el margen */
+export function tabDerecha(pPr: string, pos: number): string {
+  const interior = pPr.replace(/^<w:pPr\/>$/, '').replace(/^<w:pPr>|<\/w:pPr>$/g, '').replace(/<w:tabs>[\s\S]*?<\/w:tabs>|<w:tabs\/>/g, '');
+  return `<w:pPr>${ponerHijo(interior, [], `<w:tabs><w:tab w:val="right" w:pos="${pos}"/></w:tabs>`, TRAS_TABS)}</w:pPr>`;
+}
+
+/** Partes que no ocupan ancho en el renglón */
+const SIN_ANCHO = /^<w:(?:bookmarkStart|bookmarkEnd|proofErr|lastRenderedPageBreak|permStart|permEnd)\b/;
+
+/**
+ * Recalcula los guiones de relleno de un párrafo cuyo texto cambió, sin tocar nada más (el formato es
+ * el de la plantilla): quita los guiones y la tabulación de relleno que traía y escribe los que caben
+ * ahora al final del párrafo y antes de cada salto de línea. Si el ancho no se puede calcular
+ * (tabulaciones, imágenes, campos) o el párrafo quedó sin texto, lo devuelve igual.
+ */
+export function rellenarParrafo(p: string, anchoTexto: number): string {
+  const m = /^<w:p(\s[^>]*)?>([\s\S]*)<\/w:p>$/.exec(p);
+  if (!m || /<w:(?:drawing|pict|object|fldChar|fldSimple)\b/.test(p)) return p;
+  let pPr = /^<w:pPr>[\s\S]*?<\/w:pPr>/.exec(m[2])?.[0] ?? '';
+  let partes = leerRuns(m[2].slice(pPr.length));
+  // La tabulación final que dibujaba el relleno (con guía de guiones) se quita
+  if (/w:leader="hyphen"/.test(pPr)) {
+    pPr = pPr.replace(/<w:tab\b[^>]*w:leader="hyphen"[^>]*\/>/g, '').replace(/<w:tabs><\/w:tabs>/, '');
+    const ultimo = partes.map((r) => r.tab).lastIndexOf(true);
+    if (ultimo >= 0 && partes.slice(ultimo + 1).every((r) => r.texto === null && !r.tab)) partes = partes.filter((_, i) => i !== ultimo);
+  }
+  if (!partes.every((r) => r.texto !== null || SIN_ANCHO.test(r.xml))) return p;
+  // Los guiones viejos: antes de cada salto y al final (pueden ocupar varias corridas)
+  partes = partes.map((r) => (r.texto === null ? r : { ...r, texto: r.texto.replace(/[ \t]*-{3,}[ \t]*(?=\n)/g, '') }));
+  const completo = partes.map((r) => r.texto ?? '').join('');
+  let sobra = completo.length - completo.replace(/[ \t]*-{3,}[ \t]*$/, '').replace(/[ \t]+$/, '').length;
+  for (let i = partes.length - 1; i >= 0 && sobra > 0; i--) {
+    const t = partes[i].texto;
+    if (!t) continue;
+    const quita = Math.min(sobra, t.length);
+    partes[i] = { ...partes[i], texto: t.slice(0, t.length - quita) };
+    sobra -= quita;
+  }
+  const ultimoTexto = [...partes].reverse().find((r) => r.texto?.trim());
+  if (!ultimoTexto) return p;
+  const renglon = (anchoTexto - twips(pPr, 'left') - twips(pPr, 'right')) / 20 * 1000 / 12;
+  const renglonPrimero = renglon - (twips(pPr, 'firstLine') - twips(pPr, 'hanging')) / 20 * 1000 / 12;
+  if (partes.some((r) => r.texto?.includes('\n'))) partes = rellenarSaltos(partes, renglon, renglonPrimero);
+  const segmentos: Segmento[] = partes.filter((r) => r.texto).map((r) => ({ texto: r.texto!, negrilla: esNegrilla(r.rPr) }));
+  const n = guionesDeRelleno(segmentos, renglon, renglonPrimero);
+  const cuerpo = partes.map((r) => (r.texto === null ? r.xml : r.texto ? runTexto(r.rPr, r.texto) : '')).join('');
+  const conTab = n > 0 || partes.some((r) => r.texto?.includes(FIN_RELLENO));
+  const final = n > 0 ? runTexto(rPrNeutro(ultimoTexto.rPr), ` ${'-'.repeat(n)}${FIN_RELLENO}`) : '';
+  return `<w:p${m[1] ?? ''}>${conTab ? tabRelleno(pPr, anchoTexto - twips(pPr, 'right')) : pPr}${cuerpo}${final}</w:p>`;
+}
+
 /** Renglón de firma («______») */
 const esLineaFirma = (t: string) => /^_{8,}/.test(t);
 

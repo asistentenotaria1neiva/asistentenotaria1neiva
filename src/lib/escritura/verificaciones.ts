@@ -29,35 +29,63 @@ export interface EntradaVerificacion {
   ignorar?: string[];
 }
 
-/** Datos del negocio anterior que siguen en la escritura y no están en los documentos */
-export function datosDeLaPlantillaAnterior(e: EntradaVerificacion): Advertencia[] {
-  const fuentesDigitos = new Set([...e.fuentes.matchAll(/\d[\d.,-]*\d|\d/g)].map((m) => digitos(m[0])).filter((d) => d.length >= 5));
+/** Un dato de la plantilla que no está en los documentos ni en las observaciones del negocio nuevo */
+interface DatoAnterior { tipo: 'numero' | 'nombre'; valor: string; p: number; esta: (texto: string) => boolean }
+
+/**
+ * Números (cédulas, NIT, matrículas, valores) y nombres de personas de la plantilla que no aparecen en
+ * lo cargado para este negocio: si siguen en la escritura, probablemente son del negocio anterior.
+ */
+function datosAnteriores(plantilla: Map<number, string>, fuentes: string, ignorarLista: string[] = []): DatoAnterior[] {
+  const fuentesDigitos = new Set([...fuentes.matchAll(/\d[\d.,-]*\d|\d/g)].map((m) => digitos(m[0])).filter((d) => d.length >= 5));
   const enFuentes = (n: string) => { const d = digitos(n); return [...fuentesDigitos].some((f) => f === d || (d.length >= 7 && f.includes(d))); };
-  const fuentesNorm = normalizar(e.fuentes);
-  const escrituraNorm = normalizar(e.escritura);
-  const ignorar = new Set((e.ignorar ?? []).map(digitos));
+  const fuentesNorm = normalizar(fuentes);
+  const ignorar = new Set(ignorarLista.map(digitos));
   const vistos = new Set<string>();
-  const salida: Advertencia[] = [];
-  for (const [p, texto] of e.plantilla) {
+  const salida: DatoAnterior[] = [];
+  for (const [p, texto] of plantilla) {
     for (const m of texto.matchAll(NUMERO)) {
       const n = m[0];
       const d = digitos(n);
       if (vistos.has(d) || ignorar.has(d) || /^(?:19|20)\d{2}$/.test(d)) continue;
       vistos.add(d);
-      // Sigue en la escritura (con o sin puntos) y no está en lo que se cargó para este negocio
-      if (!e.escritura.includes(n) || enFuentes(n)) continue;
-      salida.push({ nivel: 'ADVERTENCIA', origen: 'SISTEMA', p, detalle: `El número «${n}» viene de la plantilla (párrafo ${p}) y sigue en la escritura, pero no aparece en ningún documento cargado ni en las observaciones: verifique que no sea un dato del negocio anterior.` });
+      if (!enFuentes(n)) salida.push({ tipo: 'numero', valor: n, p, esta: (t) => t.includes(n) });
     }
     for (const m of texto.matchAll(NOMBRE)) {
       const nombre = m[1].trim();
       const clave = normalizar(nombre);
       if (vistos.has(clave) || NO_NOMBRES.test(clave) || clave.split(' ').length < 2) continue;
       vistos.add(clave);
-      if (!escrituraNorm.includes(clave) || fuentesNorm.includes(clave)) continue;
-      salida.push({ nivel: 'ADVERTENCIA', origen: 'SISTEMA', p, detalle: `«${nombre}» comparecía en la plantilla (párrafo ${p}) y sigue en la escritura, pero no aparece en los documentos cargados: verifique que no sea una persona del negocio anterior.` });
+      if (!fuentesNorm.includes(clave)) salida.push({ tipo: 'nombre', valor: nombre, p, esta: (t) => normalizar(t).includes(clave) });
     }
   }
-  return salida.slice(0, 25);
+  return salida;
+}
+
+/** Datos del negocio anterior que siguen en la escritura y no están en los documentos */
+export function datosDeLaPlantillaAnterior(e: EntradaVerificacion): Advertencia[] {
+  return datosAnteriores(e.plantilla, e.fuentes, e.ignorar).filter((d) => d.esta(e.escritura)).slice(0, 25).map((d) => ({
+    nivel: 'ADVERTENCIA', origen: 'SISTEMA', p: d.p,
+    detalle: d.tipo === 'numero'
+      ? `El número «${d.valor}» viene de la plantilla (párrafo ${d.p}) y sigue en la escritura, pero no aparece en ningún documento cargado ni en las observaciones: verifique que no sea un dato del negocio anterior (si es de la parte que se conserva, como el banco o su apoderado, está bien).`
+      : `«${d.valor}» comparecía en la plantilla (párrafo ${d.p}) y sigue en la escritura, pero no aparece en los documentos cargados: verifique que no sea una persona del negocio anterior (si es de la parte que se conserva, como el apoderado del banco, está bien).`,
+  }));
+}
+
+/**
+ * Por párrafo de la plantilla, los datos del negocio anterior que siguen en su texto actual
+ * (`actuales`: el texto ya adaptado de cada párrafo). Es lo que la corrección le devuelve a la IA.
+ */
+export function restosDelNegocioAnterior(plantilla: Map<number, string>, actuales: Map<number, string>, fuentes: string, ignorar?: string[]): Map<number, string[]> {
+  const datos = datosAnteriores(plantilla, fuentes, ignorar);
+  const salida = new Map<number, string[]>();
+  for (const [n, texto] of actuales) {
+    const aqui = datos.filter((d) => d.esta(texto)).map((d) => d.tipo === 'numero'
+      ? `El número «${d.valor}» es de la plantilla y no aparece en los documentos ni en las observaciones.`
+      : `«${d.valor}» es una persona de la plantilla que no aparece en los documentos ni en las observaciones.`);
+    if (aqui.length) salida.set(n, aqui);
+  }
+  return salida;
 }
 
 /** Valores en letras que no corresponden a la cifra que los acompaña: «… PESOS ($150.000.000)» */
@@ -77,6 +105,72 @@ export function valoresEnLetras(escritura: string): Advertencia[] {
     salida.push({ nivel: 'ADVERTENCIA', origen: 'SISTEMA', p: 0, detalle: `El valor en letras junto a «$${m[1]}» no corresponde a la cifra (debería decir «${letras} PESOS»).` });
   }
   return salida.slice(0, 15);
+}
+
+/** Unidad de una medida (ya normalizada a mayúsculas): metros, metros lineales, metros cuadrados */
+const UNIDAD = String.raw`(?:MTS2|MT2|M2|M²|MTS|MT|MLS|ML|METROS(?: LINEALES| CUADRADOS)?|M)\.?(?![A-ZÑ0-9])`;
+/** «(6.00 m)», «(72,50 M2)»: la cifra de una medida entre paréntesis, que va después de sus letras */
+const MEDIDA_PARENTESIS = new RegExp(String.raw`\(\s*(\d{1,6})(?:[.,](\d{1,4}))?\s*${UNIDAD}\s*\)`, 'g');
+/** «6.00 MTS», «22 METROS»: una medida en cifras sin paréntesis (como la copia el certificado de tradición) */
+const MEDIDA_SUELTA = new RegExp(String.raw`(?<![\d.,A-ZÑ-])(\d{1,6}(?:[.,]\d{1,4})?)\s*${UNIDAD}`, 'g');
+/** Un párrafo de linderos: el rótulo de un costado («NORTE:», «SUROCCIDENTE:») o la frase que los presenta */
+const LINDERO = /(?:^|[^A-ZÑ])(?:NOR|SUR)?(?:NORTE|SUR|ORIENTE|OCCIDENTE|CENIT|NADIR)\s*:|LINDEROS\s*:/;
+
+const conLetras = (texto: string, letras: string) => new RegExp(`(?:^|[^A-ZÑ])${letras}(?:[^A-ZÑ]|$)`).test(texto);
+const letrasDe = (n: number) => [...new Set([enteroALetras(n), enteroALetras(n, { apocope: false })])];
+
+/** Las medidas del párrafo: las que no van en letras y en cifras (cada una como frase) y cuántas sí */
+function analizarMedidas(parrafo: string): { problemas: string[]; bien: number } {
+  const texto = normalizar(parrafo);
+  const problemas: string[] = [];
+  let bien = 0;
+  let finAnterior = 0;
+  for (const m of texto.matchAll(MEDIDA_PARENTESIS)) {
+    const antes = texto.slice(Math.max(finAnterior, m.index - 160), m.index);
+    finAnterior = m.index + m[0].length;
+    const entero = Number(m[1]);
+    const dec = m[2] && Number(m[2]) ? m[2] : '';
+    const centesimas = dec ? Math.round(Number(`0.${dec}`) * 100) : 0;
+    const okEntero = letrasDe(entero).some((l) => conLetras(antes, l));
+    // «6.50»: «PUNTO CINCUENTA» (o «CINCO», según cómo lo escriba la plantilla)
+    const okDecimal = !dec || [...letrasDe(centesimas), ...letrasDe(Number(dec))].some((l) => conLetras(antes, l));
+    if (okEntero && okDecimal) { bien++; continue; }
+    const cifra = `${m[1]}${m[2] ? `.${m[2]}` : ''}`;
+    problemas.push(/(?:METRO|PUNTO)[A-ZÑ ]*$/.test(antes.slice(-80))
+      ? `Las letras de la medida «${m[0]}» no corresponden a la cifra: deben decir «${enteroALetras(entero)}${dec ? ` PUNTO ${enteroALetras(centesimas, { apocope: false })}` : ''}».`
+      : `La medida «${cifra}» va solo en cifras: escríbala en letras y en cifras, como en la plantilla.`);
+  }
+  for (const m of texto.matchAll(MEDIDA_SUELTA)) {
+    // La que está entre paréntesis ya se revisó arriba
+    if (/\(\s*$/.test(texto.slice(Math.max(0, m.index - 3), m.index))) continue;
+    problemas.push(`La medida «${m[0].trim()}» va solo en cifras: escríbala en letras y en cifras, como en la plantilla (p. ej. «seis metros (6.00 m)»).`);
+  }
+  return { problemas: [...new Set(problemas)], bien };
+}
+
+/**
+ * Medidas (linderos, áreas) que no van en letras y en cifras —«seis metros (6.00 m)»—: la cifra sin
+ * sus letras, o las letras que no corresponden a la cifra. Cada problema es una frase con la medida.
+ */
+export const medidasSinLetras = (parrafo: string) => analizarMedidas(parrafo).problemas;
+
+/**
+ * Los problemas de medidas de un párrafo ya adaptado que no venían en la plantilla. Se revisan los
+ * párrafos de linderos y los demás solo si la plantilla escribía allí sus medidas en letras y en cifras
+ * (un «Nivel 2.40 m» que la plantilla trae en cifras se deja como está).
+ */
+export function medidasPorRevisar(dePlantilla: string, actual: string): string[] {
+  const antes = analizarMedidas(dePlantilla);
+  if (!LINDERO.test(normalizar(actual)) && !antes.bien) return [];
+  const yaEstaban = new Set(antes.problemas);
+  return medidasSinLetras(actual).filter((x) => !yaEstaban.has(x));
+}
+
+/** Advertencias de las medidas que no quedaron en letras y en cifras en los párrafos que cambiaron */
+export function medidasEnLetras(plantilla: Map<number, string>, cambiados: Map<number, string>): Advertencia[] {
+  const salida: Advertencia[] = [];
+  for (const [p, texto] of cambiados) for (const detalle of medidasPorRevisar(plantilla.get(p) ?? '', texto)) salida.push({ nivel: 'ADVERTENCIA', origen: 'SISTEMA', p, detalle: `Párrafo ${p}: ${detalle}` });
+  return salida.slice(0, 10);
 }
 
 /** Advertencias de lo que quedó pendiente y de los cambios que no se aplicaron */

@@ -10,6 +10,7 @@ function siguiente(e: FilaEscritura): string {
   const g = e.generaciones[0];
   if (g?.estado === 'EN_CURSO') return 'Ver el avance';
   if (g?.estado === 'ERROR') return 'Revisar el error';
+  if (g?.estado === 'CANCELADA') return 'Generar de nuevo';
   if (g) return `Revisar la versión ${g.version}`;
   if (!e._count.documentos) return 'Cargar los documentos';
   return 'Generar la escritura';

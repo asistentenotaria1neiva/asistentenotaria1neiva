@@ -9,7 +9,7 @@ import { after } from 'next/server';
 import { requerirSesion } from '@/lib/sesion';
 import { crearExpediente, cambiarPlantilla, guardarObservaciones, eliminarExpediente, ErrorNegocio, type EleccionPlantilla } from '@/lib/servicios/expedientes';
 import { completarDocumento, eliminarDocumento, releerDocumento, leerDocumento } from '@/lib/servicios/documentos';
-import { iniciarGeneracion } from '@/lib/servicios/generacion';
+import { iniciarGeneracion, iniciarAjuste, cancelarGeneracion } from '@/lib/servicios/generacion';
 import { urlAplicacion } from '@/lib/seguridad/red';
 
 export interface Resultado { error?: string; ok?: string }
@@ -103,4 +103,20 @@ export async function accionEliminarExpediente(expedienteId: string): Promise<Re
   const r = await ejecutar(() => eliminarExpediente(s, expedienteId));
   if (r.error) return r;
   redirect('/expedientes');
+}
+
+/** Detiene la generación en curso (la versión queda «cancelada»; los documentos leídos se conservan) */
+export async function accionCancelarGeneracion(expedienteId: string): Promise<Resultado> {
+  const s = await requerirSesion();
+  return ejecutar(async () => `Se canceló la generación de la versión ${await cancelarGeneracion(s, expedienteId)}.`, `/expedientes/${expedienteId}`);
+}
+
+/** Corrige la última versión según lo que pide el digitador (sin rehacerla: solo cambian los párrafos afectados) */
+export async function accionCorregirVersion(expedienteId: string, _: Resultado, f: FormData): Promise<Resultado> {
+  const s = await requerirSesion();
+  return ejecutar(async () => {
+    const { version, tarea } = await iniciarAjuste(s, expedienteId, String(f.get('pedido') ?? ''), await urlAplicacion());
+    after(() => tarea().catch((e) => console.error('[corregir]', e)));
+    return `Corrigiendo: la versión ${version} tendrá su corrección. Le avisaremos en «Notificaciones» al terminar.`;
+  }, `/expedientes/${expedienteId}`);
 }
