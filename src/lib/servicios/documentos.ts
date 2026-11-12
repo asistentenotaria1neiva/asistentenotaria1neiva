@@ -4,7 +4,7 @@
  * Cada documento se lee UNA sola vez con Haiku (muy económico) y lo leído se guarda: generar la
  * escritura otra vez (con otras observaciones u otra plantilla) no vuelve a pagar la lectura. La
  * lectura empieza apenas se carga el documento, en segundo plano, y la generación espera a los que
- * falten. Un PDF de más de 90 páginas se lee por tramos.
+ * falten. Un PDF de más de 30 páginas se lee por tramos (ver PAGINAS_POR_TRAMO).
  */
 import 'server-only';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -24,8 +24,12 @@ import { expedienteEditable, obtenerExpediente, ErrorNegocio } from './expedient
 
 /** El navegador envía cada archivo en partes (Vercel limita cada petición a 4,5 MB) */
 const TAMANO_MAXIMO_PARTE = 4 * 1024 * 1024;
-/** Páginas de PDF por llamada (la API admite 100) */
-const PAGINAS_POR_TRAMO = 90;
+/**
+ * Páginas de PDF por llamada. Cada página cuesta ~1.500-3.000 tokens (texto + imagen) y Haiku 5.5
+ * cobra 5 veces más TODA la llamada cuando el prompt pasa de 100.000 tokens: 30 páginas la mantienen
+ * por debajo (90 páginas la pasaban casi siempre). También reduce las lecturas cortadas por longitud.
+ */
+export const PAGINAS_POR_TRAMO = 30;
 /** Una lectura «en curso» que no avanza en este tiempo se cortó y se puede repetir */
 export const LECTURA_CORTADA_MS = 6 * 60_000;
 /** Texto máximo de un documento de Word que se envía a leer */

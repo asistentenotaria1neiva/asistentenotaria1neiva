@@ -6,7 +6,8 @@
  *   2. REDACCION . Sonnet recibe los párrafos numerados de la plantilla, lo leído de los documentos y las
  *                  observaciones del digitador, y devuelve SOLO los cambios a la plantilla y la revisión
  *                  (advertencias). Salida corta = pocos tokens; la plantilla y lo leído van en caché, así
- *                  que una continuación o una nueva versión con otras observaciones los paga al 10 %.
+ *                  que una continuación o una nueva versión (aun con otras observaciones) antes de 5
+ *                  minutos los paga al 10 %.
  *   3. FALTANTES . lo que quedó «FALTA» se busca en los documentos originales (Haiku).
  *   4. FINAL ..... los cambios se aplican al Word de la plantilla (su formato se conserva), se aplica el
  *                  formato de la notaría, se suman las verificaciones sin IA y se guarda la versión cifrada.
@@ -29,7 +30,7 @@ import { llamarEstructurado, configuracionModelo, ErrorIA, type ResultadoLlamada
 import { rescatarArreglo, rescatarTexto } from '../ia/json';
 import { SISTEMA_REDACCION, ESQUEMA_REDACCION, SISTEMA_FALTANTES, ESQUEMA_FALTANTES, lecturaComoTexto, type Lectura, type Advertencia, type Otorgante } from '../ia/instrucciones';
 import { expedienteEditable, obtenerExpediente, bytesPlantilla, ErrorNegocio } from './expedientes';
-import { leerDocumento, bloquesDeArchivo, LECTURA_CORTADA_MS } from './documentos';
+import { leerDocumento, bloquesDeArchivo, LECTURA_CORTADA_MS, PAGINAS_POR_TRAMO, MIME_DOCX } from './documentos';
 import { notificar } from './notificaciones';
 import { pedirEtapa, LIMITE_SIN_LATIDO_MS } from './tareas';
 
@@ -290,8 +291,9 @@ async function redactar(id: string, expedienteId: string, p: Progreso): Promise<
         { type: 'text', text: `<caso>\n${JSON.stringify(caso)}\n</caso>` },
         { type: 'text', text: instruccion },
       ],
-      // La plantilla, lo leído y el caso son iguales en una continuación (y en otra versión con las mismas observaciones)
-      cachearBloques: 3,
+      // La plantilla y lo leído son iguales en una continuación y en otra versión aunque cambien las
+      // observaciones o la fecha (van en <caso>, después del punto de caché, y son cortos)
+      cachearBloques: 2,
       esquema: ESQUEMA_REDACCION as unknown as Record<string, unknown>,
       maxTokens: MAXIMO_SALIDA,
     });
@@ -347,7 +349,14 @@ function reemplazarFaltante(p: Progreso, dato: string, valor: string) {
   }
 }
 
-/** Busca los faltantes en los documentos originales, en grupos de hasta ~90 páginas por llamada */
+/** Un Word de hasta 150.000 caracteres pesa en tokens como unas 15 páginas de PDF */
+const PESO_DOCX = 15;
+
+/**
+ * Busca los faltantes en los documentos originales, en grupos de hasta PAGINAS_POR_TRAMO páginas por
+ * llamada (así cada llamada queda bajo los 100.000 tokens, donde Haiku cuesta 5 veces más). Un PDF más
+ * largo se revisa tramo por tramo y se para apenas no quede nada por buscar.
+ */
 async function buscarFaltantes(id: string, expedienteId: string, p: Progreso) {
   const inicio = Date.now();
   let faltan = buscables(p);
@@ -355,40 +364,53 @@ async function buscarFaltantes(id: string, expedienteId: string, p: Progreso) {
   const grupos: (typeof docs)[] = [];
   let grupo: typeof docs = [], paginas = 0;
   for (const d of docs) {
-    const n = Math.min(d.paginas ?? 1, 90);
-    if (grupo.length && paginas + n > 90) { grupos.push(grupo); grupo = []; paginas = 0; }
+    const n = d.mime === MIME_DOCX ? PESO_DOCX : d.paginas ?? 1;
+    if (grupo.length && paginas + n > PAGINAS_POR_TRAMO) { grupos.push(grupo); grupo = []; paginas = 0; }
     grupo.push(d);
     paginas += n;
   }
   if (grupo.length) grupos.push(grupo);
+  const seAcabo = () => !faltan.length || Date.now() - inicio > 150_000;
   for (const g of grupos) {
-    if (!faltan.length || Date.now() - inicio > 150_000) break;
+    if (seAcabo()) break;
     const liberar: (() => Promise<void>)[] = [];
     try {
-      const contenido: Anthropic.Beta.BetaContentBlockParam[] = [];
+      const archivos: { d: (typeof g)[number]; a: Awaited<ReturnType<typeof bloquesDeArchivo>> }[] = [];
       for (const d of g) {
         const a = await bloquesDeArchivo(await leerCifrado(d.rutaCifrada), d.mime, d.nombreOriginal);
         liberar.push(a.liberar);
-        // Un archivo de más de 90 páginas solo entra con su primer tramo
-        contenido.push({ type: 'text', text: `Documento «${d.nombreOriginal}»:` }, a.tramos[0].bloque);
+        archivos.push({ d, a });
       }
-      const ids = new Map(faltan.map((f, i) => [`F${i + 1}`, f]));
-      contenido.push({ type: 'text', text: `<faltantes>\n${JSON.stringify([...ids].map(([k, f]) => ({ id: k, dato: f.dato, parrafo: f.contexto })))}\n</faltantes>` });
-      const r = await llamarEstructurado<{ encontrados: { id: string; valor: string; documento: string; pagina: number; fragmento: string }[] }>({
-        proposito: 'LECTURA', registro: { usuarioId: p.sesion.usuario.id, expedienteId, generacionId: id },
-        sistema: SISTEMA_FALTANTES, contenido, esquema: ESQUEMA_FALTANTES as unknown as Record<string, unknown>, maxTokens: 8000,
-      });
-      sumar(p, r);
-      for (const x of r.datos.encontrados ?? []) {
-        const f = ids.get(x.id);
-        if (!f || !x.valor?.trim() || /FALTA/i.test(x.valor)) continue;
-        reemplazarFaltante(p, f.dato, x.valor.trim());
-        p.completados.push({ dato: f.dato, valor: x.valor.trim(), fuente: `${x.documento}${x.pagina ? `, pág. ${x.pagina}` : ''}` });
+      // Un archivo solo (quizá largo) va tramo por tramo; varios cortos, juntos en una llamada
+      const llamadas: { contenido: Anthropic.Beta.BetaContentBlockParam[]; desde: number }[] = archivos.length === 1
+        ? archivos[0].a.tramos.map((t) => ({ desde: t.desde, contenido: [{ type: 'text', text: `Documento «${archivos[0].d.nombreOriginal}»${archivos[0].a.tramos.length > 1 ? ` (tramo desde la página ${t.desde}; numera las páginas desde 1 dentro del tramo)` : ''}:` }, t.bloque] }))
+        : [{ desde: 1, contenido: archivos.flatMap(({ d, a }) => [{ type: 'text', text: `Documento «${d.nombreOriginal}»:` } as const, a.tramos[0].bloque]) }];
+      for (const ll of llamadas) {
+        if (seAcabo()) break;
+        try {
+          const ids = new Map(faltan.map((f, i) => [`F${i + 1}`, f]));
+          const contenido = [...ll.contenido, { type: 'text' as const, text: `<faltantes>\n${JSON.stringify([...ids].map(([k, f]) => ({ id: k, dato: f.dato, parrafo: f.contexto })))}\n</faltantes>` }];
+          const r = await llamarEstructurado<{ encontrados: { id: string; valor: string; documento: string; pagina: number; fragmento: string }[] }>({
+            proposito: 'LECTURA', registro: { usuarioId: p.sesion.usuario.id, expedienteId, generacionId: id },
+            sistema: SISTEMA_FALTANTES, contenido, esquema: ESQUEMA_FALTANTES as unknown as Record<string, unknown>, maxTokens: 8000,
+          });
+          sumar(p, r);
+          for (const x of r.datos.encontrados ?? []) {
+            const f = ids.get(x.id);
+            if (!f || !x.valor?.trim() || /FALTA/i.test(x.valor)) continue;
+            reemplazarFaltante(p, f.dato, x.valor.trim());
+            const pagina = x.pagina ? x.pagina + ll.desde - 1 : 0;
+            p.completados.push({ dato: f.dato, valor: x.valor.trim(), fuente: `${x.documento}${pagina ? `, pág. ${pagina}` : ''}` });
+          }
+          faltan = buscables(p);
+          await guardar(id, p);
+        } catch (err) {
+          // La búsqueda es una ayuda: si falla, lo que falta sigue marcado «FALTA»
+          if (!(err instanceof ErrorIA)) throw err;
+          console.error('[generacion] búsqueda de faltantes', err.message);
+        }
       }
-      faltan = buscables(p);
-      await guardar(id, p);
     } catch (err) {
-      // La búsqueda es una ayuda: si falla, lo que falta sigue marcado «FALTA»
       if (!(err instanceof ErrorIA)) throw err;
       console.error('[generacion] búsqueda de faltantes', err.message);
     } finally {
