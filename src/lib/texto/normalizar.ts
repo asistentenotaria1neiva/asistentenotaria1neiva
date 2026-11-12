@@ -9,6 +9,11 @@ export function normalizar(t: string): string {
     .trim();
 }
 
+/** Quita las tildes y la diéresis sin cambiar nada más (la Ñ se conserva) */
+export function sinTildes(t: string): string {
+  return t.replace(/ñ/g, '\u0001').replace(/Ñ/g, '\u0002').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\u0001/g, 'ñ').replace(/\u0002/g, 'Ñ');
+}
+
 /** Palabras de una búsqueda (cada una debe aparecer, en cualquier orden) */
 export const terminosBusqueda = (q: string) => normalizar(q).split(' ').filter((x) => x.length > 0).slice(0, 8);
 

@@ -13,8 +13,9 @@
  * guiones de relleno de cada párrafo.
  */
 import PizZip from 'pizzip';
-import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, aplicarFuenteEInterlineado, aplicarMargenes, interlineadoEnPPr, anchoTextoDe, rellenarParrafo, tabDerecha } from './formato-notarial';
+import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, espacioNotarioEnBlanco, negrillasNotariales, aplicarFuenteEInterlineado, aplicarMargenes, interlineadoEnPPr, anchoTextoDe, rellenarParrafo, tabDerecha } from './formato-notarial';
 import { expandirNomenclatura } from './nomenclatura';
+import { normalizar, sinTildes } from '../texto/normalizar';
 
 const decodificar = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, '&');
 const escapar = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -472,8 +473,45 @@ export function limpiarZonaFirmas(texto: string, esRotulo = false): string {
     const quitar = esRotulo || ROTULO_FIRMA.test(linea.trim())
       ? /\s*(?:«EN BLANCO»|«FALTA:[^»]*»|_{6,})/g
       : /\s*«EN BLANCO»/g;
-    return quitar.test(linea) ? linea.replace(quitar, '').replace(/[ \t]+$/, '') : linea;
+    const l = quitar.test(linea) ? linea.replace(quitar, '').replace(/[ \t]+$/, '') : linea;
+    // El nombre del firmante (renglón en mayúscula) va sin tildes, como en el resto de la escritura
+    return /[A-ZÁÉÍÓÚÑ]/.test(l) && !/[a-záéíóúñ]/.test(l) ? sinTildes(l) : l;
   }).join('\n');
+}
+
+const sinIdsDeWord = (xml: string) => xml.replace(/\s+w14:paraId="[^"]*"|\s+w14:textId="[^"]*"/g, '');
+/** Primeras dos palabras de un rótulo de firma («C C NO», «ESTADO CIVIL», «FECHA DE»…), para hallar su igual */
+const claveRotulo = (t: string) => normalizar(t).replace(/[^A-ZÑ ]+/g, ' ').trim().split(/\s+/).slice(0, 3).join(' ');
+const compacto = (t: string) => normalizar(t).replace(/[\s_]+/g, '');
+
+/** Párrafo con el pPr de `base` y el formato de su primera corrida con texto */
+function parrafoComo(base: ParrafoDocx, texto: string): string {
+  const abre = sinIdsDeWord(/^<w:p\b[^>]*>/.exec(base.xml)?.[0] ?? '<w:p>');
+  const pPr = pPrDe(base.xml).replace(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g, '').replace(/<w:pPrChange\b[\s\S]*?<\/w:pPrChange>/g, '');
+  return `${abre}${pPr}${runsDe(base.runs.find((r) => r.texto?.trim())?.rPr ?? '', texto)}</w:p>`;
+}
+
+/**
+ * Bloque de firma que agrega la IA (otro otorgante): cada renglón va como un párrafo con el formato de
+ * su igual en la plantilla, para que quede idéntico a los demás bloques:
+ *  - el nombre, como el nombre de un firmante de la plantilla (negrilla), en mayúscula y sin tildes (la Ñ queda);
+ *  - cada rótulo («C.C. No.», «Estado Civil:», «Persona expuesta…», «Fecha de vinculación…»), copiado
+ *    de la plantilla tal cual (negrillas, espacios y rayas), si es el mismo rótulo;
+ *  - lo demás, con el formato del párrafo tras el que se agrega.
+ */
+function renglonesDeFirma(texto: string, zona: ParrafoDocx[], base: ParrafoDocx): string[] {
+  const conTexto = zona.filter((x) => x.editable && !x.enTabla && x.texto.trim());
+  // Nombre de un firmante: el renglón en mayúscula justo antes de un «C.C. No.»
+  const nombre = conTexto.find((x, i) => /^C\.?\s*C\.?\s*No\b/i.test(conTexto[i + 1]?.texto.trim() ?? '') && !/[a-záéíóúñ]/.test(x.texto) && !ROTULO_FIRMA.test(x.texto.trim()));
+  return texto.split('\n').map((l) => l.trim()).filter(Boolean).map((linea) => {
+    if (ROTULO_FIRMA.test(linea)) {
+      const igual = conTexto.find((x) => ROTULO_FIRMA.test(x.texto.trim()) && claveRotulo(x.texto) === claveRotulo(linea));
+      if (igual) return compacto(igual.texto) === compacto(linea) ? sinIdsDeWord(igual.xml) : parrafoComo(igual, linea);
+    } else if (nombre && /[A-ZÁÉÍÓÚÑ]/.test(linea) && !/[a-záéíóúñ]/.test(linea)) {
+      return parrafoComo(nombre, normalizar(linea));
+    }
+    return parrafoNuevo(base, linea);
+  });
 }
 
 /**
@@ -536,16 +574,58 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
     const p = porNumero.get(c.p);
     if (!p || !p.editable) { noAplicados.push({ p: c.p, original: '', motivo: p ? 'El párrafo no se puede editar (cuadro de texto).' : 'El párrafo no existe en la plantilla.' }); continue; }
     const r = editarParrafo(p, c, noAplicados);
-    if (r.aplicados && !r.eliminado) r.xml = comoEnLaPlantilla(p, r.xml);
-    const nuevos = (c.insertar_despues ?? []).filter((t) => typeof t === 'string' && t.trim()).map((t) => comoEnLaPlantilla(p, parrafoNuevo(p, t.trim())));
+    // En la redacción (no en la carátula en mayúsculas, ni en tablas ni en las firmas) las negrillas
+    // se rehacen: solo títulos de cláusula, rótulos y datos en mayúscula
+    const negrillas = (x: string) => (!p.enTabla && (firmas === null || c.p < firmas) && /[a-záéíóúñ]/.test(leerParrafo(x, 0, 0, false).texto) ? negrillasNotariales(x) : x);
+    if (r.aplicados && !r.eliminado) r.xml = comoEnLaPlantilla(p, negrillas(r.xml));
+    const enFirmas = firmas !== null && c.p >= firmas && !p.enTabla;
+    const nuevos = (c.insertar_despues ?? []).filter((t) => typeof t === 'string' && t.trim())
+      .flatMap((t) => enFirmas ? renglonesDeFirma(t, parrafos.filter((x) => x.n >= firmas!), p) : [comoEnLaPlantilla(p, negrillas(parrafoNuevo(p, t.trim())))]);
     aplicados += r.aplicados;
     if (r.eliminado) eliminados++;
     insertados += nuevos.length;
     if (r.aplicados || nuevos.length) textos.set(c.p, [r.xml, ...nuevos].filter(Boolean).map((x) => textoParaIA(leerParrafo(x, 0, 0, false).texto)).filter(Boolean).join('\n'));
     xml = xml.slice(0, p.inicio) + r.xml + nuevos.join('') + xml.slice(p.fin);
   }
+  xml = rotulosDeDerechos(xml);
   zip.file('word/document.xml', xml);
   return { docx: zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer, aplicados, noAplicados: noAplicados.reverse(), eliminados, insertados, textos, reubicados };
+}
+
+const DERECHOS = /^\s*DERECHOS\s+NOTARIALES\s*:?/i;
+const RETEFUENTE = /^\s*RETE\s*FUENTE\s*:?/i;
+/** Renglones del bloque de derechos que no van (IVA, Fondo, Super, recaudos, valores sueltos) */
+const OTRO_COBRO = /^\s*(?:IVA|FONDO|SUPER|RECAUDO|APORTE|\$|_)/i;
+
+/** Párrafo con solo el rótulo, con el formato de su primera corrida de texto (sin resaltado ni subrayado) */
+function soloRotulo(p: ParrafoDocx, rotulo: string): string {
+  const abre = /^<w:p\b[^>]*>/.exec(p.xml)?.[0] ?? '<w:p>';
+  const rPr = (p.runs.find((r) => r.texto?.trim())?.rPr ?? '').replace(/<w:highlight\b[^>]*\/>|<w:u\b[^>]*\/>|<w:shd\b[^>]*\/>/g, '').replace(/^<w:rPr><\/w:rPr>$/, '');
+  return `${abre}${pPrDe(p.xml)}<w:r>${rPr}${contenido(rotulo)}</w:r></w:p>`;
+}
+
+/**
+ * Al final de la escritura, el bloque de derechos queda solo con los rótulos, en blanco para llenar a mano:
+ *   DERECHOS NOTARIALES:
+ *   RETEFUENTE:
+ * sin los valores, el IVA, el Fondo, la Superintendencia, las rayas resaltadas ni los guiones.
+ */
+export function rotulosDeDerechos(xml: string): string {
+  const parrafos = parrafosDe(xml);
+  const i = parrafos.findIndex((p) => p.editable && !p.enTabla && DERECHOS.test(p.texto) && p.texto.length < 400);
+  if (i < 0) return xml;
+  // Si la plantilla trae la retención en el mismo párrafo, los dos rótulos quedan en él, uno por renglón
+  if (/RETE\s*FUENTE/i.test(parrafos[i].texto)) return xml.slice(0, parrafos[i].inicio) + soloRotulo(parrafos[i], 'DERECHOS NOTARIALES:\nRETEFUENTE:') + xml.slice(parrafos[i].fin);
+  const cambios: { p: ParrafoDocx; xml: string }[] = [{ p: parrafos[i], xml: soloRotulo(parrafos[i], 'DERECHOS NOTARIALES:') }];
+  for (let k = i + 1; k < Math.min(parrafos.length, i + 8); k++) {
+    const p = parrafos[k];
+    if (!p.editable || p.enTabla) break;
+    if (RETEFUENTE.test(p.texto)) { cambios.push({ p, xml: soloRotulo(p, 'RETEFUENTE:') }); break; }
+    if (OTRO_COBRO.test(p.texto)) cambios.push({ p, xml: '' });
+    else if (p.texto.trim()) break;
+  }
+  for (const c of cambios.reverse()) xml = xml.slice(0, c.p.inicio) + c.xml + xml.slice(c.p.fin);
+  return xml;
 }
 
 /**
@@ -557,7 +637,7 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
  */
 export function formatoPagina(docx: Buffer): Buffer {
   const zip = new PizZip(docx);
-  zip.file('word/document.xml', aplicarFuenteEInterlineado(aplicarMargenes(documentoXml(docx))));
+  zip.file('word/document.xml', aplicarFuenteEInterlineado(espacioNotarioEnBlanco(aplicarMargenes(documentoXml(docx)))));
   const estilos = zip.file('word/styles.xml');
   if (estilos) zip.file('word/styles.xml', interlineadoEnPPr(aplicarEstilosNotariales(estilos.asText())));
   const ajustes = zip.file('word/settings.xml');

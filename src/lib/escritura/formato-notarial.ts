@@ -115,7 +115,7 @@ const INICIO_PARTE = new RegExp(`^(?:${TITULO_CLAUSULA.source.slice(1)}|Comparec
 const ROTULOS = /^(?:[a-z]\. |Se le agregan los comprobantes fiscales correspondientes cuyo texto es el del siguiente tenor:|C\.C\. No\.|Estado Civil:|Dirección y Domicilio:|Teléfono:|Actividad Económica:|E-mail:)/;
 
 const MINUSCULA = /[a-záéíóúñü]/;
-const cifraFuerte = (t: string) => /^\(?\$?\d{1,3}(?:\.\d{3})+(?:,\d+)?\)?[.,;:)]*$/.test(t) || /^\d{2,4}-\d{3,}[.,;:]*$/.test(t) || /^\d{10,}[.,;:]*$/.test(t);
+const cifraFuerte = (t: string) => /^\(?\$?\d{1,3}(?:\.\d{3})+(?:,\d+)?\)?[.,;:)]*$/.test(t) || /^\d{2,4}-\d{3,}[.,;:]*$/.test(t) || /^\d{6,}[.,;:]*$/.test(t);
 
 /**
  * Tramos [inicio, fin) del texto que van en negrilla: el título de la cláusula, los rótulos y las
@@ -372,6 +372,41 @@ export function rellenarParrafo(p: string, anchoTexto: number): string {
   return `<w:p${m[1] ?? ''}>${conTab ? tabRelleno(pPr, anchoTexto - twips(pPr, 'right')) : pPr}${cuerpo}${final}</w:p>`;
 }
 
+/**
+ * Negrillas de la notaría en un párrafo que cambió la IA: van en negrilla SOLO el título de la
+ * cláusula («PRIMERO:», «PARÁGRAFO:»), los rótulos fijos y los datos en MAYÚSCULA (nombres, número de
+ * identificación, estado civil, actividad, valores); lo demás («mayor de edad, domiciliado en…») sin
+ * negrilla, aunque el texto nuevo haya heredado la negrilla de la corrida donde quedó. Las marcas
+ * resaltadas («FALTA», «EN BLANCO») se dejan como están.
+ */
+export function negrillasNotariales(p: string): string {
+  const m = /^<w:p(\s[^>]*)?>([\s\S]*)<\/w:p>$/.exec(p);
+  if (!m) return p;
+  const pPr = /^<w:pPr>[\s\S]*?<\/w:pPr>/.exec(m[2])?.[0] ?? '';
+  const partes = leerRuns(m[2].slice(pPr.length));
+  const texto = partes.map((r) => (r.texto ?? (r.tab ? '\t' : '￼'))).join('');
+  const tramos = tramosNegrilla(texto);
+  const enTramo = (i: number) => tramos.some(([a, b]) => i >= a && i < b);
+  const sinNegrilla = (rPr: string) => rPr.replace(/<w:b(?:Cs)?(?:\s[^>]*)?\/>/g, '').replace(/^<w:rPr><\/w:rPr>$/, '');
+  let pos = 0;
+  const cuerpo = partes.map((r) => {
+    if (r.texto === null) { pos += 1; return r.xml; }
+    const inicio = pos;
+    pos += r.texto.length;
+    if (/<w:highlight\b/.test(r.rPr)) return r.xml;
+    let xml = '';
+    for (let k = 0; k < r.texto.length;) {
+      const negrilla = enTramo(inicio + k);
+      let fin = k + 1;
+      while (fin < r.texto.length && enTramo(inicio + fin) === negrilla) fin++;
+      xml += runTexto(negrilla ? conNegrilla(sinNegrilla(r.rPr), true) : sinNegrilla(r.rPr), r.texto.slice(k, fin));
+      k = fin;
+    }
+    return xml;
+  }).join('');
+  return `<w:p${m[1] ?? ''}>${pPr}${cuerpo}</w:p>`;
+}
+
 /** Renglón de firma («______») */
 const esLineaFirma = (t: string) => /^_{8,}/.test(t);
 
@@ -452,6 +487,28 @@ export const RENGLONES_NOTARIO = 5;
 const DATO_CARATULA = /^(?:MATR[IÍ]CULA|C[EÉ]DULA CATASTRAL|NOMBRE O DIRECCI[OÓ]N|DIRECCI[OÓ]N|OFICINA DE REGISTRO|INMUEBLE|UBICACI[OÓ]N)/i;
 /** Encabezado con el notario («En la ciudad de Neiva…, donde funciona la NOTARÍA…, cuyo notario…»): lo reemplaza el espacio en blanco */
 const ENCABEZADO_NOTARIO = (t: string) => /^En la ciudad de /i.test(t) && /NOTAR[IÍ]A/i.test(t) && !/compareci/i.test(t);
+
+/**
+ * Espacio del notario en una escritura hecha sobre una plantilla: el encabezado con el notario («En la
+ * ciudad de Neiva…, donde funciona la Notaría Primera…, cuyo notario…») se llena al otorgar, así que
+ * el primero que aparezca (antes de las firmas y fuera de tablas) se cambia por RENGLONES_NOTARIO
+ * renglones en blanco. Recibe el document.xml completo.
+ */
+export function espacioNotarioEnBlanco(xml: string): string {
+  const inicio = xml.indexOf('<w:body>') + '<w:body>'.length;
+  if (inicio < '<w:body>'.length) return xml;
+  const partes = xml.slice(inicio).split(/(?=<w:p[\s>])|(?<=<\/w:p>)/);
+  let tabla = 0;
+  for (const [i, t] of partes.entries()) {
+    if (!/^<w:p[\s>]/.test(t)) { tabla += (t.match(/<w:tbl[\s>]/g) ?? []).length - (t.match(/<\/w:tbl>/g) ?? []).length; continue; }
+    const plano = textoDe(t).trim();
+    if (esLineaFirma(plano)) break;
+    if (tabla || !ENCABEZADO_NOTARIO(plano)) continue;
+    partes[i] = Array.from({ length: RENGLONES_NOTARIO }, () => normalizarParrafo('<w:p><w:pPr></w:pPr></w:p>')).join('');
+    return xml.slice(0, inicio) + partes.join('');
+  }
+  return xml;
+}
 
 /**
  * Formatea el cuerpo del documento. `anchoTexto`: ancho del renglón en twips (página menos márgenes).

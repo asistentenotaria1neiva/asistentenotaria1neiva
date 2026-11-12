@@ -29,6 +29,7 @@ import { plantillaNumerada, aplicarCambios, formatoPagina, textoDocx, textosPorP
 import { datosDeLaPlantillaAnterior, restosDelNegocioAnterior, valoresEnLetras, medidasEnLetras, medidasPorRevisar, pendientes } from '../escritura/verificaciones';
 import { llamarEstructurado, configuracionModelo, ErrorIA, type ResultadoLlamada } from '../ia/cliente';
 import { rescatarArreglo, rescatarTexto } from '../ia/json';
+import { normalizar } from '../texto/normalizar';
 import { SISTEMA_REDACCION, ESQUEMA_REDACCION, INSTRUCCION_CORRECCION, INSTRUCCION_AJUSTE, SISTEMA_FALTANTES, ESQUEMA_FALTANTES, lecturaComoTexto, type Lectura, type Advertencia, type Otorgante } from '../ia/instrucciones';
 import { expedienteEditable, obtenerExpediente, bytesPlantilla, ErrorNegocio } from './expedientes';
 import { leerDocumento, bloquesDeArchivo, LECTURA_CORTADA_MS, PAGINAS_POR_TRAMO, MIME_DOCX } from './documentos';
@@ -552,10 +553,27 @@ async function ajustar(id: string, expedienteId: string, p: Progreso) {
 /** Textos nuevos de los cambios (donde pueden ir marcas «FALTA») */
 const textosDe = (c: CambioParrafo) => [c.texto, ...c.reemplazos.map((r) => r.nuevo), ...c.insertar_despues];
 
+/** Faltantes del documento de identidad de una persona (número, lugar o fecha de expedición); no la cédula catastral */
+const DATO_DE_IDENTIDAD = /expedici[oó]n|\bc[eé]dula\b(?!\s+catastral)|identificaci[oó]n|pasaporte/i;
+
+/**
+ * Un faltante de identidad solo se busca si dice de quién es («lugar de expedición de la cédula de
+ * LAURA MORENO BOLIVAR»): la marca se reemplaza en todos los párrafos donde aparece igual, así que uno
+ * genérico («lugar de expedición») le pondría a una persona el dato de otra. Ese queda «FALTA».
+ */
+function nombraAUnOtorgante(dato: string, otorgantes: Otorgante[]): boolean {
+  const d = ` ${normalizar(dato)} `;
+  return otorgantes.some((o) => {
+    const palabras = normalizar(o.nombre).split(' ').filter((x) => x.length >= 3);
+    return palabras.length >= 2 && palabras.filter((x) => d.includes(` ${x} `)).length >= 2;
+  });
+}
+
 /** Faltantes que vale la pena buscar en los documentos, con el texto donde van */
 function buscables(p: Progreso): { dato: string; contexto: string }[] {
   const lista = new Map<string, string>();
-  for (const c of p.cambios.filter((x) => !p.ajustados || p.ajustados.includes(x.p))) for (const t of textosDe(c)) for (const dato of faltantesEn(t)) if (!NO_SE_BUSCA.test(dato) && !lista.has(dato)) lista.set(dato, normalizarMarcas(t).replace(/\*\*/g, '').slice(0, 600));
+  const sePuedeBuscar = (dato: string) => !NO_SE_BUSCA.test(dato) && (!DATO_DE_IDENTIDAD.test(dato) || nombraAUnOtorgante(dato, p.otorgantes));
+  for (const c of p.cambios.filter((x) => !p.ajustados || p.ajustados.includes(x.p))) for (const t of textosDe(c)) for (const dato of faltantesEn(t)) if (sePuedeBuscar(dato) && !lista.has(dato)) lista.set(dato, normalizarMarcas(t).replace(/\*\*/g, '').slice(0, 600));
   return [...lista].slice(0, 40).map(([dato, contexto]) => ({ dato, contexto }));
 }
 

@@ -200,3 +200,25 @@ describe('verificaciones sin IA', () => {
     expect(pendientes(['cédula'], [], [{ p: 2, original: 'x', motivo: 'No se encontró' }])).toHaveLength(2);
   });
 });
+
+describe('bloque de firma agregado por la IA', () => {
+  it('cada renglón queda con el formato de su igual en la plantilla y el nombre sin tildes', () => {
+    const plantilla = docx([
+      p(r('PRIMERO: Cláusula.')),
+      p(r('LOS OTORGANTES,', true)),
+      p(r('ERICK ROJAS CAMACHO', true)),
+      p(r('C.C. No.', true)),
+      p(r('Estado Civil:', true)),
+      p(r('Persona expuesta políticamente (Decreto 830 de 2021): SI ____ NO ____')),
+      p(r('Fecha de desvinculación: día (       ) mes (       ) año (       ).')),
+    ].join(''));
+    const { docx: salida } = aplicarCambios(plantilla, [{ p: 7, accion: 'REEMPLAZAR', reemplazos: [], texto: '', insertar_despues: ['LAURA MORENO BOLÍVAR\nC.C. No.\nEstado Civil:\nPersona expuesta políticamente (Decreto 830 de 2021): SI ____ NO ____\nFecha de desvinculación: día ( ) mes ( ) año ( ).'] }]);
+    const xml = documentoXml(salida);
+    expect(xml).toContain('<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">LAURA MORENO BOLIVAR</w:t></w:r>');
+    expect(xml).not.toContain('BOLÍVAR');
+    expect(xml.match(/<w:b\/><\/w:rPr><w:t xml:space="preserve">C\.C\. No\.<\/w:t>/g)).toHaveLength(2);
+    expect(xml.match(/<w:b\/><\/w:rPr><w:t xml:space="preserve">Estado Civil:<\/w:t>/g)).toHaveLength(2);
+    expect(xml.match(/día \( {7}\) mes/g)).toHaveLength(2);
+    expect(parrafosDe(xml).filter((x) => x.texto.trim())).toHaveLength(12);
+  });
+});
