@@ -471,6 +471,19 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
   let espacioNotario: 'sin_caratula' | 'antes' | 'pendiente' | 'hecho' = 'sin_caratula';
   const parrafos = cuerpo.split(/(?=<w:p[\s>])|(?<=<\/w:p>)/);
   const planos = parrafos.map((t) => (/^<w:p[\s>]/.test(t) ? textoDe(t).trim() : null));
+  // Encabezado del notario («En la ciudad de Neiva…, donde funciona la Notaría…»): el digitador lo
+  // entrega en blanco para la revisión. Donde esté (antes de las firmas y fuera de tablas), se
+  // reemplaza por los renglones en blanco; si no lo hay, el espacio va tras el último inmueble.
+  const encabezadoNotario = (() => {
+    let tabla = 0;
+    for (const [i, t] of parrafos.entries()) {
+      if (!/^<w:p[\s>]/.test(t)) { tabla += (t.match(/<w:tbl[\s>]/g) ?? []).length - (t.match(/<\/w:tbl>/g) ?? []).length; continue; }
+      const plano = planos[i]!;
+      if (esLineaFirma(plano)) return -1;
+      if (!tabla && ENCABEZADO_NOTARIO(plano)) return i;
+    }
+    return -1;
+  })();
   for (const [indice, trozo] of parrafos.entries()) {
     if (!/^<w:p[\s>]/.test(trozo)) {
       enTabla += (trozo.match(/<w:tbl[\s>]/g) ?? []).length - (trozo.match(/<\/w:tbl>/g) ?? []).length;
@@ -488,7 +501,13 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
 
     // Terminada la carátula (después del último inmueble), el espacio del notario que autoriza
     if (/^(?:ESCRITURA P[UÚ]BLICA N[UÚ]MERO|PERSONAS QUE INTERVIENEN EN EL ACTO|ESPECIFICACI[OÓ]N\s)/.test(plano) && espacioNotario === 'sin_caratula') espacioNotario = 'antes';
-    if (plano && !enTabla && (espacioNotario === 'antes' || espacioNotario === 'pendiente') && /^OFICINA DE REGISTRO/i.test(plano)) espacioNotario = 'pendiente';
+    if (indice === encabezadoNotario) {
+      for (let i = 0; i < RENGLONES_NOTARIO; i++) salida.push(normalizarParrafo('<w:p><w:pPr></w:pPr></w:p>'));
+      espacioNotario = 'hecho';
+      continue;
+    }
+    if (encabezadoNotario >= 0) { /* el espacio va en lugar del encabezado */ }
+    else if (plano && !enTabla && (espacioNotario === 'antes' || espacioNotario === 'pendiente') && /^OFICINA DE REGISTRO/i.test(plano)) espacioNotario = 'pendiente';
     else if (plano && !enTabla && espacioNotario === 'pendiente' && !DATO_CARATULA.test(plano)) {
       const proximo = soloGuiones(plano) ? planos.slice(indice + 1).find((t) => t && !soloGuiones(t)) : null;
       if (!proximo || !DATO_CARATULA.test(proximo)) {

@@ -2,8 +2,8 @@
  * Escrituras (expedientes): el digitador elige una plantilla de la biblioteca (o carga una personal),
  * carga los documentos, escribe sus observaciones y genera la escritura (src/lib/servicios/generacion.ts).
  *
- * Permisos: el digitador ve y trabaja sus escrituras; el revisor ve todas y trabaja las suyas; el
- * administrador ve y trabaja todas.
+ * Permisos: el digitador y el revisor ven y trabajan solo sus escrituras; el administrador ve y
+ * trabaja todas.
  */
 import 'server-only';
 import { cache } from 'react';
@@ -24,7 +24,7 @@ export const MAXIMO_PLANTILLA = 4 * 1024 * 1024;
 // ------------------------------------------------------------------ permisos
 
 export function puedeVer(s: SesionActiva, e: { responsableId: string }): boolean {
-  return s.usuario.rol !== 'DIGITADOR' || e.responsableId === s.usuario.id;
+  return s.usuario.rol === 'ADMINISTRADOR' || e.responsableId === s.usuario.id;
 }
 
 export function puedeEditar(s: SesionActiva, e: { responsableId: string }): boolean {
@@ -140,7 +140,7 @@ export async function eliminarExpediente(s: SesionActiva, id: string) {
 export async function listarExpedientes(s: SesionActiva, filtro: { q?: string; soloPropios?: boolean; responsableId?: string; limite?: number }) {
   const terminos = terminosBusqueda(filtro.q ?? '');
   const where: Prisma.ExpedienteWhereInput = {
-    ...(s.usuario.rol === 'DIGITADOR' || filtro.soloPropios ? { responsableId: s.usuario.id } : filtro.responsableId ? { responsableId: filtro.responsableId } : {}),
+    ...(s.usuario.rol !== 'ADMINISTRADOR' || filtro.soloPropios ? { responsableId: s.usuario.id } : filtro.responsableId ? { responsableId: filtro.responsableId } : {}),
     ...(terminos.length ? {
       AND: terminos.map((t) => ({ OR: [
         { numeroInterno: { contains: t, mode: 'insensitive' as const } },

@@ -135,6 +135,21 @@ describe('formato de impresión de la notaría', () => {
     expect(t.join('\n')).not.toContain('En la ciudad de Neiva');
   });
 
+  it('el encabezado del notario sale en blanco aunque no siga al último inmueble (o no haya carátula)', () => {
+    const encabezado = conGuia('En la ciudad de Neiva, Departamento del Huila, Republica de Colombia, al «FALTA: fecha de otorgamiento», en el CIRCULO NOTARIAL DE NEIVA, donde funciona la Notaria Primera cuyo notario titular en el ejercicio es el doctor LUIS IGNACIO VIVAS CEDEÑO. ------------');
+    for (const bloque of [
+      [conGuia('ESCRITURA PÚBLICA NÚMERO:'), conGuia('MATRICULA INMOBILIARIA: 200-1.'), conGuia('UBICACIÓN: LOTE 1, NEIVA.'), conGuia('VALOR: $1.000'), encabezado, conGuia('Compareció ANA PRUEBA.')],
+      [encabezado, conGuia('Compareció ANA PRUEBA.')],
+    ]) {
+      const t = textos(aplicarFormatoNotarial(bloque.join(''), ANCHO));
+      const i = t.findIndex((x) => x === '');
+      expect(t.slice(i, i + 5)).toEqual(['', '', '', '', '']);
+      expect(t.filter((x) => x === '')).toHaveLength(5);
+      expect(t.join('\n')).not.toMatch(/En la ciudad de Neiva|fecha de otorgamiento/);
+      expect(t[t.length - 1]).toMatch(/^Compareció/);
+    }
+  });
+
   it('carta y márgenes de la notaría (sup. 3 / inf. 0,9 / interior 3,1 / exterior 2,2 cm, encuadernación 0)', () => {
     expect(aplicarMargenes('<w:pgSz w:w="12240" w:h="20160"/><w:pgMar w:top="1871" w:right="1361" w:bottom="737" w:left="1985" w:header="709"/>'))
       .toBe('<w:pgSz w:w="12240" w:h="15840" w:code="1"/><w:pgMar w:top="1701" w:right="1247" w:bottom="510" w:left="1758" w:header="709" w:gutter="0"/>');

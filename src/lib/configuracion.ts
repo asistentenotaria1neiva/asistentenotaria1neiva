@@ -32,7 +32,7 @@ export interface Configuraciones {
 
 export const POR_DEFECTO: Configuraciones = {
   'red.ips_oficina': (process.env.IPS_OFICINA ?? '').split(',').map((s) => s.trim()).filter(Boolean),
-  'sesion.inactividad_minutos': 20,
+  'sesion.inactividad_minutos': 120,
   'sesion.duracion_maxima_horas': 10,
   'acceso.intentos_maximos': 5,
   'acceso.bloqueo_minutos': 30,
