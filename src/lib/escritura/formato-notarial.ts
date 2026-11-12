@@ -649,6 +649,43 @@ export function aplicarMargenes(xml: string): string {
     ].reduce((x, [n, v]) => atributo(x, n as string, v as number), pg));
 }
 
+/** w:spacing con interlineado 1,5 (conserva el espacio antes y después que tenga) */
+function conInterlineado(spacing: string | undefined): string {
+  if (!spacing || !spacing.endsWith("/>")) return `<w:spacing w:line="${INTERLINEADO}" w:lineRule="auto"/>`;
+  let s = spacing.replace(/\s+w:(?:line|lineRule|beforeLines|afterLines)="[^"]*"/g, '');
+  s = s.replace(/\s*\/>$/, ` w:line="${INTERLINEADO}" w:lineRule="auto"/>`);
+  return s;
+}
+
+/**
+ * Arial 12 e interlineado 1,5 en TODO el documento (cuerpo, tablas de la carátula, firmas), sin
+ * tocar lo demás del formato de la plantilla (alineación, sangrías, negrillas, guiones). Se aplica a
+ * toda escritura generada, aunque la plantilla traiga otra fuente, otro tamaño u otro interlineado.
+ */
+export function aplicarFuenteEInterlineado(xml: string): string {
+  // Las corridas: Arial 12 (las que traen historial de cambios de Word se dejan: su rPr va anidado)
+  // (sin tomar las etiquetas que se cierran solas, <w:r …/> o <w:p …/>)
+  let x = xml.replace(/(<w:r(?:\s[^>]*[^/])?>)(?:<w:rPr>([\s\S]*?)<\/w:rPr>|<w:rPr\/>)?/g, (m, abre: string, i: string | undefined) =>
+    i?.includes('<w:rPrChange') ? m : `${abre}<w:rPr>${rPrArial(i ?? '')}</w:rPr>`);
+  // Los párrafos: interlineado 1,5
+  x = interlineadoEnPPr(x);
+  return x.replace(/(<w:p(?:\s[^>]*[^/])?>)(?!<w:pPr[\s>/])/g, `$1<w:pPr>${conInterlineado(undefined)}</w:pPr>`);
+}
+
+/**
+ * Interlineado 1,5 en cada w:pPr del XML (los párrafos del documento o los estilos de styles.xml),
+ * conservando el espacio antes y después y lo demás del párrafo.
+ */
+export function interlineadoEnPPr(xml: string): string {
+  return xml.replace(/<w:pPr>([\s\S]*?)<\/w:pPr>|<w:pPr\/>/g, (m, i: string | undefined) => {
+    if (i?.includes('<w:pPrChange') || i?.includes('<w:pPr>')) return m;
+    const interior = i ?? '';
+    // El w:spacing del párrafo (no el espaciado de caracteres del w:rPr de la marca de párrafo)
+    const spacing = hijos(interior).find((h) => h.nombre === 'w:spacing')?.xml;
+    return `<w:pPr>${ponerHijo(interior, ['w:spacing'], conInterlineado(spacing), TRAS_ESPACIADO)}</w:pPr>`;
+  });
+}
+
 /** Ancho del renglón (twips): carta menos los márgenes (el mismo en ambas caras) */
 export function anchoTextoDe(_xml?: string): number {
   return PAGINA_CARTA.ancho - MARGENES_NOTARIA.izq - MARGENES_NOTARIA.der;

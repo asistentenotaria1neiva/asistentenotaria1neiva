@@ -100,6 +100,45 @@ describe('la escritura conserva la forma de la plantilla', () => {
     expect(t[3]).toMatch(/^PARÁGRAFO PRIMERO: Texto nuevo bastante más largo del parágrafo\. -{10,}\t$/);
   });
 
+  describe('la comparecencia del vendedor queda separada de la cláusula del comprador', () => {
+    // Como en las plantillas de venta: un solo párrafo de Word, con guiones que llenan el renglón en medio
+    const VENTA = docx(p(r('Comparecieron quienes dijeron ser, '), r('ANA PEREZ', true), r(', mayor de edad, y manifestaron: ----------------------------------------------------------PRIMERO: Que por este instrumento público transfiere en venta a quien dijo ser, '), r('LUIS GOMEZ', true), r(', el derecho de dominio sobre el siguiente inmueble: -----------')));
+
+    it('con un reemplazo que toca el corte', () => {
+      const { docx: salida } = aplicarCambios(VENTA, [{ p: 1, accion: 'REEMPLAZAR', reemplazos: [{ original: 'y manifestaron: PRIMERO: Que por este instrumento público transfiere', nuevo: 'y manifestaron: PRIMERO: Que por este instrumento público transfieren' }, { original: 'ANA PEREZ', nuevo: 'MARIA JOSEFA RODRIGUEZ LOSADA' }], texto: '', insertar_despues: [] }]);
+      const t = textos(formatoPagina(salida))[0];
+      expect(t).toMatch(/MARIA JOSEFA RODRIGUEZ LOSADA, mayor de edad, y manifestaron: -{10,}\t?\nPRIMERO: Que por este instrumento público transfieren en venta/);
+    });
+
+    it('con el párrafo reescrito', () => {
+      const { docx: salida } = aplicarCambios(VENTA, [{ p: 1, accion: 'REESCRIBIR', reemplazos: [], texto: 'Comparecieron quienes dijeron ser, **PEDRO SUAREZ**, mayor de edad, y manifestaron: PRIMERO: Que por este instrumento público transfiere en venta a quien dijo ser, **JUAN DIAZ**, el derecho de dominio sobre el siguiente inmueble:', insertar_despues: [] }]);
+      const t = textos(formatoPagina(salida))[0];
+      expect(t).toMatch(/y manifestaron: -{10,}\t?\nPRIMERO: Que por este instrumento/);
+      expect(t).toMatch(/siguiente inmueble: -+\t?$/);
+    });
+
+    it('si el reemplazo no toca el corte, los guiones viejos se vuelven a medir', () => {
+      const { docx: salida } = aplicarCambios(VENTA, [{ p: 1, accion: 'REEMPLAZAR', reemplazos: [{ original: 'ANA PEREZ', nuevo: 'MARIA JOSEFA RODRIGUEZ LOSADA DE LA TORRE' }], texto: '', insertar_despues: [] }]);
+      const t = textos(formatoPagina(salida))[0];
+      expect(t).toMatch(/y manifestaron: -{10,}\t?\nPRIMERO:/);
+      expect(t).not.toMatch(/-{58}PRIMERO/);
+    });
+  });
+
+  it('toda la escritura queda en Arial 12 con interlineado 1,5, aunque la plantilla traiga otro formato', () => {
+    const OTRA = docx([
+      '<w:p><w:pPr><w:spacing w:before="0" w:after="120" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/><w:sz w:val="22"/></w:rPr><w:t>TITULO</w:t></w:r></w:p>',
+      '<w:p><w:r><w:t>Sin formato</w:t></w:r></w:p>',
+    ].join(''));
+    const xml = documentoXml(formatoPagina(OTRA));
+    expect(xml).not.toMatch(/Times New Roman|w:val="22"|w:line="240"/);
+    expect(xml.match(/<w:rFonts w:ascii="Arial"[^>]*\/>(?:<w:b\/>)?<w:sz w:val="24"\/>/g)).toHaveLength(2);
+    expect(xml.match(/w:line="360" w:lineRule="auto"/g)).toHaveLength(2);
+    // Se conserva lo demás: alineación, negrilla y el espacio después
+    expect(xml).toMatch(/w:after="120" w:line="360"/);
+    expect(xml).toMatch(/<w:jc w:val="center"\/>/);
+  });
+
   it('en la carátula el valor nuevo queda contra el margen, en negrilla como en la plantilla', () => {
     const { docx: salida } = aplicarCambios(CARATULA, [{ p: 2, accion: 'REEMPLAZAR', reemplazos: [{ original: 'ALIX CAÑON LAMILLA 1.075.212.554', nuevo: 'MARIA ISABEL QUINTERO 36.111.222' }], texto: '', insertar_despues: [] }]);
     const x = parrafosDe(documentoXml(salida))[1];

@@ -13,7 +13,8 @@
  * guiones de relleno de cada párrafo.
  */
 import PizZip from 'pizzip';
-import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, aplicarMargenes, anchoTextoDe, rellenarParrafo, tabDerecha } from './formato-notarial';
+import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, aplicarFuenteEInterlineado, aplicarMargenes, interlineadoEnPPr, anchoTextoDe, rellenarParrafo, tabDerecha } from './formato-notarial';
+import { expandirNomenclatura } from './nomenclatura';
 
 const decodificar = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, '&');
 const escapar = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -342,8 +343,61 @@ function comoEnLaPlantilla(original: ParrafoDocx, xml: string): string {
       return `${abre}${tabDerecha(pPr, ancho - derecho)}${runsDe(rPr, v[1].replace(/[\t ]+$/, ''))}<w:r>${rPr}<w:tab/></w:r>${runsDe(rPr, v[2])}</w:p>`;
     }
   }
-  if (/-{3,}[ \t]*$/.test(original.texto) || /w:leader="hyphen"/.test(original.xml)) return rellenarParrafo(xml, ancho);
+  if (/-{3,}[ \t]*$/.test(original.texto) || /w:leader="hyphen"/.test(original.xml) || new RegExp(SEPARADOR.source).test(original.texto)) return rellenarParrafo(xml, ancho);
   return xml;
+}
+
+/**
+ * Guiones que llenan el renglón EN MEDIO de un párrafo, entre dos textos («… y manifestaron: ------
+ * PRIMERO: Que por este instrumento público transfiere en venta a …»): lo que sigue empieza en el
+ * renglón siguiente. Así separan las plantillas la comparecencia del vendedor de la cláusula del
+ * comprador, o una cláusula de la siguiente, dentro de un mismo párrafo de Word.
+ */
+const SEPARADOR = /(?<=[^\s-])[ \t]*-{3,}[ \t]*(?=[^\s-])/g;
+
+/** Inserta `s` en la posición `pos` del texto del párrafo (en la corrida que la contiene) */
+function insertarEn(textos: (string | null)[], pos: number, s: string): void {
+  let ini = 0;
+  for (let i = 0; i < textos.length; i++) {
+    const t = textos[i];
+    if (t === null) continue;
+    if (pos <= ini + t.length) { textos[i] = t.slice(0, pos - ini) + s + t.slice(pos - ini); return; }
+    ini += t.length;
+  }
+}
+
+/**
+ * Conserva en el párrafo cambiado los cortes que la plantilla hacía con guiones en medio del párrafo:
+ * la IA ve el texto sin guiones y un reemplazo o un párrafo reescrito los borraba, y la comparecencia
+ * del vendedor quedaba pegada a la cláusula del comprador. Cada corte queda como un salto de renglón
+ * (el formato completa con guiones el renglón anterior, medido para el texto nuevo).
+ */
+function conservarSeparadores(original: string, textos: (string | null)[]): void {
+  // Lo que empezaba después de cada corte: el título de la cláusula y sus primeras palabras
+  const anclas = [...original.matchAll(SEPARADOR)].map((m) => {
+    const sigue = original.slice(m.index + m[0].length).replace(RELLENO, ' ').trim();
+    return sigue.split(/\s+/).slice(0, 3).join(' ');
+  }).filter(Boolean);
+  if (!anclas.length) return;
+  const unido = () => textos.map((t) => t ?? '').join('');
+  // Los guiones que quedaron en medio (medidos para el texto anterior) pasan a ser el corte
+  for (const m of [...unido().matchAll(SEPARADOR)].reverse()) reemplazarRango(textos, m.index, m.index + m[0].length, '\n');
+  let desde = 0;
+  for (const ancla of anclas) {
+    const texto = unido();
+    const m = [...texto.matchAll(patronFragmento(ancla))].find((x) => x.index >= desde)
+      // Si las palabras cambiaron, basta el título de la cláusula («PRIMERO:», «TERCERO.»)
+      ?? (/^[A-ZÁÉÍÓÚÑ]{4,}[.:]$/.test(ancla.split(' ')[0]) ? [...texto.matchAll(patronFragmento(ancla.split(' ')[0]))].find((x) => x.index >= desde) : undefined);
+    if (!m) continue;
+    desde = m.index + m[0].length;
+    const antes = texto.slice(0, m.index);
+    const espacios = antes.length - antes.replace(/[ \t ]+$/, '').length;
+    const previo = antes.slice(0, antes.length - espacios);
+    if (!previo.trim() || previo.endsWith('\n')) continue;
+    if (espacios) reemplazarRango(textos, m.index - espacios, m.index, '\n');
+    else insertarEn(textos, m.index, '\n');
+    desde += 1 - espacios;
+  }
 }
 
 /** Aplica los cambios de un párrafo; devuelve su XML nuevo (vacío si se elimina) */
@@ -374,6 +428,7 @@ function editarParrafo(p: ParrafoDocx, c: CambioParrafo, noAplicados: NoAplicado
     }
   }
   if (!aplicados) return { xml: p.xml, aplicados: 0, eliminado: false };
+  if (c.accion !== 'ELIMINAR') conservarSeparadores(p.texto, textos);
   // Se rehacen solo las corridas que cambiaron; los guiones de relleno los recalcula el formato
   let xml = p.xml;
   const ultima = textos.reduce<number>((u, t, i) => (t !== null && t.trim() ? i : u), -1);
@@ -469,6 +524,12 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
     c.reemplazos = (c.reemplazos ?? []).map((r) => ({ ...r, nuevo: limpiarZonaFirmas(r.nuevo ?? '', rotulo) }));
     c.insertar_despues = (c.insertar_despues ?? []).map((t) => limpiarZonaFirmas(t));
   }
+  // La dirección va completa en la escritura aunque el certificado la traiga abreviada («CLL» → «CALLE»)
+  for (const c of unidos.values()) {
+    c.texto = expandirNomenclatura(c.texto ?? '');
+    c.reemplazos = (c.reemplazos ?? []).map((r) => ({ ...r, nuevo: expandirNomenclatura(r.nuevo ?? '') }));
+    c.insertar_despues = (c.insertar_despues ?? []).map((t) => typeof t === 'string' ? expandirNomenclatura(t) : t);
+  }
   const textos = new Map<number, string>();
   // De atrás hacia adelante, para que las posiciones en el XML sigan siendo válidas
   for (const c of [...unidos.values()].sort((a, b) => b.p - a.p)) {
@@ -490,12 +551,15 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
 /**
  * Formato de la escritura generada sobre una plantilla: la plantilla ya trae el formato de la notaría
  * (es una escritura de la notaría), así que se conserva tal cual —renglones, títulos, carátula, líneas
- * de guiones— y solo se ponen el tamaño carta y los márgenes simétricos de la notaría. Los guiones de
- * los párrafos que cambiaron ya los recalculó aplicarCambios.
+ * de guiones— y solo se ponen el tamaño carta, los márgenes simétricos de la notaría y, en todo el
+ * texto, Arial 12 con interlineado 1,5 (aunque la plantilla traiga otra fuente u otro interlineado).
+ * Los guiones de los párrafos que cambiaron ya los recalculó aplicarCambios.
  */
 export function formatoPagina(docx: Buffer): Buffer {
   const zip = new PizZip(docx);
-  zip.file('word/document.xml', aplicarMargenes(documentoXml(docx)));
+  zip.file('word/document.xml', aplicarFuenteEInterlineado(aplicarMargenes(documentoXml(docx))));
+  const estilos = zip.file('word/styles.xml');
+  if (estilos) zip.file('word/styles.xml', interlineadoEnPPr(aplicarEstilosNotariales(estilos.asText())));
   const ajustes = zip.file('word/settings.xml');
   if (ajustes) zip.file('word/settings.xml', aplicarAjustesNotariales(ajustes.asText()));
   return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
