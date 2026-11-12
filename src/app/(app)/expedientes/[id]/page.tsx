@@ -149,7 +149,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
         <div>
           <Link className="migas" href="/expedientes"><Icono nombre="atras" tamano={16} />Escrituras</Link>
           <div className="radicado">{e.numeroInterno}</div>
-          <h1>{e.titulo || <span className="suave">Escritura sin título</span>}</h1>
+          <h1>{e.titulo || <span className="sin-titulo">Escritura sin título</span>}</h1>
           <p className="tenue sin-margen">Responsable: {e.responsable.nombreCompleto} · creada {fecha(e.creadoEn)}</p>
         </div>
         <div className="acciones-cabecera">

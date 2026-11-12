@@ -48,14 +48,14 @@ export function MenuLateral({ enlaces, avisos, pie }: { enlaces: EnlaceMenu[]; a
         </button>
         <Link href="/" className="marca-superior" aria-label="Notaría 1 · Inicio">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/marca/logo-horizontal-blanco.svg" alt="" width={146} height={31} />
+          <img src="/marca/nombre-blanco.svg" alt="" width={120} height={32} />
         </Link>
         <Link href="/expedientes/nuevo" className="boton-superior" aria-label="Nueva escritura"><Icono nombre="mas" tamano={22} /></Link>
       </header>
       <nav ref={panel} id="menu-principal" className={`lateral${abierto ? ' abierto' : ''}`} aria-label="Menú principal">
         <Link href="/" className="marca" aria-label="Notaría 1 · Neiva - Huila · Inicio">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/marca/logo-horizontal-blanco.svg" alt="" width={190} height={40} />
+          <img src="/marca/logo-blanco.svg" alt="" width={186} height={115} />
         </Link>
         <Link href="/expedientes/nuevo" className="boton-nueva" aria-current={activo === '/expedientes/nuevo' ? 'page' : undefined}>
           <Icono nombre="mas" tamano={18} />Nueva escritura<Pendiente />

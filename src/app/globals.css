@@ -161,7 +161,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .app { display: grid; grid-template-columns: var(--ancho-lateral) minmax(0, 1fr); min-height: 100vh; min-height: 100dvh; }
 .saltar { position: absolute; left: 12px; top: -48px; z-index: 100; background: var(--superficie); color: var(--texto); padding: 8px 14px; border-radius: var(--radio); box-shadow: var(--sombra-media); font-weight: 600; }
 .saltar:focus { top: 12px; }
-.principal { padding: 32px clamp(24px, 3vw, 48px) 56px; width: 100%; min-width: 0; max-width: 1600px; }
+.principal { padding: 32px clamp(24px, 3vw, 48px) 56px; width: 100%; min-width: 0; }
 .principal:focus { outline: none; }
 .barra-superior { display: none; }
 .velo { display: none; }
@@ -443,13 +443,14 @@ details.simple { border: 0; padding: 0; background: transparent; }
 /* 4.14 Pasos de la escritura (stepper) */
 .pasos-escritura { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); list-style: none; margin: 0; padding: 0; counter-reset: paso; }
 .pasos-escritura li { position: relative; min-width: 0; }
-.pasos-escritura li::after { content: ''; position: absolute; top: 15px; left: 40px; right: 8px; height: 2px; border-radius: 2px; background: var(--borde); }
+/* La línea une los números (fila de arriba); el nombre y el estado van debajo, sin cruzarse con ella */
+.pasos-escritura li::after { content: ''; position: absolute; top: 15px; left: 44px; right: 12px; height: 2px; border-radius: 2px; background: var(--borde); }
 .pasos-escritura li:last-child::after { display: none; }
 .pasos-escritura li.hecho::after { background: var(--primario); }
-.pasos-escritura a { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 2px 10px; padding: 0 12px 0 0; text-decoration: none; color: inherit; border-radius: var(--radio); }
-.pasos-escritura .marca-paso { grid-row: span 2; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--superficie); border: 2px solid var(--borde-campo); color: var(--texto-tenue); font-family: var(--fuente-mono); font-size: 13px; font-weight: 500; position: relative; z-index: 1; }
-.pasos-escritura .nombre-paso { font-weight: 700; font-size: 14px; line-height: 20px; padding-top: 6px; color: var(--texto-suave); }
-.pasos-escritura .estado-paso { font-size: 12px; line-height: 16px; color: var(--texto-tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pasos-escritura a { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 0 12px 0 0; text-decoration: none; color: inherit; border-radius: var(--radio); }
+.pasos-escritura .marca-paso { width: 32px; margin-bottom: 10px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--superficie); border: 2px solid var(--borde-campo); color: var(--texto-tenue); font-family: var(--fuente-mono); font-size: 13px; font-weight: 500; position: relative; z-index: 1; }
+.pasos-escritura .nombre-paso { font-weight: 700; font-size: 14px; line-height: 20px; color: var(--texto-suave); }
+.pasos-escritura .estado-paso { max-width: 100%; font-size: 12px; line-height: 16px; color: var(--texto-tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pasos-escritura li.hecho .marca-paso { background: var(--primario); border-color: var(--primario); color: #fff; }
 .pasos-escritura li.hecho .nombre-paso { color: var(--texto); }
 .pasos-escritura li.actual .marca-paso { border-color: var(--primario); color: var(--primario); box-shadow: 0 0 0 4px var(--primario-tinte); }
@@ -542,6 +543,7 @@ progress::-moz-progress-bar { background: var(--primario); border-radius: 8px; }
 /* 5.3 Escritura: pasos a la izquierda, panel «siguiente paso» fijo a la derecha */
 .cabecera-escritura { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
 .cabecera-escritura h1 { margin: 2px 0 4px; max-width: 46ch; }
+.cabecera-escritura .sin-titulo { color: var(--texto-tenue); }
 .cabecera-escritura .radicado { font-size: 14px; color: var(--texto-suave); }
 .cabecera-escritura .acciones-cabecera { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tarjeta.pasos { padding: 18px 20px; margin-bottom: 24px; }
@@ -745,7 +747,6 @@ progress::-moz-progress-bar { background: var(--primario); border-radius: 8px; }
 /* 6.1 Pantallas medianas */
 @media (max-width: 1240px) {
   .escritura { grid-template-columns: minmax(0, 1fr) 300px; column-gap: 16px; }
-  .pasos-escritura .estado-paso { display: none; }
 }
 @media (max-width: 1100px) {
   .rejilla.cuatro { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -761,7 +762,7 @@ progress::-moz-progress-bar { background: var(--primario); border-radius: 8px; }
     padding: 0 8px; background: var(--lateral-fondo); color: #fff; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
   }
   .barra-superior .marca-superior { justify-self: center; display: block; line-height: 0; border-radius: var(--radio); }
-  .barra-superior .marca-superior img { width: 140px; height: auto; }
+  .barra-superior .marca-superior img { width: 120px; height: auto; }
   .barra-superior :focus-visible { outline-color: var(--marino-200); }
   .boton-menu, .boton-superior { display: grid; place-items: center; min-height: 44px; width: 44px; padding: 0; background: transparent; border: 0; box-shadow: none; color: #fff; border-radius: var(--radio); }
   .boton-menu:hover:not(:disabled), .boton-superior:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
@@ -783,7 +784,8 @@ progress::-moz-progress-bar { background: var(--primario); border-radius: 8px; }
   .pasos-escritura { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .pasos-escritura .nombre-paso, .pasos-escritura .estado-paso { display: none; }
   .pasos-escritura li::after { left: 36px; right: 4px; }
-  .pasos-escritura a { grid-template-columns: 32px; padding: 0; }
+  .pasos-escritura a { padding: 0; }
+  .pasos-escritura .marca-paso { margin-bottom: 0; }
   .paso-de { display: block; margin: 12px 0 0; font-size: 14px; font-weight: 700; }
 
   /* Biblioteca: la vista previa ocupa toda la pantalla al elegir una plantilla */
@@ -795,11 +797,11 @@ progress::-moz-progress-bar { background: var(--primario); border-radius: 8px; }
   .vista-plantilla.con-eleccion .visor-docx { max-height: none; }
   body:has(.vista-plantilla.con-eleccion) { overflow: hidden; }
 
-  /* Acceso: sin el panel de marca; el isotipo arriba del formulario */
+  /* Acceso: sin el panel de marca; el nombre (sin la N) arriba del formulario */
   .acceso { grid-template-columns: minmax(0, 1fr); }
   .acceso-marca { display: none; }
   .acceso-formulario { place-items: start center; padding: 40px 20px; }
-  .acceso-caja .isotipo-movil { display: block; width: 44px; height: auto; margin-bottom: 24px; }
+  .acceso-caja .isotipo-movil { display: block; width: 150px; height: auto; margin-bottom: 24px; }
 }
 
 /* 6.3 Móviles */

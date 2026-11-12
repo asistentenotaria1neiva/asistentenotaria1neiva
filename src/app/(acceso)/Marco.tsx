@@ -32,7 +32,7 @@ export function MarcoAcceso({ titulo, descripcion, paso, porQue, children, pie }
       <div className="acceso-formulario">
         <div className="acceso-caja">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="isotipo-movil" src="/marca/isotipo.svg" alt="Notaría 1" width={44} height={51} />
+          <img className="isotipo-movil" src="/marca/nombre.svg" alt="Notaría 1 · Neiva - Huila" width={150} height={41} />
           {paso && (
             <ol className="pasos-acceso" aria-label="Pasos del ingreso">
               {PASOS.map((p, i) => (
