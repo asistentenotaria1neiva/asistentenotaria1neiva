@@ -14,7 +14,7 @@ import { BotonAccion, FormularioCarga, RefrescoAutomatico } from '../formularios
 import { FormularioObservaciones } from './Observaciones';
 import { CorregirVersion } from './CorregirVersion';
 import {
-  accionCompletarDocumento, accionEliminarDocumento, accionReleerDocumento, accionGuardarObservaciones, accionGenerar, accionEliminarExpediente, accionCancelarGeneracion, accionCorregirVersion,
+  accionCompletarDocumento, accionEliminarDocumento, accionReleerDocumento, accionGuardarObservaciones, accionGenerar, accionEliminarExpediente, accionRestaurarExpediente, accionCancelarGeneracion, accionCorregirVersion,
 } from '../acciones';
 
 // Las acciones de esta página (cargar, generar) siguen trabajando en segundo plano después de responder
@@ -49,6 +49,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
   let e: Awaited<ReturnType<typeof expedienteDePagina>>;
   try { e = await expedienteDePagina(s, id); } catch (err) { if (err instanceof ErrorNegocio) notFound(); throw err; }
   const editable = puedeEditar(s, e);
+  const esAdmin = s.usuario.rol === 'ADMINISTRADOR';
 
   // Una etapa de la generación que se cortó se reanuda; un documento cuya lectura no empezó o se cortó, se lee
   const reanudar = await generacionPorReanudar(id);
@@ -166,9 +167,19 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
         </div>
         <div className="acciones-cabecera">
           <EtiquetaVersion g={generaciones[0]} />
-          {editable && <BotonAccion accion={accionEliminarExpediente.bind(null, id)} texto="Eliminar escritura" icono="papelera" clase="peligro-suave pequeno" confirmar="¿Eliminar esta escritura? Se borran sus documentos y todas sus versiones. No se puede deshacer." />}
+          {e.eliminadoEn && esAdmin && <BotonAccion accion={accionRestaurarExpediente.bind(null, id)} texto="Restaurar" textoPendiente="Restaurando…" icono="atras" clase="secundario pequeno" confirmar={`¿Restaurar esta escritura? ${e.responsable.nombreCompleto} vuelve a verla en su lista y puede seguir trabajándola.`} />}
+          {esAdmin && (editable || e.eliminadoEn) ? (
+            <BotonAccion accion={accionEliminarExpediente.bind(null, id)} texto="Borrar definitivamente" icono="papelera" clase="peligro-suave pequeno" confirmar="¿Borrar definitivamente esta escritura? Se borran sus documentos y todas sus versiones. No se puede deshacer." />
+          ) : editable && (
+            <BotonAccion accion={accionEliminarExpediente.bind(null, id)} texto="Eliminar escritura" icono="papelera" clase="peligro-suave pequeno" confirmar="¿Eliminar esta escritura? Dejará de aparecer en su lista de escrituras." />
+          )}
         </div>
       </div>
+      {e.eliminadoEn && (
+        <div className="aviso error" role="status"><Icono nombre="papelera" /><div>
+          <strong>Eliminada por el usuario</strong>{e.eliminadoPor ? ` (${e.eliminadoPor.nombreCompleto})` : ''} el {fecha(e.eliminadoEn)}. El responsable ya no la ve; usted la ve en solo lectura. Puede restaurarla o borrarla definitivamente.
+        </div></div>
+      )}
       {(enCurso || leyendo) && <RefrescoAutomatico segundos={enCurso ? 5 : 8} />}
 
       <nav className="tarjeta pasos" aria-label="Pasos de la escritura">

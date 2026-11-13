@@ -389,6 +389,8 @@ td.acciones { white-space: nowrap; text-align: right; }
 td.acciones details { display: inline-block; text-align: left; }
 tr.grupo th { background: var(--superficie-suave); color: var(--texto); }
 tr.total td { font-weight: 700; background: #f8f9fb; }
+tr.eliminada td { color: var(--texto-tenue); }
+tr.eliminada .radicado { text-decoration: line-through; }
 
 /* 4.10 Vacíos, carga y error */
 .vacio { text-align: center; padding: 40px 16px; color: var(--texto-suave); }

@@ -49,7 +49,7 @@ Las marcadas **(verificación automática)** las hace el sistema sin IA: número
 En **Biblioteca de plantillas** el revisor alimenta la base:
 
 - **Agregar plantillas**: elija uno o varios .docx, la **categoría** (puede escribir una nueva), el banco o subcategoría y, si quiere, la fecha (si la deja vacía, se usa la de modificación del archivo).
-- En la vista previa de una plantilla, **Editar datos, retirar o eliminar**: corrija nombre, categoría o fecha; **Retirar** la oculta para los digitadores sin borrarla; **Eliminar** la borra.
+- En la vista previa de una plantilla, **Editar datos, retirar o eliminar**: corrija nombre, categoría o fecha; **Retirar** la oculta para los digitadores sin borrarla; **Eliminar** la borra (solo el administrador).
 - El revisor ve todas las escrituras; trabaja como un digitador en las suyas.
 
 ## 4. Buenas prácticas

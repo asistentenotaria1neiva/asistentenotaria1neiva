@@ -64,6 +64,8 @@ export interface FilaEscritura {
   titulo: string | null;
   plantillaNombre: string;
   actualizadoEn: Date;
+  eliminadoEn?: Date | null;
+  eliminadoPor?: { nombreCompleto: string } | null;
   responsable: { nombreCompleto: string };
   plantilla: { categoria: string } | null;
   _count: { documentos: number };
@@ -77,11 +79,13 @@ export function TablaExpedientes({ filas, conResponsable = true, vacio }: { fila
       <thead><tr><th>Número</th><th>Escritura</th><th>Plantilla</th><th>Estado</th>{conResponsable && <th>Responsable</th>}<th className="numero">Documentos</th><th>Actualizada</th></tr></thead>
       <tbody>
         {filas.map((e) => (
-          <tr key={e.id}>
+          <tr key={e.id} className={e.eliminadoEn ? 'eliminada' : undefined}>
             <td className="principal-celda"><Link href={`/expedientes/${e.id}`} className="radicado">{e.numeroInterno}</Link></td>
             <td data-etiqueta="Escritura">{e.titulo || <span className="tenue">Sin título</span>}</td>
             <td data-etiqueta="Plantilla">{e.plantillaNombre}{e.plantilla && <div className="tenue">{e.plantilla.categoria}</div>}</td>
-            <td data-etiqueta="Estado"><EtiquetaVersion g={e.generaciones[0]} /></td>
+            <td data-etiqueta="Estado">{e.eliminadoEn
+              ? <span className="etiqueta critica" title={`Eliminada ${fecha(e.eliminadoEn)}${e.eliminadoPor ? ` por ${e.eliminadoPor.nombreCompleto}` : ''}`}>Borrada por el usuario</span>
+              : <EtiquetaVersion g={e.generaciones[0]} />}</td>
             {conResponsable && <td data-etiqueta="Responsable">{e.responsable.nombreCompleto}</td>}
             <td data-etiqueta="Documentos" className="numero">{e._count.documentos}</td>
             <td data-etiqueta="Actualizada" className="suave" title={fecha(e.actualizadoEn)}>{hace(e.actualizadoEn)}</td>

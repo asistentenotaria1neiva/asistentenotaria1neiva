@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { after } from 'next/server';
 import { requerirSesion } from '@/lib/sesion';
-import { crearExpediente, cambiarPlantilla, guardarObservaciones, eliminarExpediente, ErrorNegocio, type EleccionPlantilla } from '@/lib/servicios/expedientes';
+import { crearExpediente, cambiarPlantilla, guardarObservaciones, eliminarExpediente, restaurarExpediente, ErrorNegocio, type EleccionPlantilla } from '@/lib/servicios/expedientes';
 import { completarDocumento, eliminarDocumento, releerDocumento, leerDocumento } from '@/lib/servicios/documentos';
 import { iniciarGeneracion, iniciarAjuste, cancelarGeneracion } from '@/lib/servicios/generacion';
 import { urlAplicacion } from '@/lib/seguridad/red';
@@ -103,6 +103,12 @@ export async function accionEliminarExpediente(expedienteId: string): Promise<Re
   const r = await ejecutar(() => eliminarExpediente(s, expedienteId));
   if (r.error) return r;
   redirect('/expedientes');
+}
+
+/** Solo el administrador: devuelve al digitador una escritura que este eliminó */
+export async function accionRestaurarExpediente(expedienteId: string): Promise<Resultado> {
+  const s = await requerirSesion({ roles: ['ADMINISTRADOR'] });
+  return ejecutar(async () => { await restaurarExpediente(s, expedienteId); return 'Escritura restaurada: el responsable vuelve a verla.'; }, `/expedientes/${expedienteId}`);
 }
 
 /** Detiene la generación en curso (la versión queda «cancelada»; los documentos leídos se conservan) */

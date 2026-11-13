@@ -32,12 +32,14 @@ El administrador tiene control total: usuarios, equipos, plantillas, configuraci
 
 Ve todas las escrituras (menú **Escrituras**) y puede abrirlas, generar versiones o eliminarlas. El digitador solo ve las suyas; el revisor ve todas.
 
+Cuando un digitador **elimina** una escritura, desaparece de su lista, pero no se borra: usted la sigue viendo en **Escrituras** con la marca **«Borrada por el usuario»** (tachada), en solo lectura. Con el filtro **Eliminadas por el usuario** puede ver solo esas u ocultarlas. Al abrirla puede **Restaurar** (el responsable vuelve a verla) o **Borrar definitivamente** (se borran sus documentos y versiones; no se puede deshacer). Todo queda en la auditoría.
+
 ## 5. Biblioteca de plantillas
 
 La biblioteca reúne las escrituras modelo de la notaría, con su **categoría** (la carpeta del acto: COMPRAVENTA, HIPOTECA, LEASING…), su **subcategoría** (el banco o la clase de oficio), el **año** y la **fecha** de modificación. El digitador busca en ella la plantilla, la ve en vista previa y la usa; la IA la adapta con los documentos sin cambiar su estructura.
 
 - **Carga inicial** (desde la carpeta de minutas, una vez): `npm run biblioteca:cargar -- "C:\ruta\milan" --confirmar`. Sin `--confirmar` solo muestra lo que cargaría. Los archivos repetidos se cargan una sola vez; los `.doc` antiguos y los PDF se omiten (los `.doc` se abren en Word y se guardan como `.docx` para agregarlos).
-- **El revisor alimenta la biblioteca** desde la página **Biblioteca de plantillas**: agrega plantillas (una o varias, con su categoría), corrige sus datos, las **retira** (dejan de aparecer para los digitadores) o las elimina. El administrador puede hacer lo mismo.
+- **El revisor alimenta la biblioteca** desde la página **Biblioteca de plantillas**: agrega plantillas (una o varias, con su categoría), corrige sus datos, o las **retira** (dejan de aparecer para los digitadores). El administrador puede hacer lo mismo y, además, es el único que puede **eliminarlas**.
 - Cada plantilla se guarda cifrada; las descargas quedan en la auditoría.
 - **Buena plantilla**: una escritura completa de la notaría (carátula, comparecencia, cláusulas, constancias, otorgamiento y firmas), del mismo acto, banco y tipo de negocio que se quiere redactar.
 

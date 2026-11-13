@@ -14,6 +14,7 @@ export default async function Biblioteca({ searchParams }: { searchParams: Promi
   const s = await requerirSesion();
   const parametros = await searchParams;
   const admin = puedeAdministrar(s);
+  const puedeEliminar = s.usuario.rol === 'ADMINISTRADOR';
   const opciones = admin ? await opcionesFiltro() : null;
   return (
     <>
@@ -29,7 +30,7 @@ export default async function Biblioteca({ searchParams }: { searchParams: Promi
       )}
       <Buscador s={s} parametros={parametros} base="/plantillas" administrar={admin} acciones={admin ? (p) => (
         <details className="edicion-plantilla">
-          <summary><Icono nombre="editar" tamano={16} />Editar datos, retirar o eliminar</summary>
+          <summary><Icono nombre="editar" tamano={16} />{puedeEliminar ? 'Editar datos, retirar o eliminar' : 'Editar datos o retirar'}</summary>
           <FormularioAccion accion={accionEditarPlantilla.bind(null, p.id)} texto="Guardar cambios" textoPendiente="Guardando…" clase="pequeno">
             <div className="campos-columnas">
               <div className="campo"><label htmlFor="e-nombre">Nombre</label><input id="e-nombre" name="nombre" type="text" defaultValue={p.nombre} maxLength={200} /></div>
@@ -41,7 +42,7 @@ export default async function Biblioteca({ searchParams }: { searchParams: Promi
           <div className="acciones-edicion">
             <BotonAccion accion={accionActivarPlantilla.bind(null, p.id, !p.activa)} texto={p.activa ? 'Retirar de la biblioteca' : 'Volver a publicar'} icono={p.activa ? 'ojo' : 'check'} clase="secundario pequeno"
               confirmar={p.activa ? `¿Retirar «${p.nombre}»? Deja de aparecer para los digitadores, pero no se borra: puede volver a publicarla.` : undefined} />
-            <BotonAccion accion={accionEliminarPlantilla.bind(null, p.id)} texto="Eliminar" icono="papelera" clase="peligro-suave pequeno" confirmar={`¿Eliminar «${p.nombre}» de la biblioteca? Se borra el archivo. No se puede deshacer.`} />
+            {puedeEliminar && <BotonAccion accion={accionEliminarPlantilla.bind(null, p.id)} texto="Eliminar" icono="papelera" clase="peligro-suave pequeno" confirmar={`¿Eliminar «${p.nombre}» de la biblioteca? Se borra el archivo. No se puede deshacer.`} />}
           </div>
         </details>
       ) : undefined} />

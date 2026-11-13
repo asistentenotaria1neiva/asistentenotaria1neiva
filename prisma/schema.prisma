@@ -43,6 +43,7 @@ model Usuario {
 
   sesiones               Sesion[]
   expedientesResponsable Expediente[]   @relation("responsable")
+  expedientesEliminados  Expediente[]   @relation("eliminadoPor")
   documentos             Documento[]
   generaciones           Generacion[]
   dispositivosAprobados  Dispositivo[]
@@ -148,11 +149,16 @@ model Expediente {
   responsableId   String
   creadoEn        DateTime   @default(now())
   actualizadoEn   DateTime   @updatedAt
+  // Borrada por el digitador: él deja de verla; el administrador la sigue viendo y puede restaurarla
+  eliminadoEn     DateTime?
+  eliminadoPor    Usuario?   @relation("eliminadoPor", fields: [eliminadoPorId], references: [id], onDelete: SetNull)
+  eliminadoPorId  String?
 
   documentos   Documento[]
   generaciones Generacion[]
 
   @@index([responsableId])
+  @@index([eliminadoEn])
   @@map("expedientes")
 }
 

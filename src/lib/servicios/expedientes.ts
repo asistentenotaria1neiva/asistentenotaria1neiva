@@ -4,6 +4,10 @@
  *
  * Permisos: el digitador y el revisor ven y trabajan solo sus escrituras; el administrador ve y
  * trabaja todas.
+ *
+ * Eliminación: cuando el digitador elimina una escritura, deja de verla, pero no se borra: queda
+ * marcada como «eliminada por el usuario» (eliminadoEn, eliminadoPor) y el administrador la sigue
+ * viendo (solo lectura), puede restaurarla o borrarla definitivamente.
  */
 import 'server-only';
 import { cache } from 'react';
@@ -23,18 +27,21 @@ export const MAXIMO_PLANTILLA = 4 * 1024 * 1024;
 
 // ------------------------------------------------------------------ permisos
 
-export function puedeVer(s: SesionActiva, e: { responsableId: string }): boolean {
-  return s.usuario.rol === 'ADMINISTRADOR' || e.responsableId === s.usuario.id;
+type Permisos = { responsableId: string; eliminadoEn: Date | null };
+
+export function puedeVer(s: SesionActiva, e: Permisos): boolean {
+  return s.usuario.rol === 'ADMINISTRADOR' || (e.responsableId === s.usuario.id && !e.eliminadoEn);
 }
 
-export function puedeEditar(s: SesionActiva, e: { responsableId: string }): boolean {
-  return s.usuario.rol === 'ADMINISTRADOR' || e.responsableId === s.usuario.id;
+/** Una escritura eliminada queda de solo lectura (el administrador puede restaurarla) */
+export function puedeEditar(s: SesionActiva, e: Permisos): boolean {
+  return !e.eliminadoEn && (s.usuario.rol === 'ADMINISTRADOR' || e.responsableId === s.usuario.id);
 }
 
 export async function obtenerExpediente(s: SesionActiva, id: string) {
   const e = await db.expediente.findUnique({
     where: { id },
-    include: { responsable: { select: { nombreCompleto: true } }, plantilla: { select: { id: true, nombre: true, categoria: true, subcategoria: true, anio: true, fecha: true, activa: true } } },
+    include: { responsable: { select: { nombreCompleto: true } }, eliminadoPor: { select: { nombreCompleto: true } }, plantilla: { select: { id: true, nombre: true, categoria: true, subcategoria: true, anio: true, fecha: true, activa: true } } },
   });
   if (!e || !puedeVer(s, e)) throw new ErrorNegocio('Escritura no encontrada o sin permiso.');
   return e;
@@ -45,6 +52,7 @@ export const expedienteDePagina = cache(obtenerExpediente);
 
 export async function expedienteEditable(s: SesionActiva, id: string) {
   const e = await obtenerExpediente(s, id);
+  if (e.eliminadoEn) throw new ErrorNegocio('La escritura está eliminada. Restáurela para modificarla.');
   if (!puedeEditar(s, e)) throw new ErrorNegocio('Solo el responsable de la escritura puede modificarla.');
   return e;
 }
@@ -121,9 +129,32 @@ export async function guardarObservaciones(s: SesionActiva, id: string, datos: {
   });
 }
 
-/** Elimina la escritura con sus documentos, versiones generadas y plantilla personal (y sus archivos cifrados) */
+/**
+ * El digitador (o el revisor) elimina su escritura: deja de verla, pero se conserva con sus documentos y
+ * versiones y el administrador la ve como «eliminada por el usuario». Si la elimina el administrador,
+ * se borra definitivamente (ver borrarDefinitivamente).
+ */
 export async function eliminarExpediente(s: SesionActiva, id: string) {
+  if (s.usuario.rol === 'ADMINISTRADOR') return borrarDefinitivamente(s, id);
   const e = await expedienteEditable(s, id);
+  if (await db.generacion.count({ where: { expedienteId: id, estado: 'EN_CURSO' } })) throw new ErrorNegocio('La IA está generando esta escritura. Espere a que termine o cancele la generación.');
+  await db.expediente.update({ where: { id }, data: { eliminadoEn: new Date(), eliminadoPorId: s.usuario.id } });
+  await auditar({ ...datosAuditoria(s), accion: 'EXPEDIENTE_ELIMINADO_POR_USUARIO', entidad: 'expediente', entidadId: id, detalle: { numero: e.numeroInterno } });
+}
+
+/** El administrador devuelve al digitador una escritura que este eliminó */
+export async function restaurarExpediente(s: SesionActiva, id: string) {
+  if (s.usuario.rol !== 'ADMINISTRADOR') throw new ErrorNegocio('Solo el administrador puede restaurar escrituras eliminadas.');
+  const e = await obtenerExpediente(s, id);
+  if (!e.eliminadoEn) throw new ErrorNegocio('La escritura no está eliminada.');
+  await db.expediente.update({ where: { id }, data: { eliminadoEn: null, eliminadoPorId: null } });
+  await auditar({ ...datosAuditoria(s), accion: 'EXPEDIENTE_RESTAURADO', entidad: 'expediente', entidadId: id, detalle: { numero: e.numeroInterno, eliminadaPor: e.eliminadoPor?.nombreCompleto ?? null } });
+}
+
+/** Solo el administrador: borra la escritura con sus documentos, versiones y plantilla personal (y sus archivos cifrados) */
+export async function borrarDefinitivamente(s: SesionActiva, id: string) {
+  if (s.usuario.rol !== 'ADMINISTRADOR') throw new ErrorNegocio('Solo el administrador puede borrar escrituras definitivamente.');
+  const e = await obtenerExpediente(s, id);
   const [docs, gens] = await Promise.all([
     db.documento.findMany({ where: { expedienteId: id }, select: { rutaCifrada: true } }),
     db.generacion.findMany({ where: { expedienteId: id }, select: { rutaDocx: true, estado: true } }),
@@ -132,15 +163,22 @@ export async function eliminarExpediente(s: SesionActiva, id: string) {
   await db.expediente.delete({ where: { id } });
   const rutas = [...docs.map((d) => d.rutaCifrada), ...gens.map((g) => g.rutaDocx).filter((x): x is string => !!x), ...(e.plantillaRuta ? [e.plantillaRuta] : [])];
   await Promise.all(rutas.map((r) => borrarCifrado(r).catch((err) => console.error('[eliminarExpediente]', err))));
-  await auditar({ ...datosAuditoria(s), accion: 'EXPEDIENTE_ELIMINADO', entidad: 'expediente', entidadId: id, detalle: { numero: e.numeroInterno, documentos: docs.length, versiones: gens.length } });
+  await auditar({ ...datosAuditoria(s), accion: 'EXPEDIENTE_ELIMINADO', entidad: 'expediente', entidadId: id, detalle: { numero: e.numeroInterno, documentos: docs.length, versiones: gens.length, eliminadaAntesPor: e.eliminadoPor?.nombreCompleto ?? null } });
 }
 
 // ------------------------------------------------------------------ listado
 
-export async function listarExpedientes(s: SesionActiva, filtro: { q?: string; soloPropios?: boolean; responsableId?: string; limite?: number }) {
+/**
+ * eliminadas (solo el administrador): 'incluir' (por defecto, con su marca), 'excluir' o 'solo'.
+ * El digitador nunca ve las que eliminó, y en «Mis escrituras» tampoco aparecen.
+ */
+export async function listarExpedientes(s: SesionActiva, filtro: { q?: string; soloPropios?: boolean; responsableId?: string; limite?: number; eliminadas?: 'incluir' | 'excluir' | 'solo' }) {
   const terminos = terminosBusqueda(filtro.q ?? '');
+  const propias = s.usuario.rol !== 'ADMINISTRADOR' || filtro.soloPropios;
+  const eliminadas = propias ? 'excluir' : (filtro.eliminadas ?? 'incluir');
   const where: Prisma.ExpedienteWhereInput = {
-    ...(s.usuario.rol !== 'ADMINISTRADOR' || filtro.soloPropios ? { responsableId: s.usuario.id } : filtro.responsableId ? { responsableId: filtro.responsableId } : {}),
+    ...(propias ? { responsableId: s.usuario.id } : filtro.responsableId ? { responsableId: filtro.responsableId } : {}),
+    ...(eliminadas === 'excluir' ? { eliminadoEn: null } : eliminadas === 'solo' ? { eliminadoEn: { not: null } } : {}),
     ...(terminos.length ? {
       AND: terminos.map((t) => ({ OR: [
         { numeroInterno: { contains: t, mode: 'insensitive' as const } },
@@ -152,7 +190,8 @@ export async function listarExpedientes(s: SesionActiva, filtro: { q?: string; s
   return db.expediente.findMany({
     where, orderBy: { actualizadoEn: 'desc' }, take: filtro.limite ?? 100,
     select: {
-      id: true, numeroInterno: true, titulo: true, plantillaNombre: true, actualizadoEn: true,
+      id: true, numeroInterno: true, titulo: true, plantillaNombre: true, actualizadoEn: true, eliminadoEn: true,
+      eliminadoPor: { select: { nombreCompleto: true } },
       responsable: { select: { nombreCompleto: true } },
       plantilla: { select: { categoria: true } },
       _count: { select: { documentos: true } },
