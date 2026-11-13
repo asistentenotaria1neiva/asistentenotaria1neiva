@@ -88,7 +88,8 @@ export async function completarDocumento(s: SesionActiva, expedienteId: string, 
 }
 
 /** Bloques de contenido de un archivo para la IA (un PDF largo, por tramos de páginas) */
-export async function bloquesDeArchivo(bytes: Buffer, mime: string, titulo: string): Promise<{ tramos: { bloque: Anthropic.Beta.BetaContentBlockParam; desde: number }[]; liberar: () => Promise<void> }> {
+/** `omitir`: tramos (por su página inicial) ya leídos, que no hace falta preparar otra vez */
+export async function bloquesDeArchivo(bytes: Buffer, mime: string, titulo: string, omitir: ReadonlySet<number> = new Set()): Promise<{ tramos: { bloque: Anthropic.Beta.BetaContentBlockParam; desde: number }[]; liberar: () => Promise<void> }> {
   if (mime === MIME_DOCX) {
     let texto: string;
     try { texto = textoDocx(bytes); } catch (e) { if (e instanceof ErrorDocx) throw new ErrorIA('El documento de Word no se pudo abrir.', 'FORMATO'); throw e; }
@@ -105,6 +106,7 @@ export async function bloquesDeArchivo(bytes: Buffer, mime: string, titulo: stri
   const liberar: (() => Promise<void>)[] = [];
   const tramos = [];
   for (const p of partes) {
+    if (omitir.has(p.desde)) continue;
     const d = await prepararDocumento(p.bytes, mime, titulo);
     liberar.push(d.liberar);
     tramos.push({ bloque: d.bloque, desde: p.desde });
@@ -112,9 +114,19 @@ export async function bloquesDeArchivo(bytes: Buffer, mime: string, titulo: stri
   return { tramos, liberar: async () => { await Promise.all(liberar.map((f) => f())); } };
 }
 
+/** Tramos de un PDF largo que se leen a la vez (cada uno tarda de 1 a 4 minutos) */
+const TRAMOS_A_LA_VEZ = 3;
+
+/** Lo leído de cada tramo (por su página inicial) mientras la lectura sigue EN_CURSO o quedó en ERROR */
+type LecturaParcial = { tramos?: Record<string, DocumentoLeido[]> };
+
 /**
  * Lee un documento con la IA y guarda lo leído. Toma el documento solo si nadie lo está leyendo (o si
  * su lectura se cortó); devuelve false si otro ya lo tomó. Un error queda en el documento (ERROR).
+ *
+ * Un PDF largo se lee por tramos, varios a la vez, y cada tramo terminado se guarda enseguida (y renueva
+ * el latido): en Vercel cada invocación se corta a los 5 minutos y, sin eso, un PDF de 100+ páginas
+ * volvía a empezar desde el primer tramo en cada intento y nunca terminaba.
  */
 export async function leerDocumento(documentoId: string, usuarioId: string): Promise<boolean> {
   const tomado = await db.documento.updateMany({
@@ -123,43 +135,54 @@ export async function leerDocumento(documentoId: string, usuarioId: string): Pro
   });
   if (!tomado.count) return false;
   const doc = await db.documento.findUniqueOrThrow({ where: { id: documentoId } });
+  const hechos: Record<string, DocumentoLeido[]> = { ...((doc.lectura as LecturaParcial | null)?.tramos ?? {}) };
+  const guardarAvance = () => db.documento.updateMany({ where: { id: doc.id, estadoLectura: 'EN_CURSO' }, data: { lectura: { tramos: hechos } as unknown as Prisma.InputJsonValue } });
   let liberar = async () => {};
   try {
     const bytes = await leerCifrado(doc.rutaCifrada);
-    const archivo = await bloquesDeArchivo(bytes, doc.mime, doc.nombreOriginal);
+    const archivo = await bloquesDeArchivo(bytes, doc.mime, doc.nombreOriginal, new Set(Object.keys(hechos).map(Number)));
     liberar = archivo.liberar;
-    const documentos: DocumentoLeido[] = [];
-    for (const t of archivo.tramos) {
+    const porTramos = archivo.tramos.length > 1 || Object.keys(hechos).length > 0;
+    const cola = [...archivo.tramos];
+    const leerTramo = async (t: (typeof cola)[number]) => {
       const desplazar = (x: DocumentoLeido): DocumentoLeido => (t.desde === 1 ? x : {
         ...x,
         paginas: x.paginas.replace(/\d+/g, (n) => String(Number(n) + t.desde - 1)),
         datos: x.datos.map((d) => ({ ...d, pagina: d.pagina ? d.pagina + t.desde - 1 : d.pagina })),
         textos_literales: x.textos_literales.map((d) => ({ ...d, pagina: d.pagina ? d.pagina + t.desde - 1 : d.pagina })),
       });
+      let leidos: DocumentoLeido[];
       try {
         const r = await llamarEstructurado<Lectura>({
           proposito: 'LECTURA',
           registro: { usuarioId, expedienteId: doc.expedienteId },
           sistema: SISTEMA_LECTURA,
-          contenido: [t.bloque, { type: 'text', text: archivo.tramos.length > 1 ? `Este tramo empieza en la página ${t.desde} del archivo: numera las páginas desde 1 dentro del tramo.` : 'Transcribe los datos de este archivo.' }],
+          contenido: [t.bloque, { type: 'text', text: porTramos ? `Este tramo empieza en la página ${t.desde} del archivo: numera las páginas desde 1 dentro del tramo.` : 'Transcribe los datos de este archivo.' }],
           esquema: ESQUEMA_LECTURA as unknown as Record<string, unknown>,
           maxTokens: 32000,
         });
-        documentos.push(...(r.datos.documentos ?? []).map(desplazar));
+        leidos = r.datos.documentos ?? [];
       } catch (e) {
         // Cortada por longitud: se conservan los documentos que alcanzaron a salir completos
         if (!(e instanceof ErrorIA) || e.codigo !== 'TRUNCADO' || !e.parcial) throw e;
-        const rescatados = rescatarArreglo<DocumentoLeido>(e.parcial, 'documentos');
-        if (!rescatados.length) throw e;
-        documentos.push(...rescatados.map(desplazar));
+        leidos = rescatarArreglo<DocumentoLeido>(e.parcial, 'documentos');
+        if (!leidos.length) throw e;
       }
-    }
+      hechos[t.desde] = leidos.map(desplazar);
+      // Guarda el avance y renueva el latido (actualizadoEn): si la invocación se corta, la siguiente sigue desde aquí
+      await guardarAvance();
+    };
+    await Promise.all(Array.from({ length: Math.min(TRAMOS_A_LA_VEZ, cola.length) }, async () => {
+      while (cola.length) await leerTramo(cola.shift()!);
+    }));
+    const documentos = Object.keys(hechos).map(Number).sort((a, b) => a - b).flatMap((k) => hechos[k]);
     await db.documento.update({ where: { id: doc.id }, data: { estadoLectura: 'LEIDO', lectura: { documentos } as unknown as Prisma.InputJsonValue } });
     return true;
   } catch (e) {
     const mensaje = e instanceof ErrorIA ? e.message : 'Error inesperado al leer el documento.';
     if (!(e instanceof ErrorIA)) console.error('[leerDocumento]', e);
-    await db.documento.update({ where: { id: doc.id }, data: { estadoLectura: 'ERROR', errorLectura: mensaje } });
+    // Los tramos ya leídos se conservan: un nuevo intento de la generación sigue desde ahí («Leer de nuevo» empieza de cero)
+    await db.documento.update({ where: { id: doc.id }, data: { estadoLectura: 'ERROR', errorLectura: mensaje, lectura: { tramos: hechos } as unknown as Prisma.InputJsonValue } });
     return true;
   } finally {
     await liberar();
