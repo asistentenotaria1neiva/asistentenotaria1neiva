@@ -717,6 +717,11 @@ progress::-moz-progress-bar { background: var(--primario); border-radius: 8px; }
 .emergente .icono-aviso { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--info-claro); color: var(--info); }
 .emergente .contenido { all: unset; cursor: pointer; display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; border-radius: var(--radio-chico); }
 .emergente .contenido:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+/* Anula el hover/active global de los botones (fondo oscuro y escala): aquí el aviso solo se resalta */
+.emergente button.contenido:hover:not(:disabled), .emergente button.contenido:active:not(:disabled) { background: transparent; border-color: transparent; color: inherit; transform: none; }
+.emergente { transition: border-color 150ms var(--curva), background-color 150ms var(--curva); }
+.emergente:not(.invitacion):hover { border-color: var(--info); background: var(--superficie-suave); }
+.emergente button.contenido:hover strong { color: var(--info); text-decoration: underline; text-underline-offset: 3px; }
 .emergente .contenido strong { font-weight: 700; color: var(--texto); }
 .emergente .contenido span { font-size: 14px; color: var(--texto-suave); }
 .emergente .cerrar { display: grid; place-items: center; width: 28px; height: 28px; min-height: 0; padding: 0; border: 0; box-shadow: none; border-radius: var(--radio-chico); background: transparent; color: var(--texto-tenue); cursor: pointer; }

@@ -4,6 +4,8 @@
  * lo activó en este equipo, muestra cada notificación nueva como aviso del navegador (aunque esté en
  * otra pestaña o ventana). Además, cada notificación nueva aparece como un aviso emergente en la
  * esquina inferior derecha de la aplicación, que se cierra solo a los pocos segundos.
+ * Con los avisos activados, el navegador además se suscribe a los avisos push (public/sw.js): el
+ * servidor los envía y llegan como aviso de Windows aunque la pestaña esté dormida o cerrada.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -20,7 +22,34 @@ const CLAVE_INVITACION = 'avisos-invitacion-descartada';
 interface Nueva { id: string; titulo: string; mensaje: string; enlace: string | null }
 interface Respuesta { ahora: string; noLeidas: number; nuevas: Nueva[] }
 
-export function Avisos({ inicial }: { inicial: number }) {
+/** Clave VAPID (base64url) → bytes, como la pide pushManager.subscribe */
+function claveABytes(base64: string): Uint8Array<ArrayBuffer> {
+  const b = atob((base64 + '='.repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = new Uint8Array(new ArrayBuffer(b.length));
+  for (let i = 0; i < b.length; i++) bytes[i] = b.charCodeAt(i);
+  return bytes;
+}
+
+const mismaClave = (a: ArrayBuffer | null, b: Uint8Array) => {
+  if (!a || a.byteLength !== b.length) return false;
+  const x = new Uint8Array(a);
+  return x.every((v, i) => v === b[i]);
+};
+
+/** Registra el service worker y deja este navegador suscrito a los avisos push de la persona */
+async function suscribirPush(clave: string): Promise<boolean> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+  await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+  const registro = await navigator.serviceWorker.ready;
+  const bytes = claveABytes(clave);
+  let sub = await registro.pushManager.getSubscription();
+  if (sub && !mismaClave(sub.options.applicationServerKey, bytes)) { await sub.unsubscribe(); sub = null; }
+  sub ??= await registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+  const r = await fetch('/api/notificaciones/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub) });
+  return r.ok;
+}
+
+export function Avisos({ inicial, clavePush = null }: { inicial: number; clavePush?: string | null }) {
   const router = useRouter();
   const ruta = usePathname();
   const [cuenta, setCuenta] = useState(inicial);
@@ -28,6 +57,8 @@ export function Avisos({ inicial }: { inicial: number }) {
   const desde = useRef(new Date().toISOString());
   const [emergentes, setEmergentes] = useState<Nueva[]>([]);
   const [montado, setMontado] = useState(false);
+  // Con push activo, el aviso de Windows lo muestra el service worker (así no sale repetido)
+  const pushActivo = useRef(false);
   const quitar = useCallback((id: string) => setEmergentes((l) => l.filter((n) => n.id !== id)), []);
 
   // Al cambiar de página (p. ej. al abrir «Notificaciones», que las marca leídas) llega la cuenta nueva del servidor
@@ -57,7 +88,7 @@ export function Avisos({ inicial }: { inicial: number }) {
         setEmergentes((l) => [...l.filter((v) => !datos.nuevas.some((n) => n.id === v.id)), ...datos.nuevas].slice(-MAX_EMERGENTES));
         // Aviso del sistema solo si la persona está en otra pestaña o en otro programa (si no, basta el emergente)
         const fuera = document.visibilityState !== 'visible' || !document.hasFocus();
-        if (fuera && 'Notification' in window && Notification.permission === 'granted') {
+        if (fuera && !pushActivo.current && 'Notification' in window && Notification.permission === 'granted') {
           for (const n of datos.nuevas) {
             const aviso = new Notification(n.titulo, { body: n.mensaje, tag: n.id, lang: 'es' });
             aviso.onclick = () => { window.focus(); router.push(n.enlace ?? '/notificaciones'); aviso.close(); };
@@ -79,6 +110,29 @@ export function Avisos({ inicial }: { inicial: number }) {
       window.removeEventListener('focus', alVolver);
       window.removeEventListener('blur', mirar);
     };
+  }, [router]);
+
+  // Suscripción push en cuanto hay permiso (también si se concedió desde el candado del navegador)
+  useEffect(() => {
+    if (permiso !== 'granted' || !clavePush) return;
+    let activo = true;
+    suscribirPush(clavePush)
+      .then((ok) => { if (activo) pushActivo.current = ok; })
+      .catch((e) => console.warn('[avisos push]', e));
+    return () => { activo = false; };
+  }, [permiso, clavePush]);
+
+  // Al pulsar un aviso de Windows con la aplicación abierta, el service worker pide navegar aquí
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const alMensaje = (e: MessageEvent) => {
+      const d = e.data as { tipo?: string; enlace?: string } | null;
+      if (d?.tipo !== 'abrir-aviso' || !d.enlace) return;
+      const url = new URL(d.enlace, location.origin);
+      if (url.origin === location.origin) router.push(url.pathname + url.search + url.hash);
+    };
+    navigator.serviceWorker.addEventListener('message', alMensaje);
+    return () => navigator.serviceWorker.removeEventListener('message', alMensaje);
   }, [router]);
 
   // El número de no leídas también en el título de la pestaña, para verlo desde otras pestañas

@@ -48,6 +48,7 @@ model Usuario {
   dispositivosAprobados  Dispositivo[]
   plantillasCargadas     Plantilla[]    @relation("cargadaPor")
   notificaciones         Notificacion[]
+  suscripcionesPush      SuscripcionPush[]
 
   @@map("usuarios")
 }
@@ -298,4 +299,19 @@ model Notificacion {
 
   @@index([usuarioId, creadaEn])
   @@map("notificaciones")
+}
+
+/// Navegadores donde la persona activó los avisos: el servidor les envía cada notificación como
+/// aviso push, que llega aunque la pestaña esté dormida o cerrada (src/lib/servicios/push.ts).
+model SuscripcionPush {
+  id        String   @id @default(cuid())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  creadaEn  DateTime @default(now())
+
+  @@index([usuarioId])
+  @@map("suscripciones_push")
 }

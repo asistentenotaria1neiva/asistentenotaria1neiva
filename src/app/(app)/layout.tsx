@@ -6,11 +6,12 @@ import { Avisos } from './notificaciones/Avisos';
 import { Actividad } from './Actividad';
 import { Icono } from '../Icono';
 import { noLeidas } from '@/lib/servicios/notificaciones';
+import { clavePublicaPush } from '@/lib/servicios/push';
 
 const ROL: Record<string, string> = { ADMINISTRADOR: 'Administrador', REVISOR: 'Revisor', DIGITADOR: 'Digitador' };
 
 async function AvisosConConteo({ usuarioId }: { usuarioId: string }) {
-  return <Avisos inicial={await noLeidas(usuarioId)} />;
+  return <Avisos inicial={await noLeidas(usuarioId)} clavePush={clavePublicaPush()} />;
 }
 
 /** Iniciales del nombre (máximo dos) para el distintivo del usuario */
@@ -41,7 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         enlaces={enlaces}
         avisos={
           // El conteo no detiene la página: llega en cuanto esté listo
-          <Suspense fallback={<Avisos inicial={0} />}>
+          <Suspense fallback={<Avisos inicial={0} clavePush={clavePublicaPush()} />}>
             <AvisosConConteo usuarioId={s.usuario.id} />
           </Suspense>
         }

@@ -19,6 +19,7 @@ export function proxy(request: NextRequest) {
     "img-src 'self' data: blob:",
     "font-src 'self'",
     "connect-src 'self'",
+    "worker-src 'self'", // service worker de los avisos push (public/sw.js)
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -49,6 +50,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // La marca (logo e íconos) es pública: se ve también en el ingreso, antes de tener sesión
-  matcher: [{ source: '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|marca/).*)' }],
+  // La marca (logo e íconos) es pública: se ve también en el ingreso, antes de tener sesión.
+  // sw.js (avisos push) tampoco lleva datos: el navegador lo revisa aunque la sesión haya vencido.
+  matcher: [{ source: '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|sw.js|marca/).*)' }],
 };

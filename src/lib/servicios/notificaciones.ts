@@ -6,13 +6,16 @@
  */
 import 'server-only';
 import { db } from '../db';
+import { enviarPush } from './push';
 
 export interface NuevaNotificacion { titulo: string; mensaje: string; enlace?: string }
 
 /** Avisar nunca hace fallar la operación que lo origina */
 export async function notificar(usuarioId: string, n: NuevaNotificacion): Promise<void> {
-  await db.notificacion.create({ data: { usuarioId, titulo: n.titulo.slice(0, 200), mensaje: n.mensaje.slice(0, 1000), enlace: n.enlace } })
-    .catch((e) => console.error('[notificaciones]', e));
+  const creada = await db.notificacion.create({ data: { usuarioId, titulo: n.titulo.slice(0, 200), mensaje: n.mensaje.slice(0, 1000), enlace: n.enlace } })
+    .catch((e) => { console.error('[notificaciones]', e); return null; });
+  // Aviso de Windows aunque la pestaña esté dormida o cerrada (si la persona lo activó)
+  if (creada) await enviarPush(usuarioId, { id: creada.id, titulo: creada.titulo, mensaje: creada.mensaje, enlace: creada.enlace });
 }
 
 export const noLeidas = (usuarioId: string) => db.notificacion.count({ where: { usuarioId, leidaEn: null } });
