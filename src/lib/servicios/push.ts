@@ -6,7 +6,7 @@
  * Sin ellas, los avisos siguen funcionando solo con la página abierta.
  */
 import 'server-only';
-import webpush from 'web-push';
+import { sendNotification, setVapidDetails } from 'web-push';
 import { db } from '../db';
 
 const PUBLICA = process.env.VAPID_PUBLICA?.trim() || null;
@@ -16,7 +16,7 @@ const CONTACTO = process.env.VAPID_CONTACTO?.trim() || process.env.URL_APLICACIO
 let configurado = false;
 function configurar(): boolean {
   if (!PUBLICA || !PRIVADA) return false;
-  if (!configurado) { webpush.setVapidDetails(CONTACTO, PUBLICA, PRIVADA); configurado = true; }
+  if (!configurado) { setVapidDetails(CONTACTO, PUBLICA, PRIVADA); configurado = true; }
   return true;
 }
 
@@ -49,13 +49,13 @@ export interface AvisoPush { id: string; titulo: string; mensaje: string; enlace
 
 /** Envía el aviso a todos los navegadores de la persona. Nunca lanza error. */
 export async function enviarPush(usuarioId: string, aviso: AvisoPush): Promise<void> {
-  if (!configurar()) return;
   try {
+    if (!configurar()) return;
     const suscripciones = await db.suscripcionPush.findMany({ where: { usuarioId } });
     const carga = JSON.stringify(aviso);
     await Promise.all(suscripciones.map(async (s) => {
       try {
-        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, carga, { TTL: 60 * 60 * 24, urgency: 'high' });
+        await sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, carga, { TTL: 60 * 60 * 24, urgency: 'high' });
       } catch (e) {
         const estado = (e as { statusCode?: number }).statusCode;
         // 404/410: el navegador anuló la suscripción (permiso retirado, datos borrados…)
