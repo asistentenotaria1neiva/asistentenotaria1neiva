@@ -222,3 +222,39 @@ describe('bloque de firma agregado por la IA', () => {
     expect(parrafosDe(xml).filter((x) => x.texto.trim())).toHaveLength(12);
   });
 });
+
+describe('hojas de papel notarial', () => {
+  const textos = (b: Buffer) => parrafosDe(documentoXml(b)).map((x) => x.texto.replace(/[ \t]*-{3,}[ \t]*/g, '').trim());
+  it('quita los números de las hojas del párrafo aparte y deja el renglón en blanco', () => {
+    const salida = aplicarCambios(docx([
+      p(r('El anterior instrumento quedó elaborado en las hojas de papel notarial números: --------')),
+      p(r('Aa124276303, Aa124276302, Aa124276301.')),
+      p(r('De lo cual doy fe.')),
+    ].join('')), []).docx;
+    expect(textos(salida)).toEqual(['El anterior instrumento quedó elaborado en las hojas de papel notarial números:', '', 'De lo cual doy fe.']);
+  });
+  it('si «De lo cual doy fe» va en el mismo párrafo, queda en el renglón siguiente al espacio en blanco', () => {
+    const salida = aplicarCambios(docx([
+      p(r('El anterior instrumento quedó elaborado en las hojas de papel notarial números: --------')),
+      p(r('Aa124274577, Aa124274576 y Aa124280047. De lo cual doy fe. -----')),
+    ].join('')), []).docx;
+    expect(textos(salida)).toEqual(['El anterior instrumento quedó elaborado en las hojas de papel notarial números:', 'De lo cual doy fe.']);
+    expect(documentoXml(salida)).toContain('<w:br/><w:t xml:space="preserve">De lo cual');
+  });
+});
+
+describe('oficios después de la firma del notario', () => {
+  it('no se tratan como zona de firmas: los cambios se aplican como en el resto de la escritura', () => {
+    const plantilla = docx([
+      p(r('LOS OTORGANTES,')), p(r('PEDRO PEREZ GOMEZ', true)), p(r('C.C. No.')), p(r('Estado Civil:')),
+      p(r('EL NOTARIO,')), p(r('LUIS IGNACIO VIVAS CEDEÑO')),
+      p(r('Señores')), p(r('Atentamente me permito informarle que se efectuó la liquidación de PEDRO PEREZ GOMEZ, con registro serial número «EN BLANCO».')),
+    ].join(''));
+    const n = parrafosDe(documentoXml(plantilla)).find((x) => x.texto.startsWith('Atentamente'))!.n;
+    const salida = aplicarCambios(plantilla, [{ p: n, accion: 'REEMPLAZAR', reemplazos: [{ original: 'PEDRO PEREZ GOMEZ', nuevo: 'ANA RUIZ' }], texto: '', insertar_despues: [] }]).docx;
+    const oficio = textoDocx(salida);
+    expect(oficio).toContain('liquidación de ANA RUIZ');
+    // Fuera de la zona de firmas la raya del dato en blanco se conserva
+    expect(oficio).toMatch(/serial número _{6,}/);
+  });
+});

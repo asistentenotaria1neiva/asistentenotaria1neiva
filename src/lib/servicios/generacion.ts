@@ -424,7 +424,7 @@ async function redactar(id: string, expedienteId: string, p: Progreso): Promise<
 /** Párrafos que se revisan en la corrección, como máximo (la respuesta debe caber en una invocación) */
 const MAXIMO_CORRECCION = 40;
 /** Advertencia de la IA que describe un cambio que ella misma no hizo («hay que cambiar…», «falta actualizar los párrafos…») */
-const CAMBIO_PENDIENTE = /\b(?:hay que|se deben?|deben?|debería|falta|faltan|pendiente|quedan?)\b[^.]{0,60}\b(?:cambiar|actualizar|ajustar|reemplazar|corregir|modificar)/i;
+const CAMBIO_PENDIENTE = /\b(?:hay que|se deben?|deben?|debería|falta|faltan|pendiente|quedan?)\b[^.]{0,140}\b(?:cambiar|actualizar|ajustar|reemplazar|corregir|modificar|rehacer|completar)/i;
 
 /** Números de párrafo que menciona una advertencia («párrafos 68, 73, 75 y 152», «párr. 161») */
 function parrafosMencionados(a: Advertencia): number[] {
@@ -454,10 +454,16 @@ async function corregir(id: string, expedienteId: string, p: Progreso) {
   }
   for (const x of r.noAplicados) agregar(x.p, `Tu cambio no se pudo aplicar (${x.motivo})${x.original ? `: «${x.original}»` : ''}.`);
   const pendientesIA = p.advertencias.filter((a) => a.origen === 'IA' && CAMBIO_PENDIENTE.test(a.detalle));
-  for (const a of pendientesIA) for (const n of parrafosMencionados(a)) agregar(n, `Tú advertiste: ${a.detalle}`);
+  const urgentes = new Set<number>(r.noAplicados.map((x) => x.p));
+  for (const a of pendientesIA) for (const n of parrafosMencionados(a)) { agregar(n, `Tú advertiste: ${a.detalle}`); urgentes.add(n); }
   if (!revisar.size) return;
 
-  const lista = [...revisar].sort((a, b) => a[0] - b[0]).slice(0, MAXIMO_CORRECCION);
+  // Si son más de los que caben, primero los cambios no aplicados y los que la IA dejó pendientes, luego
+  // los que tienen más datos del negocio anterior; así no se quedan sin revisar los últimos (los oficios)
+  const lista = [...revisar]
+    .sort((a, b) => Number(urgentes.has(b[0])) - Number(urgentes.has(a[0])) || b[1].length - a[1].length || a[0] - b[0])
+    .slice(0, MAXIMO_CORRECCION)
+    .sort((a, b) => a[0] - b[0]);
   const texto = lista.map(([n, motivos]) => `[${n}] ahora: ${(actuales.get(n) || '(eliminado)').replace(/\n/g, '\n  + ')}\n  revisar:\n${[...new Set(motivos)].map((m) => `  - ${m}`).join('\n')}`).join('\n\n');
   let datos: RespuestaRedaccion;
   let completa = true;

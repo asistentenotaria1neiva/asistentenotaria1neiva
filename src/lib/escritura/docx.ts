@@ -15,6 +15,7 @@
 import PizZip from 'pizzip';
 import { aplicarAjustesNotariales, aplicarEstilosNotariales, aplicarFormatoNotarial, espacioNotarioEnBlanco, negrillasNotariales, aplicarFuenteEInterlineado, aplicarMargenes, interlineadoEnPPr, anchoTextoDe, rellenarParrafo, tabDerecha } from './formato-notarial';
 import { expandirNomenclatura } from './nomenclatura';
+import { expedicionEnMinuscula } from './expedicion';
 import { normalizar, sinTildes } from '../texto/normalizar';
 
 const decodificar = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, '&');
@@ -463,6 +464,28 @@ export function inicioZonaFirmas(parrafos: { n: number; texto: string }[]): numb
   return parrafos[Math.max(0, k)].n;
 }
 
+/** Encabezado de la firma del notario: «EL NOTARIO,», «LA NOTARIA PRIMERA,», «EL NOTARIO ENCARGADO,» */
+const ENCABEZADO_NOTARIO = /^(?:EL|LA)\s+NOTARI[OA](?:\s+[A-ZÁÉÍÓÚÑ()]+){0,4}\s*,?\s*$/i;
+
+/**
+ * Número del último párrafo de la zona de firmas: el nombre del notario (y su cargo, si va debajo).
+ * Lo que sigue (oficios, cartas o constancias anexas) es parte de la escritura y se llena como el resto.
+ * Infinity si la plantilla no trae la firma del notario.
+ */
+export function finZonaFirmas(parrafos: { n: number; texto: string }[], inicio: number): number {
+  const i = parrafos.findIndex((p) => p.n > inicio && ENCABEZADO_NOTARIO.test(p.texto.trim()));
+  if (i < 0) return Infinity;
+  let k = i + 1;
+  while (k < parrafos.length && !parrafos[k].texto.trim()) k++;
+  if (k >= parrafos.length) return parrafos[i].n;
+  let fin = k;
+  // El cargo bajo el nombre («NOTARIO PRIMERO DEL CÍRCULO DE NEIVA»)
+  let j = k + 1;
+  while (j < parrafos.length && !parrafos[j].texto.trim()) j++;
+  if (j < parrafos.length && /^NOTARI[OA]\b/i.test(parrafos[j].texto.trim()) && parrafos[j].texto.length < 120) fin = j;
+  return parrafos[fin].n;
+}
+
 /**
  * En la zona de firmas no hay rayas para llenar: el espacio queda en blanco, como en las plantillas.
  * «EN BLANCO» se quita, y en los rótulos («C.C. No.», «Estado Civil:»…) también las marcas «FALTA»
@@ -553,20 +576,25 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
       return false;
     });
   }
-  // En la zona de firmas el espacio para llenar a mano queda en blanco, sin rayas
+  // En la zona de firmas el espacio para llenar a mano queda en blanco, sin rayas. La zona termina en
+  // el nombre del notario: los oficios que vienen después se llenan como el resto de la escritura.
   const firmas = inicioZonaFirmas(parrafos);
+  const finFirmas = firmas === null ? -1 : finZonaFirmas(parrafos, firmas);
+  const enLaZonaDeFirmas = (n: number) => firmas !== null && n >= firmas && n <= finFirmas;
   if (firmas !== null) for (const c of unidos.values()) {
-    if (c.p < firmas) continue;
+    if (!enLaZonaDeFirmas(c.p)) continue;
     const rotulo = ROTULO_FIRMA.test(porNumero.get(c.p)?.texto.trim() ?? '');
     c.texto = limpiarZonaFirmas(c.texto ?? '', rotulo);
     c.reemplazos = (c.reemplazos ?? []).map((r) => ({ ...r, nuevo: limpiarZonaFirmas(r.nuevo ?? '', rotulo) }));
     c.insertar_despues = (c.insertar_despues ?? []).map((t) => limpiarZonaFirmas(t));
   }
   // La dirección va completa en la escritura aunque el certificado la traiga abreviada («CLL» → «CALLE»)
+  // y la expedición de la cédula no va en mayúscula ni en negrita («expedida en Neiva»)
+  const ajustar = (t: string) => expedicionEnMinuscula(expandirNomenclatura(t));
   for (const c of unidos.values()) {
-    c.texto = expandirNomenclatura(c.texto ?? '');
-    c.reemplazos = (c.reemplazos ?? []).map((r) => ({ ...r, nuevo: expandirNomenclatura(r.nuevo ?? '') }));
-    c.insertar_despues = (c.insertar_despues ?? []).map((t) => typeof t === 'string' ? expandirNomenclatura(t) : t);
+    c.texto = ajustar(c.texto ?? '');
+    c.reemplazos = (c.reemplazos ?? []).map((r) => ({ ...r, nuevo: ajustar(r.nuevo ?? '') }));
+    c.insertar_despues = (c.insertar_despues ?? []).map((t) => typeof t === 'string' ? ajustar(t) : t);
   }
   const textos = new Map<number, string>();
   // De atrás hacia adelante, para que las posiciones en el XML sigan siendo válidas
@@ -576,18 +604,18 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
     const r = editarParrafo(p, c, noAplicados);
     // En la redacción (no en la carátula en mayúsculas, ni en tablas ni en las firmas) las negrillas
     // se rehacen: solo títulos de cláusula, rótulos y datos en mayúscula
-    const negrillas = (x: string) => (!p.enTabla && (firmas === null || c.p < firmas) && /[a-záéíóúñ]/.test(leerParrafo(x, 0, 0, false).texto) ? negrillasNotariales(x) : x);
+    const negrillas = (x: string) => (!p.enTabla && !enLaZonaDeFirmas(c.p) && /[a-záéíóúñ]/.test(leerParrafo(x, 0, 0, false).texto) ? negrillasNotariales(x) : x);
     if (r.aplicados && !r.eliminado) r.xml = comoEnLaPlantilla(p, negrillas(r.xml));
-    const enFirmas = firmas !== null && c.p >= firmas && !p.enTabla;
+    const enFirmas = enLaZonaDeFirmas(c.p) && !p.enTabla;
     const nuevos = (c.insertar_despues ?? []).filter((t) => typeof t === 'string' && t.trim())
-      .flatMap((t) => enFirmas ? renglonesDeFirma(t, parrafos.filter((x) => x.n >= firmas!), p) : [comoEnLaPlantilla(p, negrillas(parrafoNuevo(p, t.trim())))]);
+      .flatMap((t) => enFirmas ? renglonesDeFirma(t, parrafos.filter((x) => x.n >= firmas! && x.n <= finFirmas), p) : [comoEnLaPlantilla(p, negrillas(parrafoNuevo(p, t.trim())))]);
     aplicados += r.aplicados;
     if (r.eliminado) eliminados++;
     insertados += nuevos.length;
     if (r.aplicados || nuevos.length) textos.set(c.p, [r.xml, ...nuevos].filter(Boolean).map((x) => textoParaIA(leerParrafo(x, 0, 0, false).texto)).filter(Boolean).join('\n'));
     xml = xml.slice(0, p.inicio) + r.xml + nuevos.join('') + xml.slice(p.fin);
   }
-  xml = rotulosDeDerechos(xml);
+  xml = hojasDePapelEnBlanco(rotulosDeDerechos(xml));
   zip.file('word/document.xml', xml);
   return { docx: zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer, aplicados, noAplicados: noAplicados.reverse(), eliminados, insertados, textos, reubicados };
 }
@@ -623,6 +651,49 @@ export function rotulosDeDerechos(xml: string): string {
     if (RETEFUENTE.test(p.texto)) { cambios.push({ p, xml: soloRotulo(p, 'RETEFUENTE:') }); break; }
     if (OTRO_COBRO.test(p.texto)) cambios.push({ p, xml: '' });
     else if (p.texto.trim()) break;
+  }
+  for (const c of cambios.reverse()) xml = xml.slice(0, c.p.inicio) + c.xml + xml.slice(c.p.fin);
+  return xml;
+}
+
+const PAPEL_NOTARIAL = /papel\s+notarial/i;
+/**
+ * Lista de números de hojas de papel notarial («Aa124274577, Aa124274576 y Aa124280047.»), con la raya
+ * o la marca «EN BLANCO» que haya puesto la IA en su lugar y los guiones de relleno que la acompañen.
+ */
+const NUMEROS_DE_HOJAS = /(?:(?:\b[A-Z][A-Za-z]{0,2}[  ]?\d{6,}\b|_{6,}|«EN BLANCO»)[\s ,;.-]*(?:\by\b[\s ]*)?)+/g;
+
+/**
+ * Los números de las hojas de papel notarial se conocen solo al imprimir: se quitan los de la plantilla
+ * y queda el renglón en blanco para escribirlos a mano:
+ *   El anterior instrumento quedó elaborado en las hojas de papel notarial números: --------
+ *   (renglón en blanco)
+ *   De lo cual doy fe. ----------
+ * Revisa el párrafo de «papel notarial» y los dos siguientes, hasta el que dice «doy fe».
+ */
+export function hojasDePapelEnBlanco(xml: string): string {
+  const parrafos = parrafosDe(xml);
+  const i = parrafos.findIndex((p) => p.editable && !p.enTabla && PAPEL_NOTARIAL.test(p.texto) && /hojas?/i.test(p.texto) && p.texto.length < 600);
+  if (i < 0) return xml;
+  const cambios: { p: ParrafoDocx; xml: string }[] = [];
+  for (let k = i; k < Math.min(parrafos.length, i + 3); k++) {
+    const p = parrafos[k];
+    if (!p.editable || p.enTabla) break;
+    const desde = k === i ? (PAPEL_NOTARIAL.exec(p.texto)?.index ?? 0) : 0;
+    const lista = [...p.texto.matchAll(NUMEROS_DE_HOJAS)].filter((m) => m.index >= desde && /\d{6,}|_{6,}|EN BLANCO/.test(m[0]));
+    if (lista.length) {
+      const reemplazos = lista.map((m) => {
+        const antes = p.texto.slice(0, m.index).replace(/[\s -]+$/, '');
+        const sigue = /^[\s ]*([^\s -]+)/.exec(p.texto.slice(m.index + m[0].length))?.[1];
+        if (!sigue) return { original: m[0].trim(), nuevo: '' };
+        // Si sigue texto («De lo cual doy fe.»), va en el renglón siguiente al espacio en blanco
+        // (con su primera palabra en el fragmento, para que no le quede un espacio delante)
+        return { original: `${m[0].trim()} ${sigue}`, nuevo: `${antes ? '\n\n' : '\n'}${sigue}` };
+      });
+      const r = editarParrafo(p, { p: p.n, accion: 'REEMPLAZAR', reemplazos, texto: '', insertar_despues: [] }, []);
+      if (r.aplicados) cambios.push({ p, xml: comoEnLaPlantilla(p, r.xml) });
+    }
+    if (/doy\s+fe/i.test(p.texto)) break;
   }
   for (const c of cambios.reverse()) xml = xml.slice(0, c.p.inicio) + c.xml + xml.slice(c.p.fin);
   return xml;
