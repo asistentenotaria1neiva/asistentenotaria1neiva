@@ -2,10 +2,17 @@
  * Consulta periódica de notificaciones (src/app/(app)/notificaciones/Avisos.tsx): cuántas hay sin leer
  * y las nuevas desde `desde`, para mostrarlas como aviso del navegador. No cuenta como actividad: la
  * sesión se sigue cerrando por inactividad aunque la página esté abierta.
+ *
+ * Como cualquier pestaña abierta la hace cada 30 segundos, también reanuda (después de responder) las
+ * generaciones que dejaron de avanzar porque falló el paso a su siguiente etapa.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, after, type NextRequest } from 'next/server';
 import { leerSesion } from '@/lib/sesion';
 import { noLeidas, notificacionesNuevas } from '@/lib/servicios/notificaciones';
+import { generacionesPorReanudar } from '@/lib/servicios/generacion';
+
+/** Una etapa reanudada corre en esta invocación */
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   const s = await leerSesion({ sinActividad: true });
@@ -16,6 +23,10 @@ export async function GET(request: NextRequest) {
     noLeidas(s.usuario.id),
     Number.isNaN(desde.getTime()) ? [] : notificacionesNuevas(s.usuario.id, desde),
   ]);
+  after(async () => {
+    const tareas = await generacionesPorReanudar().catch((err) => { console.error('[reanudar generaciones]', err); return []; });
+    await Promise.all(tareas.map((t) => t().catch((err) => console.error('[reanudar generación]', err))));
+  });
   return NextResponse.json({
     ahora: ahora.toISOString(),
     noLeidas: total,

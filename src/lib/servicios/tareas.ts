@@ -19,8 +19,11 @@ export function firmaValida(id: string, turno: number, recibida: string): boolea
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-/** Esperas antes de cada intento de pedir la siguiente etapa */
-const ESPERAS = [0, 2_000, 8_000];
+/**
+ * Esperas antes de cada intento de pedir la siguiente etapa. La última cubre los momentos en que se
+ * publica una versión nueva de la aplicación y por unos segundos no responde.
+ */
+const ESPERAS = [0, 2_000, 8_000, 30_000];
 
 /**
  * Pide a la aplicación (`base`/api/tareas) que ejecute la etapa `turno` de la tarea `id` en una

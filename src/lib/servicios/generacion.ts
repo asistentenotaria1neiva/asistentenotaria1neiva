@@ -178,6 +178,25 @@ export async function generacionPorReanudar(expedienteId: string): Promise<(() =
 }
 
 /**
+ * Reanuda las generaciones de cualquier escritura que dejaron de avanzar (el encadenamiento falló o la
+ * etapa se cortó). La llama la consulta periódica de avisos, que hace cualquier pestaña abierta de la
+ * aplicación: así una generación no queda detenida esperando a que alguien abra su página.
+ * Devuelve las etapas a ejecutar (quien llama las programa con after()).
+ */
+export async function generacionesPorReanudar(): Promise<(() => Promise<void>)[]> {
+  const quietas = await db.generacion.findMany({
+    where: { estado: 'EN_CURSO', creadaEn: { gt: new Date(Date.now() - DURACION_MAXIMA_MS) }, actualizadaEn: { lt: new Date(Date.now() - 15_000) } },
+    select: { expedienteId: true }, distinct: ['expedienteId'], take: 5,
+  });
+  const tareas: (() => Promise<void>)[] = [];
+  for (const g of quietas) {
+    const t = await generacionPorReanudar(g.expedienteId);
+    if (t) tareas.push(t);
+  }
+  return tareas;
+}
+
+/**
  * Valida y deja la generación EN_CURSO. Devuelve la primera etapa, que la acción programa para después
  * de responder (la persona puede salir de la página). `base`: dirección para encadenar las etapas.
  */
