@@ -251,11 +251,15 @@ const caracter = (c: string) => CLASE.get(c.toLowerCase()) ?? c.replace(/[.*+?^$
 
 /**
  * Expresión que ubica el fragmento tolerando mayúsculas, tildes, comillas, guiones y espacios, y los
- * guiones de relleno que la IA no vio (se le envía el texto sin ellos)
+ * guiones de relleno que la IA no vio (se le envía el texto sin ellos).
+ *
+ * Cada raya de guiones se toma entera (`-{3,}(?!-)`): con `(?:\s|-{3,})+` una raya larga se podía
+ * partir de muchísimas maneras (3+3+…, 4+3+…) y, si después no seguía la palabra buscada, el motor
+ * las probaba todas. Con la raya de 114 guiones al final de un párrafo, la generación se congelaba.
  */
 export function patronFragmento(fragmento: string): RegExp {
   const palabras = fragmento.trim().split(/\s+/).filter(Boolean);
-  return new RegExp(palabras.map((p) => [...p].map(caracter).join('')).join('(?:[\\s\\u00a0]|-{3,})+'), 'giu');
+  return new RegExp(palabras.map((p) => [...p].map(caracter).join('')).join('(?:[\\s\\u00a0]|-{3,}(?!-))+'), 'giu');
 }
 
 /** Reemplaza [a, b) del texto del párrafo; el texto nuevo queda en la primera corrida que toca */

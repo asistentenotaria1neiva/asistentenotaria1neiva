@@ -29,6 +29,22 @@ const NO_ES_LUGAR = '(?:ESTADO|Y|QUIEN|QUIENES|MAYOR|DOMICILIAD[OA]S?|ACTIVIDAD|
 const PALABRA = `(?!${NO_ES_LUGAR})(?:[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ.]*|\\([A-Z.]+\\))`;
 const EXPEDIDA = new RegExp(`\\b(EXPEDID[AO]S?|[Ee]xpedid[ao]s?)([ \\u00a0]+)(?:EN|en)\\b(?:([ \\u00a0]+)(${PALABRA}(?:[ \\u00a0]+${PALABRA}){0,4})(?![a-záéíóúñ]))?`, 'g');
 
+/** «expedida en Neiva», «expedido en Bogotá D.C.», «expedida en La Plata (H)» ya escritos como van */
+const CAP = '(?:[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\\.?|[A-Z]\\.(?:[A-Z]\\.)+|\\([A-Z.]+\\))';
+const EXPEDIDA_MINUSCULA = new RegExp(`\\bexpedid[ao]s?[ \\u00a0]+en\\b(?:[ \\u00a0]+${CAP}(?:[ \\u00a0]+(?:(?:de|del|la|las|los|el)[ \\u00a0]+)?${CAP}){0,3})?`, 'g');
+
+/**
+ * Para el formato final del párrafo: el texto con la expedición en minúscula (mismo largo, para no
+ * descuadrar las corridas) y los tramos [inicio, fin) de cada expedición, que van sin negrilla.
+ */
+export function expedicionesSinNegrilla(texto: string): { texto: string; tramos: [number, number][] } {
+  if (!texto || !/expedid/i.test(texto)) return { texto, tramos: [] };
+  const nuevo = expedicionEnMinuscula(texto);
+  const base = nuevo.length === texto.length ? nuevo : texto;
+  const tramos = [...base.matchAll(EXPEDIDA_MINUSCULA)].map((m): [number, number] => [m.index!, m.index! + m[0].length]);
+  return { texto: base, tramos };
+}
+
 export function expedicionEnMinuscula(texto: string): string {
   if (!texto || !/expedid/i.test(texto)) return texto;
   return texto.replace(EXPEDIDA, (todo, expedida: string, esp: string, esp2?: string, lugar?: string) => {

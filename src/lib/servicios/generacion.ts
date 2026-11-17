@@ -26,6 +26,8 @@ import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { obtenerConfig } from '../configuracion';
 import { plantillaNumerada, aplicarCambios, formatoPagina, textoDocx, textosPorParrafo, faltantesEn, verificarEn, normalizarMarcas, ErrorDocx, type CambioParrafo } from '../escritura/docx';
+import { discordanciasDeGenero, describirDiscordancias } from '../escritura/genero';
+import { revisarCatastrales } from '../escritura/catastral';
 import { datosDeLaPlantillaAnterior, restosDelNegocioAnterior, valoresEnLetras, medidasEnLetras, medidasPorRevisar, pendientes } from '../escritura/verificaciones';
 import { llamarEstructurado, configuracionModelo, ErrorIA, type ResultadoLlamada } from '../ia/cliente';
 import { rescatarArreglo, rescatarTexto } from '../ia/json';
@@ -511,6 +513,12 @@ async function corregir(id: string, expedienteId: string, p: Progreso) {
   const pendientesIA = p.advertencias.filter((a) => a.origen === 'IA' && CAMBIO_PENDIENTE.test(a.detalle));
   const urgentes = new Set<number>(r.noAplicados.map((x) => x.p));
   for (const a of pendientesIA) for (const n of parrafosMencionados(a)) { agregar(n, `Tú advertiste: ${a.detalle}`); urgentes.add(n); }
+  // Palabras que no concuerdan con el género de la persona («ALIRIO …, domiciliada»): la plantilla era de otra persona
+  for (const [n, t] of r.textos) {
+    const motivos = describirDiscordancias(discordanciasDeGenero(t, p.otorgantes));
+    for (const m of motivos) agregar(n, m);
+    if (motivos.length) urgentes.add(n);
+  }
   if (!revisar.size) return;
 
   // Si son más de los que caben, primero los cambios no aplicados y los que la IA dejó pendientes, luego
@@ -736,8 +744,11 @@ async function terminar(id: string, expedienteId: string, version: number, p: Pr
     ...c.sinLeer.map((n) => ({ nivel: 'ADVERTENCIA' as const, origen: 'SISTEMA' as const, p: 0, detalle: `El documento «${n}» no se pudo leer: sus datos no se usaron. Ábralo en la lista de documentos y léalo de nuevo, o cárguelo con mejor calidad.` })),
     ...pendientes(faltantes, verificar, r.noAplicados),
     ...datosDeLaPlantillaAnterior({ plantilla: textosPorParrafo(c.plantilla), escritura: texto, fuentes, ignorar: [notaria.codigo, notaria.resolucion_tarifas] }),
+    // Cédulas catastrales: exactas, como en los documentos
+    ...revisarCatastrales(texto, c.leidos.flatMap((d) => (d.lectura as unknown as Lectura).documentos ?? [])).map((detalle) => ({ nivel: 'CRITICA' as const, origen: 'SISTEMA' as const, p: 0, detalle })),
     ...valoresEnLetras(texto),
     ...medidasEnLetras(textosPorParrafo(c.plantilla), r.textos),
+    ...[...r.textos].flatMap(([n, t]) => describirDiscordancias(discordanciasDeGenero(t, p.otorgantes)).map((detalle) => ({ nivel: 'ADVERTENCIA' as const, origen: 'SISTEMA' as const, p: n, detalle: `Párrafo ${n}: ${detalle.replace(/ Corrige .*$/, ' Corríjalo antes de imprimir.')}` }))).slice(0, 10),
   ];
   const advertencias = [...p.advertencias.filter((a) => !avisoDeDatoAMano(a)), ...automaticas].sort((a, b) => ORDEN_NIVEL[a.nivel] - ORDEN_NIVEL[b.nivel]);
   const resultado: ResultadoGeneracion = {

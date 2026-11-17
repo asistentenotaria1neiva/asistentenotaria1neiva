@@ -17,7 +17,8 @@ import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { abrirPdf, extraerPaginas } from '../pdf';
 import { textoDocx, ErrorDocx } from '../escritura/docx';
-import { llamarEstructurado, prepararDocumento, ErrorIA } from '../ia/cliente';
+import { llamarEstructurado, prepararDocumento, configuracionModelo, ErrorIA } from '../ia/cliente';
+import { esDatoCatastral, soloDigitos, problemaDeForma, difierenEnCeros } from '../escritura/catastral';
 import { rescatarArreglo } from '../ia/json';
 import { SISTEMA_LECTURA, ESQUEMA_LECTURA, type Lectura, type DocumentoLeido } from '../ia/instrucciones';
 import { expedienteEditable, obtenerExpediente, ErrorNegocio } from './expedientes';
@@ -114,6 +115,94 @@ export async function bloquesDeArchivo(bytes: Buffer, mime: string, titulo: stri
   return { tramos, liberar: async () => { await Promise.all(liberar.map((f) => f())); } };
 }
 
+const ESQUEMA_CATASTRAL = {
+  type: 'object',
+  properties: {
+    numeros: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          rotulo: { type: 'string' },
+          tal_como_aparece: { type: 'string' },
+          grupos: { type: 'array', items: { type: 'string' } },
+          cantidad_digitos: { type: 'integer' },
+        },
+        required: ['rotulo', 'tal_como_aparece', 'grupos', 'cantidad_digitos'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['numeros'],
+  additionalProperties: false,
+} as const;
+
+const SISTEMA_CATASTRAL = `Transcribes, con exactitud absoluta, las cédulas catastrales (código catastral, número predial, ficha catastral) de UNA página de un documento colombiano (certificado de tradición, paz y salvo predial o de valorización, escritura). Una sola cifra de más o de menos invalida la escritura.
+- Transcribe cada cédula catastral VIGENTE de la página (no la «anterior» o «antigua»), con su rótulo.
+- «tal_como_aparece»: el número exactamente como está impreso (con sus guiones o puntos, si los tiene).
+- «grupos»: el mismo número partido en grupos. Si tiene 30 dígitos (número predial nacional): 2, 3, 2, 2, 2, 2, 4, 4, 1, 2, 2, 4 dígitos (departamento, municipio, zona, sector, comuna, barrio, manzana o vereda, terreno, condición, edificio, piso, unidad). Si tiene 25 (sin departamento ni municipio): 2, 2, 2, 2, 4, 4, 1, 2, 2, 4. Si tiene otra cantidad o guiones, los grupos que trae impresos.
+- «cantidad_digitos»: cuántos dígitos tiene, contados uno por uno.
+- CUIDADO con las series de ceros: es donde más se equivoca la lectura. Cuenta cada cero mirando su posición; mide el largo del número contra los dígitos distintos de cero que lo rodean. Antes de responder, vuelve a contar los dígitos y verifica que los grupos, unidos, den el número.
+- Si la página está girada, léela girada. Si no hay ninguna cédula catastral, devuelve la lista vacía.`;
+
+/**
+ * Relectura de las cédulas catastrales: la lectura general (Haiku) cuenta mal las series de ceros de un
+ * escaneo. Cada página con una cédula catastral se vuelve a leer solo para ese número con el modelo de
+ * la redacción y esfuerzo alto; si la relectura es coherente (sus grupos y su cantidad cuadran) y
+ * difiere de lo leído, manda la relectura y queda una alerta. Un fallo aquí no daña la lectura.
+ */
+async function releerCatastrales(bytes: Buffer, mime: string, nombre: string, documentos: DocumentoLeido[], registro: { usuarioId: string; expedienteId: string }): Promise<void> {
+  if (mime === MIME_DOCX) return; // el texto de un Word es exacto
+  const porPagina = new Map<number, { doc: DocumentoLeido; i: number }[]>();
+  for (const doc of documentos) doc.datos.forEach((x, i) => {
+    if (!esDatoCatastral(x.dato, x.valor)) return;
+    const p = x.pagina || 1;
+    porPagina.set(p, [...(porPagina.get(p) ?? []), { doc, i }]);
+  });
+  if (!porPagina.size) return;
+  const pdf = mime === 'application/pdf' ? await abrirPdf(bytes) : null;
+  await Promise.all([...porPagina].slice(0, 6).map(async ([pagina, datos]) => {
+    let liberar = async () => {};
+    try {
+      const pagBytes = pdf && pagina <= pdf.getPageCount() ? await extraerPaginas(pdf, pagina, pagina) : bytes;
+      const d = await prepararDocumento(pagBytes, mime, `${nombre} — página ${pagina}`);
+      liberar = d.liberar;
+      const r = await llamarEstructurado<{ numeros: { rotulo: string; tal_como_aparece: string; grupos: string[]; cantidad_digitos: number }[] }>({
+        proposito: 'LECTURA',
+        modelo: configuracionModelo('REDACCION').modelo,
+        esfuerzo: 'high',
+        registro,
+        sistema: SISTEMA_CATASTRAL,
+        contenido: [d.bloque, { type: 'text', text: 'Transcribe las cédulas catastrales de esta página.' }],
+        esquema: ESQUEMA_CATASTRAL as unknown as Record<string, unknown>,
+        maxTokens: 8000,
+      });
+      // Solo las relecturas coherentes: los grupos unidos dan el número y la cantidad cuadra
+      const buenas = r.datos.numeros.filter((n) => {
+        const dig = soloDigitos(n.tal_como_aparece);
+        return dig.length === n.cantidad_digitos && soloDigitos(n.grupos.join('')) === dig && !problemaDeForma(dig);
+      });
+      for (const { doc, i } of datos) {
+        const leido = doc.datos[i];
+        if (buenas.some((n) => soloDigitos(n.tal_como_aparece) === soloDigitos(leido.valor))) continue;
+        // La que corresponde: la que solo difiere en ceros, o la única de la página
+        const candidata = buenas.find((n) => difierenEnCeros(n.tal_como_aparece, leido.valor)) ?? (buenas.length === 1 ? buenas[0] : undefined);
+        if (!candidata) {
+          (doc.alertas ??= []).push(`Cédula catastral «${leido.valor}» (p${pagina}): no se pudo confirmar en una segunda lectura; verifíquela dígito por dígito contra el documento.`);
+          continue;
+        }
+        (doc.alertas ??= []).push(`Cédula catastral corregida en una segunda lectura (p${pagina}): ${candidata.tal_como_aparece} (la primera lectura decía ${leido.valor}).`);
+        doc.datos[i] = { ...leido, valor: candidata.tal_como_aparece };
+      }
+    } catch (e) {
+      console.error('[releerCatastrales]', e);
+      for (const { doc, i } of datos) (doc.alertas ??= []).push(`Cédula catastral «${doc.datos[i].valor}» (p${pagina}): no se pudo hacer la segunda lectura; verifíquela dígito por dígito contra el documento.`);
+    } finally {
+      await liberar();
+    }
+  }));
+}
+
 /** Tramos de un PDF largo que se leen a la vez (cada uno tarda de 1 a 4 minutos) */
 const TRAMOS_A_LA_VEZ = 3;
 
@@ -176,6 +265,8 @@ export async function leerDocumento(documentoId: string, usuarioId: string): Pro
       while (cola.length) await leerTramo(cola.shift()!);
     }));
     const documentos = Object.keys(hechos).map(Number).sort((a, b) => a - b).flatMap((k) => hechos[k]);
+    // Las cédulas catastrales, releídas una por una (deben quedar exactas)
+    await releerCatastrales(bytes, doc.mime, doc.nombreOriginal, documentos, { usuarioId, expedienteId: doc.expedienteId });
     await db.documento.update({ where: { id: doc.id }, data: { estadoLectura: 'LEIDO', lectura: { documentos } as unknown as Prisma.InputJsonValue } });
     return true;
   } catch (e) {

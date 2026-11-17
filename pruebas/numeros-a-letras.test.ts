@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   enteroALetras, pesosEnLetras, medidaEnLetras, fechaEnLetras, fechaComparecencia,
-  numeroEscrituraEnLetras, porcentajeEnLetras, formatoPesos,
+  numeroEscrituraEnLetras, porcentajeEnLetras, formatoPesos, areasVurConvertidas,
 } from '@/lib/texto/numeros-a-letras';
 
 // Vectores tomados de escrituras reales de la notaría (solo cifras, sin datos personales)
@@ -90,5 +90,15 @@ describe('porcentajes', () => {
     expect(porcentajeEnLetras(12.5)).toBe('DOCE PUNTO CINCO POR CIENTO (12.5%)');
     expect(porcentajeEnLetras(94.64)).toBe('NOVENTA Y CUATRO PUNTO SESENTA Y CUATRO POR CIENTO (94.64%)');
     expect(porcentajeEnLetras(50)).toBe('CINCUENTA POR CIENTO (50%)');
+  });
+});
+
+describe('área del certificado de la VUR', () => {
+  it('suma hectáreas, metros y centímetros cuadrados y la deja en letras', () => {
+    expect(areasVurConvertidas('AREA - HECTAREAS: 0 METROS CUADRADOS: 37 CENTIMETROS CUADRADOS: 2000'))
+      .toBe('AREA - HECTAREAS: 0 METROS CUADRADOS: 37 CENTIMETROS CUADRADOS: 2000 [= TREINTA Y SIETE PUNTO VEINTE METROS CUADRADOS (37.20 M2)]');
+    expect(areasVurConvertidas('HECTAREAS: 2 METROS CUADRADOS: 500 CENTIMETROS CUADRADOS: 0')).toContain('(20500.00 M2)');
+    // Las áreas en cero se dejan como están
+    expect(areasVurConvertidas('AREA PRIVADA - METROS CUADRADOS: 0 CENTIMETROS CUADRADOS: 0')).toBe('AREA PRIVADA - METROS CUADRADOS: 0 CENTIMETROS CUADRADOS: 0');
   });
 });

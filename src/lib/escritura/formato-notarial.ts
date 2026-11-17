@@ -23,6 +23,7 @@
  * Los guiones se calculan con el ancho de los caracteres de Arial (el de Helvetica, el mismo de
  * Liberation Sans en LibreOffice) y un margen de seguridad, para que no pasen al renglón siguiente.
  */
+import { expedicionesSinNegrilla } from './expedicion';
 
 /**
  * Márgenes de la notaría (twips; 1 cm = 567 twips): superior 3 cm, inferior 0,9 cm, interior 3,1 cm
@@ -185,6 +186,9 @@ function leerRuns(contenido: string): Run[] {
   }
   return partes;
 }
+
+/** El rPr sin la negrilla */
+const sinNegrillaRPr = (rPr: string) => rPr.replace(/<w:b(?:Cs)?(?:\s[^>]*)?\/>/g, '').replace(/^<w:rPr><\/w:rPr>$/, '');
 
 const esNegrilla = (rPr: string) => /<w:b(?:\s+w:val="(?:1|true|on)")?\s*\/>/.test(rPr);
 
@@ -413,6 +417,84 @@ const esLineaFirma = (t: string) => /^_{8,}/.test(t);
 /** Un párrafo vacío que se puede quitar (no lleva salto de página, sección, imagen ni campo) */
 const vacioRemovible = (p: string) => !/<w:br\b[^>]*w:type="page"|<w:sectPr|<w:drawing|<w:pict|<w:object|<w:fldChar|<w:fldSimple|<mc:AlternateContent/.test(p);
 
+/**
+ * Quita los renglones en blanco hechos con saltos de línea dentro de un mismo párrafo (la IA a veces
+ * separa los datos de la carátula con «\n\n»): deja un solo salto entre renglones con texto y ninguno
+ * al principio ni al final del párrafo.
+ */
+function sinRenglonesVacios(partes: Run[]): Run[] {
+  const texto = partes.map((r) => (r.texto ?? (r.tab ? '\t' : '￼'))).join('');
+  if (!texto.includes('\n')) return partes;
+  const quitar = new Set<number>();
+  const marcar = (a: number, b: number) => { for (let i = a; i < b; i++) quitar.add(i); };
+  // Un salto seguido (tras espacios) de otro salto: sobra el primero con sus espacios
+  for (const m of texto.matchAll(/\n[  ]*(?=\n)/g)) marcar(m.index!, m.index! + m[0].length);
+  // Saltos al principio y al final del párrafo
+  const inicio = /^[  \n]*\n/.exec(texto);
+  if (inicio) marcar(0, inicio[0].length);
+  const fin = /\n[  \n]*$/.exec(texto);
+  if (fin) marcar(fin.index, texto.length);
+  return editarCaracteres(partes, quitar);
+}
+
+/**
+ * Quita de las corridas los caracteres en `quitar` y pasa a mayúscula los de `mayuscula` (posiciones
+ * en el texto unido de las corridas; las que no son de texto cuentan como un carácter y no se tocan).
+ */
+function editarCaracteres(partes: Run[], quitar: Set<number>, mayuscula = new Set<number>()): Run[] {
+  if (!quitar.size && !mayuscula.size) return partes;
+  let pos = 0;
+  return partes.map((r) => {
+    if (r.texto === null) { pos += 1; return r; }
+    const desde = pos;
+    pos += r.texto.length;
+    const t = r.texto.split('').map((c, k) => (quitar.has(desde + k) ? '' : mayuscula.has(desde + k) ? c.toUpperCase() : c)).join('');
+    return t === r.texto ? r : { ...r, texto: t };
+  });
+}
+
+// Número y fecha de una escritura citada: solo en cifras
+const PALABRA_NUMERO = '(?:CERO|UNO|UNA|UN|DOS|TRES|CUATRO|CINCO|SEIS|SIETE|OCHO|NUEVE|DIEZ|ONCE|DOCE|TRECE|CATORCE|QUINCE|DIECIS[EÉ]IS|DIECISIETE|DIECIOCHO|DIECINUEVE|VEINTE|VEINTI[UÚ]NO|VEINTI[UÚ]N|VEINTID[OÓ]S|VEINTITR[EÉ]S|VEINTICUATRO|VEINTICINCO|VEINTIS[EÉ]IS|VEINTISIETE|VEINTIOCHO|VEINTINUEVE|TREINTA|CUARENTA|CINCUENTA|SESENTA|SETENTA|OCHENTA|NOVENTA|CIEN|CIENTO|DOSCIENTOS|TRESCIENTOS|CUATROCIENTOS|QUINIENTOS|SEISCIENTOS|SETECIENTOS|OCHOCIENTOS|NOVECIENTOS|MIL|Y|PRIMERO)(?![A-Za-zÁÉÍÓÚÑáéíóúñ])';
+const EN_LETRAS = `${PALABRA_NUMERO}(?:[ \\u00a0]+${PALABRA_NUMERO})*[ \\u00a0]*\\(`;
+const MES = '(?:ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|SETIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)';
+const S = '[ \\u00a0]+';
+/**
+ * Grupos seguidos que cubren toda la cita: 1 «escritura pública número », 2-4 «LETRAS (», cifra, «)»
+ * o 5 la cifra sola; 6 « del »; 7-9 «LETRAS (», día, «)» o 10 el día solo; 11 « DE MES DE »; 12-14
+ * «LETRAS (», año, «)» o 15 el año solo. Las letras y los paréntesis se quitan.
+ */
+const CITA_ESCRITURA = new RegExp(
+  `(\\bescrituras?${S}(?:p[uú]blicas?${S})?(?:n[uú]mero|No\\.?|Nro\\.?|N[°º])[ \\u00a0]*)` +
+  `(?:(${EN_LETRAS})(\\d[\\d.]*)(\\))|(\\d[\\d.]*))` +
+  `(?:([ \\u00a0]*,?${S}(?:otorgada${S})?(?:del|de${S}fecha|de|el)${S}(?:d[ií]a${S})?)` +
+  `(?:(${EN_LETRAS})(\\d{1,2})(\\))|(\\d{1,2}))(${S}de${S}${MES}${S}(?:del?${S})?(?:a[ñn]o${S})?)(?:(${EN_LETRAS})(\\d{4})(\\))|(\\d{4})))?`,
+  'gi');
+const GRUPOS_QUE_SE_QUITAN = new Set([2, 4, 7, 9, 12, 14]);
+const GRUPO_MES = 11;
+
+/**
+ * El número y la fecha de toda escritura citada van solo en cifras, en mayúscula: «escritura pública
+ * número TRES MIL CIENTO SESENTA Y CUATRO (3164) del VEINTIDOS (22) DE SEPTIEMBRE DE DOS MIL VEINTIDOS
+ * (2022)» → «escritura pública número 3164 del 22 DE SEPTIEMBRE DE 2022». El mes sigue en letras.
+ */
+function citasEnCifras(partes: Run[]): Run[] {
+  const texto = partes.map((r) => (r.texto ?? (r.tab ? '\t' : '￼'))).join('');
+  if (!/escritura/i.test(texto)) return partes;
+  const quitar = new Set<number>(), mayuscula = new Set<number>();
+  for (const m of texto.matchAll(CITA_ESCRITURA)) {
+    let pos = m.index!;
+    for (let g = 1; g < m.length; g++) {
+      const largo = m[g]?.length ?? 0;
+      for (let k = pos; k < pos + largo; k++) {
+        if (GRUPOS_QUE_SE_QUITAN.has(g)) quitar.add(k);
+        else if (g === GRUPO_MES) mayuscula.add(k);
+      }
+      pos += largo;
+    }
+  }
+  return editarCaracteres(partes, quitar, mayuscula);
+}
+
 const twips = (pPr: string, atributo: string) => Number(new RegExp(`<w:ind\\b[^>]*\\bw:${atributo}="(-?\\d+)"`).exec(pPr)?.[1] ?? 0);
 
 /**
@@ -514,7 +596,7 @@ export function espacioNotarioEnBlanco(xml: string): string {
  * Formatea el cuerpo del documento. `anchoTexto`: ancho del renglón en twips (página menos márgenes).
  */
 export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): string {
-  const enCaratula = { personas: false, especificacion: false };
+  const enCaratula = { personas: false, especificacion: false, inmuebles: false };
   const salida: string[] = [];
   // Todo párrafo sale con Arial 12, interlineado 1,5 y justificado completo (Resolución 9146 de 2012)
   const parrafo = (xml: string, jc: 'both' | 'center' = 'both') => salida.push(normalizarParrafo(xml, jc));
@@ -550,10 +632,11 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     const m = /^<w:p(\s[^>]*)?>([\s\S]*)<\/w:p>$/.exec(trozo);
     if (!m) { salida.push(trozo); continue; }
     let pPr = /^<w:pPr>[\s\S]*?<\/w:pPr>/.exec(m[2])?.[0] ?? '';
-    const runs = leerRuns(m[2].slice(pPr.length));
     const texto = textoDe(m[2].slice(pPr.length)).replace(/\t$/, '');
     const plano = texto.trim();
     if (esLineaFirma(plano)) zonaFirmas = true;
+    // Sin renglones en blanco tampoco dentro del párrafo (saltos de línea seguidos), salvo en las firmas
+    const runs = zonaFirmas || enTabla ? leerRuns(m[2].slice(pPr.length)) : sinRenglonesVacios(leerRuns(m[2].slice(pPr.length)));
     const centrado = /<w:jc w:val="center"\/>/.test(pPr);
 
     // Terminada la carátula (después del último inmueble), el espacio del notario que autoriza
@@ -564,7 +647,7 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
       continue;
     }
     if (encabezadoNotario >= 0) { /* el espacio va en lugar del encabezado */ }
-    else if (plano && !enTabla && (espacioNotario === 'antes' || espacioNotario === 'pendiente') && /^OFICINA DE REGISTRO/i.test(plano)) espacioNotario = 'pendiente';
+    else if (plano && !enTabla && (espacioNotario === 'antes' || espacioNotario === 'pendiente') && /^OFICINA DE REGISTRO/im.test(plano)) espacioNotario = 'pendiente';
     else if (plano && !enTabla && espacioNotario === 'pendiente' && !DATO_CARATULA.test(plano)) {
       const proximo = soloGuiones(plano) ? planos.slice(indice + 1).find((t) => t && !soloGuiones(t)) : null;
       if (!proximo || !DATO_CARATULA.test(proximo)) {
@@ -633,9 +716,14 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     if (enCaratula.especificacion) {
       // Terminada la especificación, una línea de guiones antes de los inmuebles
       enCaratula.especificacion = false;
+      enCaratula.inmuebles = true;
       salida.push(lineaGuiones(anchoTexto));
       previo = '-';
     }
+    // Los datos de cada inmueble en la carátula (matrícula, cédula catastral, dirección, oficina de
+    // registro) van completos en negrilla; el bloque termina con el primer párrafo que no es un dato
+    if (enCaratula.inmuebles && (enTabla || !DATO_CARATULA.test(plano))) enCaratula.inmuebles = false;
+    const todoNegrilla = enCaratula.inmuebles;
 
     // Línea de guiones antes de cada parte de la escritura (si no la tiene ya)
     if (INICIO_PARTE.test(plano) && previo && previo !== '-') salida.push(lineaGuiones(anchoTexto));
@@ -660,6 +748,20 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
       if (ultimo >= 0 && partes.slice(ultimo + 1).every((r) => r.texto === null && !r.tab)) partes = partes.filter((_, i) => i !== ultimo);
     }
     if (terminaEnGuiones) partes = partes.map((r) => (r === ultimoTexto ? { ...r, texto: r.texto!.replace(/\s-{3,}\s*$/, '') } : r));
+    // El número y la fecha de las escrituras citadas, solo en cifras
+    if (!zonaFirmas) partes = citasEnCifras(partes);
+    // La expedición de la cédula («36.169.118 expedida en Neiva») en minúscula y sin negrilla, aunque
+    // la plantilla la traiga en mayúscula o en una corrida en negrilla
+    const expedicion = expedicionesSinNegrilla(partes.map((r) => (r.texto ?? (r.tab ? '\t' : '￼'))).join(''));
+    if (expedicion.tramos.length) {
+      let p = 0;
+      partes = partes.map((r) => {
+        const largo = r.texto?.length ?? 1;
+        const t = r.texto === null ? null : expedicion.texto.slice(p, p + largo);
+        p += largo;
+        return t === null || t === r.texto ? r : { ...r, texto: t };
+      });
+    }
 
     const renglon = (anchoTexto - twips(pPr, 'left') - twips(pPr, 'right')) / 20 * 1000 / 12;
     const renglonPrimero = renglon - twips(pPr, 'firstLine') / 20 * 1000 / 12;
@@ -669,7 +771,9 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     // Negrillas sobre el texto de los runs simples
     const textoRuns = partes.map((r) => (r.texto ?? (r.tab ? '\t' : '￼'))).join('');
     const tramos = tramosNegrilla(textoRuns);
-    const enTramo = (i: number) => tramos.some(([a, b]) => i >= a && i < b);
+    const enTramo = (i: number) => todoNegrilla || tramos.some(([a, b]) => i >= a && i < b);
+    const sinNegrillaEn = expedicionesSinNegrilla(textoRuns).tramos;
+    const esNegrita = (i: number, rPr: string) => !sinNegrillaEn.some(([a, b]) => i >= a && i < b) && (enTramo(i) || esNegrilla(rPr));
     let pos = 0;
     const segmentos: Segmento[] = [];
     const nuevos = partes.map((r) => {
@@ -677,11 +781,11 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
       let xml = '';
       let k = 0;
       while (k < r.texto.length) {
-        const negrilla = enTramo(pos + k) || esNegrilla(r.rPr);
+        const negrilla = esNegrita(pos + k, r.rPr);
         let fin = k + 1;
-        while (fin < r.texto.length && (enTramo(pos + fin) || esNegrilla(r.rPr)) === negrilla) fin++;
+        while (fin < r.texto.length && esNegrita(pos + fin, r.rPr) === negrilla) fin++;
         const t = r.texto.slice(k, fin);
-        xml += runTexto(conNegrilla(r.rPr, negrilla), t);
+        xml += runTexto(negrilla ? conNegrilla(r.rPr, true) : sinNegrillaRPr(r.rPr), t);
         segmentos.push({ texto: t, negrilla });
         k = fin;
       }

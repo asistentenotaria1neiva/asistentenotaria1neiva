@@ -137,6 +137,21 @@ export function medidaEnLetras(valor: number, unidadLarga: string, unidadCorta: 
   return `${minusculas ? texto.toLowerCase() : texto} (${numero} ${unidadCorta})`;
 }
 
+/**
+ * Área como la trae el certificado de tradición de la VUR, en hectáreas, metros y centímetros cuadrados:
+ * «HECTAREAS: 0 METROS CUADRADOS: 37 CENTIMETROS CUADRADOS: 2000» son 37,20 m² (2.000 cm² = 0,20 m²).
+ * A cada área distinta de cero le agrega, entre corchetes, el total en metros cuadrados y en letras,
+ * para que no se lea como «37 m²» ni parezca que no coincide con la descripción.
+ */
+export function areasVurConvertidas(texto: string): string {
+  const numero = (s: string | undefined) => Number((s ?? '0').replace(/\./g, '').replace(',', '.')) || 0;
+  return texto.replace(/(?:HECT[AÁ]REAS\s*:\s*([\d.,]+)\s*-?\s*)?METROS\s+CUADRADOS\s*:\s*([\d.,]+)\s*-?\s*CENT[IÍ]METROS\s+CUADRADOS\s*:\s*([\d.,]+)/gi, (todo, ha?: string, m2?: string, cm2?: string) => {
+    const total = numero(ha) * 10000 + numero(m2) + numero(cm2) / 10000;
+    if (!(total > 0) || total > 1e9) return todo;
+    return `${todo} [= ${medidaEnLetras(total, 'METROS CUADRADOS', 'M2')}]`;
+  });
+}
+
 const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
 
 /** Fecha a partir de "AAAA-MM-DD" sin desfases de zona horaria */

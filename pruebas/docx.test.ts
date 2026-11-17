@@ -70,6 +70,16 @@ describe('cambios de la IA sobre la plantilla', () => {
     expect(noAplicados).toHaveLength(1);
   });
 
+  it('no se congela con una raya larga de guiones que no va seguida del fragmento', () => {
+    // Antes: «a.» de «cuota.» + 114 guiones hacía que la búsqueda de «a. Que pagaron» no terminara
+    const texto = `y manifestaron: ${'-'.repeat(30)}a. Que pagaron el valor. b. por tratarse de derechos de cuota. ${'-'.repeat(114)}`;
+    const inicio = Date.now();
+    expect([...texto.matchAll(patronFragmento('a. Que pagaron'))]).toHaveLength(1);
+    expect(patronFragmento('cuota. Fin').test(texto)).toBe(false);
+    expect(Date.now() - inicio).toBeLessThan(500);
+    expect(patronFragmento('manifestaron: a. Que').test(texto)).toBe(true);
+  });
+
   it('el resultado con el formato de la notaría sigue siendo un Word válido', () => {
     const { docx: salida } = aplicarCambios(PLANTILLA, [{ p: 3, accion: 'REEMPLAZAR', reemplazos: [{ original: '200-84274', nuevo: '200-99999' }], texto: '', insertar_despues: [] }]);
     const final = formatoNotaria(salida);

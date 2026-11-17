@@ -83,7 +83,7 @@ export interface ResultadoLlamada<T> {
  */
 export async function llamarEstructurado<T>(opciones: OpcionesLlamada): Promise<ResultadoLlamada<T>> {
   const config = configuracionModelo(opciones.proposito);
-  const modelo = config.modelo;
+  const modelo = opciones.modelo ?? config.modelo;
   const esfuerzo = opciones.esfuerzo ?? config.esfuerzo;
   try {
     return await llamar<T>(opciones, modelo, esfuerzo);
@@ -102,6 +102,8 @@ interface OpcionesLlamada {
   maxTokens?: number;
   /** Esfuerzo de razonamiento para esta llamada (p. ej. 'low' para identificar un documento); si no, el del propósito */
   esfuerzo?: Esfuerzo;
+  /** Modelo para esta llamada (p. ej. uno más fuerte para releer un dato crítico); si no, el del propósito */
+  modelo?: string;
   /**
    * Cantidad de bloques iniciales de `contenido` que se repiten igual en llamadas seguidas (p. ej. la
    * plantilla y los documentos al continuar una redacción): quedan en caché 5 minutos y la siguiente

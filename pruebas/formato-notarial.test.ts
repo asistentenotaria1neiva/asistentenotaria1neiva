@@ -18,6 +18,55 @@ describe('formato de impresión de la notaría', () => {
     expect(guionesDeRelleno([{ texto: lleno, negrilla: false }], RENGLON)).toBe(0);
   });
 
+  it('quita los renglones en blanco hechos con saltos de línea dentro del párrafo', () => {
+    const p = '<w:p><w:r><w:t xml:space="preserve">MATRICULA INMOBILIARIA: 200-190650.</w:t><w:br/><w:br/><w:t xml:space="preserve">CEDULA CATASTRAL: 4100101.</w:t><w:br/></w:r><w:r><w:br/><w:t xml:space="preserve">OFICINA DE REGISTRO DE NEIVA.</w:t><w:br/></w:r></w:p>';
+    const [t] = textos(aplicarFormatoNotarial(p, ANCHO));
+    expect(t).not.toMatch(/\n[\s-]*\n/);
+    expect(t).not.toMatch(/\n[\s-]*$/);
+    expect(t.split('\n')).toHaveLength(3);
+  });
+
+  it('la expedición de la cédula va en minúscula y sin negrilla aunque la plantilla la traiga así', () => {
+    const p = '<w:p><w:r><w:t xml:space="preserve">Que la señora </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">CLARA ROJAS ARDILA</w:t></w:r><w:r><w:t xml:space="preserve">, identificada con cédula número </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">36.169.118 EXPEDIDA EN NEIVA</w:t></w:r><w:r><w:t xml:space="preserve">, en la fecha.</w:t></w:r></w:p>';
+    const xml = aplicarFormatoNotarial(p, ANCHO);
+    expect(textos(xml)[0]).toContain('36.169.118 expedida en Neiva, en la fecha.');
+    const b = negrillas(xml).join('|');
+    expect(b).toContain('36.169.118');
+    expect(b).toContain('CLARA ROJAS ARDILA');
+    expect(b).not.toMatch(/expedida|Neiva/i);
+  });
+
+  it('el número y la fecha de una escritura citada van solo en cifras', () => {
+    const p = '<w:p><w:r><w:t xml:space="preserve">SEGUNDO: Que mediante escritura pública número </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">TRES MIL CIENTO SESENTA Y CUATRO (3164)</w:t></w:r><w:r><w:t xml:space="preserve"> del </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">VEINTIDOS (22) DE SEPTIEMBRE DE DOS MIL VEINTIDOS (2022)</w:t></w:r><w:r><w:t xml:space="preserve">, otorgada en la Notaria Primera de Neiva, por NOVENTA MILLONES DE PESOS M/CTE ($90.000.000).</w:t></w:r></w:p>';
+    const xml = aplicarFormatoNotarial(p, ANCHO);
+    const t = textos(xml)[0];
+    expect(t).toContain('escritura pública número 3164 del 22 DE SEPTIEMBRE DE 2022, otorgada');
+    // Los valores siguen en letras y en cifras
+    expect(t).toContain('NOVENTA MILLONES DE PESOS M/CTE ($90.000.000)');
+    const b = negrillas(xml).join('|');
+    expect(b).toContain('3164');
+    expect(b).toContain('22 DE SEPTIEMBRE DE 2022');
+    // También con la fecha en minúscula y la cita en una sola corrida
+    const q = textos(aplicarFormatoNotarial(sinGuia('según escritura pública No. MIL DOSCIENTOS TREINTA Y CUATRO (1.234) de fecha doce (12) de marzo de dos mil veinte (2020) de la Notaría'), ANCHO))[0];
+    expect(q).toContain('escritura pública No. 1.234 de fecha 12 DE MARZO DE 2020 de la Notaría');
+  });
+
+  it('pone en negrilla los datos del inmueble de la carátula, y no el cuerpo', () => {
+    const xml = aplicarFormatoNotarial([
+      sinGuia('ESPECIFICACION VALOR DEL ACTO'),
+      sinGuia('CANCELACION DE HIPOTECA $90.000.000'),
+      sinGuia('MATRICULA INMOBILIARIA: 200-190650.'),
+      sinGuia('CEDULA CATASTRAL: 41001010100000024.'),
+      sinGuia('OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.'),
+      sinGuia('Compareció la señora del caso.'),
+    ].join(''), ANCHO);
+    const b = negrillas(xml).join('|');
+    expect(b).toContain('MATRICULA INMOBILIARIA: 200-190650.');
+    expect(b).toContain('CEDULA CATASTRAL: 41001010100000024.');
+    expect(b).toContain('OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.');
+    expect(b).not.toContain('Compareció');
+  });
+
   it('guiones escritos (Google Docs no muestra el relleno de la tabulación) y una tabulación al margen que completa lo que falta', () => {
     const xml = aplicarFormatoNotarial(conGuia('Texto de la cláusula.') + sinGuia('LOS OTORGANTES,'), ANCHO);
     // La guía de la plantilla (en 8894) se cambia por una sola, en el margen derecho
