@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requerirSesion } from '@/lib/sesion';
 import { listarExpedientes } from '@/lib/servicios/expedientes';
+import { cerrarGeneracionesVencidas } from '@/lib/servicios/generacion';
 import { TablaExpedientes, Vacio } from '../componentes';
 import { Icono } from '../../Icono';
 
@@ -9,6 +10,8 @@ export default async function Escrituras({ searchParams }: { searchParams: Promi
   const esAdmin = s.usuario.rol === 'ADMINISTRADOR';
   const { q = '', eliminadas: e = '' } = await searchParams;
   const eliminadas = e === 'solo' || e === 'excluir' ? e : 'incluir';
+  // Ninguna escritura queda «Generando» para siempre: las que pasaron el tiempo máximo se cierran con error
+  await cerrarGeneracionesVencidas().catch((err) => console.error('[generaciones vencidas]', err));
   const filas = await listarExpedientes(s, { q, limite: 200, eliminadas });
   const filtrado = !!q || eliminadas !== 'incluir';
   return (

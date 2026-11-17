@@ -48,6 +48,19 @@ const CONCURRENCIA = Math.min(Math.max(Math.trunc(Number(process.env.CLAUDE_CONC
 const CORTE_MS = 100_000;
 /** Salida máxima de la redacción: más no alcanza a terminar en los 5 minutos de una invocación */
 const MAXIMO_SALIDA = 20_000;
+/**
+ * Límites de tiempo, contados desde que se pidió la generación, para que nunca quede «generando»
+ * indefinidamente:
+ *   - LECTURA_MAXIMA_MS: se deja de esperar a los documentos que no terminan de leerse; se redacta con
+ *     lo leído y los demás quedan como advertencia.
+ *   - APURO_MS: se omite lo que es ayuda (continuar una redacción cortada, la revisión final, la
+ *     búsqueda de faltantes) y se arma el Word con lo que hay, avisando qué quedó sin hacer.
+ *   - DURACION_MAXIMA_MS: la generación se da por fallida (con aviso) aunque nadie tenga la página abierta.
+ */
+const LECTURA_MAXIMA_MS = 10 * 60_000;
+const APURO_MS = 15 * 60_000;
+export const DURACION_MAXIMA_MS = 25 * 60_000;
+const MENSAJE_VENCIDA = `La generación tardó más de ${DURACION_MAXIMA_MS / 60_000} minutos y se detuvo. Genérela de nuevo (los documentos ya leídos no se vuelven a leer); si vuelve a pasar, revise que los documentos no sean demasiado largos o divídalos.`;
 /** Faltantes que no están en los documentos: se asignan en la notaría al otorgar */
 const NO_SE_BUSCA = /fecha de(l)? otorgamiento|n[uú]mero de (la )?escritura|derechos notariales|\biva\b|recaudo|retenci[oó]n|aporte|superintendencia|fondo (cuenta|especial)/i;
 /**
@@ -126,6 +139,10 @@ export async function generacionEnCurso(expedienteId: string) {
   const g = await db.generacion.findFirst({ where: { expedienteId, estado: 'EN_CURSO' }, orderBy: { version: 'desc' } });
   const p = g && progresoDe(g);
   if (!g || !p) return null;
+  if (Date.now() - g.creadaEn.getTime() > DURACION_MAXIMA_MS) {
+    await terminarConError(g.id, p, MENSAJE_VENCIDA);
+    return null;
+  }
   if (Date.now() - g.actualizadaEn.getTime() > LIMITE_SIN_LATIDO_MS && p.reanudaciones >= MAX_REANUDACIONES) {
     await terminarConError(g.id, p, 'La generación se interrumpió varias veces. Genérela de nuevo (los documentos ya leídos no se vuelven a leer).');
     return null;
@@ -149,6 +166,7 @@ export async function generacionPorReanudar(expedienteId: string): Promise<(() =
   const g = await db.generacion.findFirst({ where: { expedienteId, estado: 'EN_CURSO' }, orderBy: { version: 'desc' } });
   const p = g && progresoDe(g);
   if (!g || !p) return null;
+  if (Date.now() - g.creadaEn.getTime() > DURACION_MAXIMA_MS) return null; // generacionEnCurso la da por fallida
   const quieta = Date.now() - g.actualizadaEn.getTime();
   if (quieta < LIMITE_SIN_LATIDO_MS && !(p.sinEncadenar && quieta > 15_000)) return null;
   if (p.reanudaciones >= MAX_REANUDACIONES) return null; // generacionEnCurso la da por fallida
@@ -254,6 +272,22 @@ export async function cancelarGeneracion(s: SesionActiva, expedienteId: string):
   return g.version;
 }
 
+/**
+ * Cierra con error las generaciones que pasaron DURACION_MAXIMA_MS sin terminar (de cualquier
+ * expediente): las listas de escrituras la llaman, así ninguna queda «Generando» para siempre aunque
+ * nadie abra su página. Devuelve cuántas cerró.
+ */
+export async function cerrarGeneracionesVencidas(): Promise<number> {
+  const vencidas = await db.generacion.findMany({ where: { estado: 'EN_CURSO', creadaEn: { lt: new Date(Date.now() - DURACION_MAXIMA_MS) } }, select: { id: true, progreso: true }, take: 50 });
+  for (const g of vencidas) await terminarConError(g.id, progresoDe(g), MENSAJE_VENCIDA).catch((err) => console.error('[generacion] cerrar vencida', err));
+  return vencidas.length;
+}
+
+/** Lo que se omite por falta de tiempo queda avisado en la revisión */
+function omitidoPorTiempo(p: Progreso, que: string) {
+  p.advertencias.push({ nivel: 'ADVERTENCIA', origen: 'SISTEMA', p: 0, detalle: `La generación se estaba demorando y se omitió ${que} para entregarla a tiempo. Revise la escritura con más cuidado o genérela de nuevo.` });
+}
+
 async function encadenar(id: string, p: Progreso) {
   if (!p.base) return ejecutarEtapa(id, p.turno); // pruebas: sigue en la misma invocación
   if (!(await pedirEtapa(p.base, id, p.turno))) await guardar(id, { ...p, sinEncadenar: true });
@@ -269,17 +303,30 @@ export async function ejecutarEtapa(id: string, turno: number): Promise<void> {
   try {
     const usuario = await db.usuario.findUnique({ where: { id: p.sesion.usuario.id }, select: { estado: true } });
     if (usuario?.estado !== 'ACTIVO') throw new ErrorNegocio('El usuario que inició la generación ya no está activo.');
+    const edad = () => Date.now() - g.creadaEn.getTime();
+    if (edad() > DURACION_MAXIMA_MS) throw new ErrorNegocio(MENSAJE_VENCIDA);
+    const apurada = () => edad() > APURO_MS;
+    const despuesDeRedactar = (): Etapa => (buscables(p).length && !apurada() ? 'FALTANTES' : 'FINAL');
+    // Una etapa que solo ayuda y se reanudó tarde se salta
+    if (apurada() && p.etapa === 'CORRECCION') { omitidoPorTiempo(p, 'la revisión final de datos del negocio anterior'); p.etapa = 'FINAL'; }
+    if (apurada() && p.etapa === 'FALTANTES') { omitidoPorTiempo(p, 'la búsqueda de los datos «FALTA» en los documentos'); p.etapa = 'FINAL'; }
     if (p.etapa === 'LECTURA') {
-      if (await leerPendientes(id, g.expedienteId, p)) return encadenar(id, p);
+      if (await leerPendientes(id, g.expedienteId, p, g.creadaEn.getTime() + LECTURA_MAXIMA_MS)) return encadenar(id, p);
       p.etapa = p.ajuste ? 'AJUSTE' : 'REDACCION';
     } else if (p.etapa === 'REDACCION') {
-      if (await redactar(id, g.expedienteId, p)) p.etapa = 'CORRECCION';
+      if (await redactar(id, g.expedienteId, p)) {
+        p.etapa = apurada() ? 'FINAL' : 'CORRECCION';
+        if (apurada()) omitidoPorTiempo(p, 'la revisión final de datos del negocio anterior');
+      } else if (apurada()) {
+        p.advertencias.push({ nivel: 'CRITICA', origen: 'SISTEMA', p: p.hasta, detalle: `Por tiempo, la IA no alcanzó a adaptar la plantilla después del párrafo ${p.hasta}. Revise ese tramo a mano o genere de nuevo.` });
+        p.etapa = 'FINAL';
+      }
     } else if (p.etapa === 'AJUSTE') {
       await ajustar(id, g.expedienteId, p);
-      p.etapa = buscables(p).length ? 'FALTANTES' : 'FINAL';
+      p.etapa = despuesDeRedactar();
     } else if (p.etapa === 'CORRECCION') {
       await corregir(id, g.expedienteId, p);
-      p.etapa = buscables(p).length ? 'FALTANTES' : 'FINAL';
+      p.etapa = despuesDeRedactar();
     } else if (p.etapa === 'FALTANTES') {
       await buscarFaltantes(id, g.expedienteId, p);
       p.etapa = 'FINAL';
@@ -296,9 +343,17 @@ export async function ejecutarEtapa(id: string, turno: number): Promise<void> {
 
 // ------------------------------------------------------------------ 1. lectura de los documentos
 
-/** Lee los documentos pendientes, varios a la vez, hasta CORTE_MS. true si quedan para otra invocación. */
-async function leerPendientes(id: string, expedienteId: string, p: Progreso): Promise<boolean> {
+/**
+ * Lee los documentos pendientes, varios a la vez, hasta CORTE_MS. true si quedan para otra invocación.
+ * Pasado `limite` (hora) no se espera más: se redacta con lo leído y los demás quedan como advertencia.
+ */
+async function leerPendientes(id: string, expedienteId: string, p: Progreso, limite: number): Promise<boolean> {
   const inicio = Date.now();
+  if (inicio > limite) {
+    const sinLeer = await db.documento.count({ where: { expedienteId, estadoLectura: { not: 'LEIDO' } } });
+    if (sinLeer) p.advertencias.push({ nivel: 'ADVERTENCIA', origen: 'SISTEMA', p: 0, detalle: `La lectura de ${sinLeer} documento(s) se estaba demorando demasiado y la escritura se redactó sin ellos. Cuando terminen de leerse (o léalos de nuevo), genere otra versión.` });
+    return false;
+  }
   const pendientes = await db.documento.findMany({
     where: { expedienteId, estadoLectura: { not: 'LEIDO' }, id: { notIn: p.intentados } },
     orderBy: { creadoEn: 'asc' }, select: { id: true, nombreOriginal: true, estadoLectura: true, actualizadoEn: true },
@@ -307,7 +362,7 @@ async function leerPendientes(id: string, expedienteId: string, p: Progreso): Pr
   const ajenos = pendientes.filter((d) => d.estadoLectura === 'EN_CURSO' && Date.now() - d.actualizadoEn.getTime() < LECTURA_CORTADA_MS);
   const cola = pendientes.filter((d) => !ajenos.includes(d));
   const trabajador = async () => {
-    while (cola.length && Date.now() - inicio < CORTE_MS) {
+    while (cola.length && Date.now() - inicio < CORTE_MS && Date.now() < limite) {
       const d = cola.shift()!;
       p.leyendo.push(d.nombreOriginal);
       if (!(await guardar(id, p))) return;

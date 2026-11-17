@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requerirSesion } from '@/lib/sesion';
 import { listarExpedientes } from '@/lib/servicios/expedientes';
+import { cerrarGeneracionesVencidas } from '@/lib/servicios/generacion';
 import { noLeidas } from '@/lib/servicios/notificaciones';
 import { EtiquetaVersion, TablaExpedientes, Vacio, hace, type FilaEscritura } from './componentes';
 import { Icono } from '../Icono';
@@ -24,6 +25,8 @@ function saludo(): string {
 export default async function Inicio({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await requerirSesion();
   const { error } = await searchParams;
+  // Ninguna escritura queda «Generando» para siempre: las que pasaron el tiempo máximo se cierran con error
+  await cerrarGeneracionesVencidas().catch((err) => console.error('[generaciones vencidas]', err));
   const [filas, avisos] = await Promise.all([listarExpedientes(s, { soloPropios: true, limite: 50 }), noLeidas(s.usuario.id)]);
   const generando = filas.filter((e) => e.generaciones[0]?.estado === 'EN_CURSO').length;
   const sinGenerar = filas.filter((e) => !e.generaciones[0]).length;
