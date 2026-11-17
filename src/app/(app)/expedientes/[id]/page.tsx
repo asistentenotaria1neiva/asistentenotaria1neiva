@@ -54,9 +54,11 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
   // Una etapa de la generación que se cortó se reanuda; un documento cuya lectura no empezó o se cortó, se lee
   const reanudar = await generacionPorReanudar(id);
   if (reanudar) after(() => reanudar().catch((err) => console.error('[reanudar generación]', err)));
-  const [documentos, enCurso, generaciones] = await Promise.all([
+  // Primero la generación en curso: si pasó el tiempo máximo la cierra con error, y la lista de
+  // versiones (que se lee después) ya la muestra con su error y no como «Generando»
+  const enCurso = await generacionEnCurso(id);
+  const [documentos, generaciones] = await Promise.all([
     db.documento.findMany({ where: { expedienteId: id }, orderBy: { creadoEn: 'asc' } }),
-    generacionEnCurso(id),
     db.generacion.findMany({ where: { expedienteId: id }, orderBy: { version: 'desc' }, take: 20, include: { generadaPor: { select: { nombreCompleto: true } } } }),
   ]);
   const trabados = documentos.filter((d) => (d.estadoLectura === 'PENDIENTE' && Date.now() - d.creadoEn.getTime() > 60_000) || (d.estadoLectura === 'EN_CURSO' && Date.now() - d.actualizadoEn.getTime() > LECTURA_CORTADA_MS));
