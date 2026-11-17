@@ -596,7 +596,7 @@ export function espacioNotarioEnBlanco(xml: string): string {
  * Formatea el cuerpo del documento. `anchoTexto`: ancho del renglón en twips (página menos márgenes).
  */
 export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): string {
-  const enCaratula = { personas: false, especificacion: false, inmuebles: false };
+  const enCaratula: { personas: boolean; especificacion: boolean; inmuebles: 'no' | 'esperando' | 'dentro' } = { personas: false, especificacion: false, inmuebles: 'no' };
   const salida: string[] = [];
   // Todo párrafo sale con Arial 12, interlineado 1,5 y justificado completo (Resolución 9146 de 2012)
   const parrafo = (xml: string, jc: 'both' | 'center' = 'both') => salida.push(normalizarParrafo(xml, jc));
@@ -698,6 +698,7 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     const especificacion = !enTabla && espacioNotario !== 'hecho' ? ROTULO_ESPECIFICACION.exec(plano.replace(/\t/g, ' ')) : null;
     if (especificacion) {
       enCaratula.especificacion = true;
+      enCaratula.inmuebles = 'esperando';
       const tabs = `<w:pPr><w:tabs><w:tab w:val="right" w:pos="${anchoTexto}"/></w:tabs><w:spacing w:after="0" w:line="360" w:lineRule="auto"/><w:ind w:firstLine="${SANGRIA_CARATULA}"/><w:jc w:val="left"/></w:pPr>`;
       const rPr = '<w:rPr><w:b/><w:bCs/><w:u w:val="single"/></w:rPr>';
       // Las minutas con columna de código (Bancolombia) la conservan
@@ -716,14 +717,18 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     if (enCaratula.especificacion) {
       // Terminada la especificación, una línea de guiones antes de los inmuebles
       enCaratula.especificacion = false;
-      enCaratula.inmuebles = true;
       salida.push(lineaGuiones(anchoTexto));
       previo = '-';
     }
     // Los datos de cada inmueble en la carátula (matrícula, cédula catastral, dirección, oficina de
-    // registro) van completos en negrilla; el bloque termina con el primer párrafo que no es un dato
-    if (enCaratula.inmuebles && (enTabla || !DATO_CARATULA.test(plano))) enCaratula.inmuebles = false;
-    const todoNegrilla = enCaratula.inmuebles;
+    // registro) van completos en negrilla. El bloque empieza en el primer dato después de la
+    // especificación (aunque antes vaya el acto con el valor en blanco, «COMPRAVENTA $____») y termina
+    // con el primer párrafo que no es un dato; si no aparece ningún dato, termina con el cuerpo.
+    const esDato = !enTabla && DATO_CARATULA.test(plano);
+    if (enCaratula.inmuebles === 'esperando' && esDato) enCaratula.inmuebles = 'dentro';
+    else if (enCaratula.inmuebles === 'dentro' && !esDato) enCaratula.inmuebles = 'no';
+    else if (enCaratula.inmuebles === 'esperando' && (enTabla || plano.length > 150 || espacioNotario === 'hecho')) enCaratula.inmuebles = 'no';
+    const todoNegrilla = enCaratula.inmuebles === 'dentro';
 
     // Línea de guiones antes de cada parte de la escritura (si no la tiene ya)
     if (INICIO_PARTE.test(plano) && previo && previo !== '-') salida.push(lineaGuiones(anchoTexto));

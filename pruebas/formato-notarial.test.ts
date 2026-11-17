@@ -67,6 +67,24 @@ describe('formato de impresión de la notaría', () => {
     expect(b).not.toContain('Compareció');
   });
 
+  it('también con el valor del acto en blanco («COMPRAVENTA $____») antes de los datos', () => {
+    const xml = aplicarFormatoNotarial([
+      sinGuia('ESPECIFICACION VALOR DEL ACTO'),
+      '<w:p><w:r><w:t xml:space="preserve">COMPRAVENTA $</w:t></w:r><w:r><w:rPr><w:highlight w:val="yellow"/></w:rPr><w:t>____________________</w:t></w:r></w:p>',
+      sinGuia('MATRICULA INMOBILIARIA: 200-291172.'),
+      sinGuia('CEDULA CATASTRAL: 416150000000000030023000000000.'),
+      sinGuia('CEDULA CATASTRAL PAZ Y SALVO: 41-615-00-00-00-00-0003-0035-0-00-00-0000.'),
+      sinGuia('NOMBRE O DIRECCIÓN DEL INMUEBLE: LOTE 5 H.'),
+      sinGuia('OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA.'),
+      sinGuia('Comparecieron quienes dijeron ser, LUIS EDUARDO ZABALA CORDOBA, mayor de edad, domiciliado en la ciudad de Neiva, quien obra en su propio nombre y manifestó que vende el inmueble.'),
+    ].join(''), ANCHO);
+    const b = negrillas(xml).join('|');
+    expect(b).toContain('CEDULA CATASTRAL: 416150000000000030023000000000.');
+    expect(b).toContain('CEDULA CATASTRAL PAZ Y SALVO: 41-615-00-00-00-00-0003-0035-0-00-00-0000.');
+    expect(b).toContain('MATRICULA INMOBILIARIA: 200-291172.');
+    expect(b).not.toMatch(/Comparecieron|mayor de edad/);
+  });
+
   it('guiones escritos (Google Docs no muestra el relleno de la tabulación) y una tabulación al margen que completa lo que falta', () => {
     const xml = aplicarFormatoNotarial(conGuia('Texto de la cláusula.') + sinGuia('LOS OTORGANTES,'), ANCHO);
     // La guía de la plantilla (en 8894) se cambia por una sola, en el margen derecho
