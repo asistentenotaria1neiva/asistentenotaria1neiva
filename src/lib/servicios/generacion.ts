@@ -28,6 +28,7 @@ import { obtenerConfig } from '../configuracion';
 import { plantillaNumerada, aplicarCambios, formatoPagina, textoDocx, textosPorParrafo, faltantesEn, verificarEn, normalizarMarcas, ErrorDocx, type CambioParrafo } from '../escritura/docx';
 import { discordanciasDeGenero, describirDiscordancias } from '../escritura/genero';
 import { revisarCatastrales } from '../escritura/catastral';
+import { revisarLinderos } from '../escritura/linderos';
 import { datosDeLaPlantillaAnterior, restosDelNegocioAnterior, valoresEnLetras, medidasEnLetras, medidasPorRevisar, pendientes } from '../escritura/verificaciones';
 import { llamarEstructurado, configuracionModelo, ErrorIA, type ResultadoLlamada } from '../ia/cliente';
 import { rescatarArreglo, rescatarTexto } from '../ia/json';
@@ -752,6 +753,14 @@ const ORDEN_NIVEL = { CRITICA: 0, ADVERTENCIA: 1, INFORMATIVA: 2 } as const;
 
 async function terminar(id: string, expedienteId: string, version: number, p: Progreso) {
   const c = await contexto(expedienteId, p);
+  // Linderos poco legibles o que no cuadran con el área: cada costado queda [VERIFICAR] (en amarillo)
+  const lecturas = c.leidos.flatMap((d) => (d.lectura as unknown as Lectura).documentos ?? []);
+  const avisosLinderos = [
+    ...lecturas.flatMap((d) => d.alertas ?? []),
+    ...lecturas.flatMap((d) => d.textos_literales ?? []).filter((t) => /\[VERIFICAR/i.test(t.texto) && /linder/i.test(`${t.titulo} ${t.texto}`)).map((t) => `Linderos con cifras poco legibles: ${t.titulo}`),
+  ];
+  const linderos = revisarLinderos(p.cambios, avisosLinderos);
+  p.cambios = linderos.cambios;
   const r = aplicarCambios(c.plantilla, p.cambios);
   const docx = formatoPagina(r.docx);
   const texto = textoDocx(docx);
@@ -761,6 +770,7 @@ async function terminar(id: string, expedienteId: string, version: number, p: Pr
   const fuentes = `${c.textoDocs}\n${c.e.observaciones ?? ''}`;
   const automaticas: Advertencia[] = [
     ...c.sinLeer.map((n) => ({ nivel: 'ADVERTENCIA' as const, origen: 'SISTEMA' as const, p: 0, detalle: `El documento «${n}» no se pudo leer: sus datos no se usaron. Ábralo en la lista de documentos y léalo de nuevo, o cárguelo con mejor calidad.` })),
+    ...linderos.advertencias,
     ...pendientes(faltantes, verificar, r.noAplicados),
     ...datosDeLaPlantillaAnterior({ plantilla: textosPorParrafo(c.plantilla), escritura: texto, fuentes, ignorar: [notaria.codigo, notaria.resolucion_tarifas] }),
     // Cédulas catastrales: exactas, como en los documentos
