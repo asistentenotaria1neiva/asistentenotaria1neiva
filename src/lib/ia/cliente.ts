@@ -85,14 +85,24 @@ export async function llamarEstructurado<T>(opciones: OpcionesLlamada): Promise<
   const config = configuracionModelo(opciones.proposito);
   const modelo = opciones.modelo ?? config.modelo;
   const esfuerzo = opciones.esfuerzo ?? config.esfuerzo;
+  const respaldo = process.env.CLAUDE_MODELO_RESPALDO?.trim() || RESPALDO;
   try {
     return await llamar<T>(opciones, modelo, esfuerzo);
   } catch (e) {
-    const respaldo = process.env.CLAUDE_MODELO_RESPALDO?.trim() || RESPALDO;
-    if (!(e instanceof ErrorIA && e.codigo === 'RECHAZO') || tieneRespaldoServidor(modelo) || respaldo === modelo) throw e;
+    if (!(e instanceof ErrorIA)) throw e;
+    // La redacción gastó toda la salida razonando y no escribió nada (no hay qué continuar): se repite
+    // una vez con el modelo de respaldo o, si ya era ese, razonando menos. Nunca se queda sin escritura.
+    if (e.codigo === 'TRUNCADO' && !e.parcial?.trim() && opciones.proposito === 'REDACCION') {
+      console.warn(`[ia] redacción sin texto con ${modelo}/${esfuerzo}: se repite`);
+      // El respaldo razona al menos con esfuerzo medio: el esfuerzo bajo es para el modelo barato
+      return respaldo !== modelo ? llamar<T>(opciones, respaldo, esfuerzo === 'low' ? 'medium' : esfuerzo) : llamar<T>(opciones, modelo, MENOS_ESFUERZO[esfuerzo]);
+    }
+    if (e.codigo !== 'RECHAZO' || tieneRespaldoServidor(modelo) || respaldo === modelo) throw e;
     return llamar<T>(opciones, respaldo, esfuerzo);
   }
 }
+
+const MENOS_ESFUERZO: Record<Esfuerzo, Esfuerzo> = { max: 'high', xhigh: 'medium', high: 'medium', medium: 'low', low: 'low' };
 
 interface OpcionesLlamada {
   proposito: Proposito;
