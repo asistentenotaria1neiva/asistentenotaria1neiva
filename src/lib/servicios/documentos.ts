@@ -217,13 +217,23 @@ type LecturaParcial = { tramos?: Record<string, DocumentoLeido[]> };
  * el latido): en Vercel cada invocación se corta a los 5 minutos y, sin eso, un PDF de 100+ páginas
  * volvía a empezar desde el primer tramo en cada intento y nunca terminaba.
  */
-export async function leerDocumento(documentoId: string, usuarioId: string): Promise<boolean> {
+export async function leerDocumento(documentoId: string, usuarioId: string, { reutilizar = true }: { reutilizar?: boolean } = {}): Promise<boolean> {
   const tomado = await db.documento.updateMany({
     where: { id: documentoId, OR: [{ estadoLectura: { in: ['PENDIENTE', 'ERROR'] } }, { estadoLectura: 'EN_CURSO', actualizadoEn: { lt: new Date(Date.now() - LECTURA_CORTADA_MS) } }] },
     data: { estadoLectura: 'EN_CURSO', errorLectura: null },
   });
   if (!tomado.count) return false;
   const doc = await db.documento.findUniqueOrThrow({ where: { id: documentoId } });
+  // El mismo archivo (mismo SHA-256) ya leído en este u otro expediente: misma lectura, sin pagarla otra
+  // vez (un certificado o una escritura de mayor extensión se carga en varios negocios). «Leer de nuevo» no reutiliza.
+  if (reutilizar) {
+    const gemelo = await db.documento.findFirst({ where: { hashSha256: doc.hashSha256, id: { not: doc.id }, estadoLectura: 'LEIDO' }, orderBy: { actualizadoEn: 'desc' }, select: { lectura: true } });
+    const documentos = (gemelo?.lectura as { documentos?: DocumentoLeido[] } | null)?.documentos;
+    if (documentos?.length) {
+      await db.documento.update({ where: { id: doc.id }, data: { estadoLectura: 'LEIDO', lectura: { documentos } as unknown as Prisma.InputJsonValue } });
+      return true;
+    }
+  }
   const hechos: Record<string, DocumentoLeido[]> = { ...((doc.lectura as LecturaParcial | null)?.tramos ?? {}) };
   const guardarAvance = () => db.documento.updateMany({ where: { id: doc.id, estadoLectura: 'EN_CURSO' }, data: { lectura: { tramos: hechos } as unknown as Prisma.InputJsonValue } });
   let liberar = async () => {};
@@ -288,7 +298,8 @@ export async function releerDocumento(s: SesionActiva, documentoId: string) {
   if (doc.estadoLectura === 'EN_CURSO' && Date.now() - doc.actualizadoEn.getTime() < LECTURA_CORTADA_MS) throw new ErrorNegocio('El documento se está leyendo.');
   if (!(await consumirLimite(`ia:${s.usuario.id}`, 200, 3600)).permitido) throw new ErrorNegocio('Límite de lecturas por hora alcanzado.');
   await db.documento.update({ where: { id: documentoId }, data: { estadoLectura: 'PENDIENTE', lectura: Prisma.DbNull } });
-  return () => leerDocumento(documentoId, s.usuario.id).then(() => undefined);
+  // Se relee de verdad (si la lectura falló o salió mal, la de una copia del mismo archivo tampoco sirve)
+  return () => leerDocumento(documentoId, s.usuario.id, { reutilizar: false }).then(() => undefined);
 }
 
 export async function eliminarDocumento(s: SesionActiva, documentoId: string) {

@@ -14,7 +14,7 @@ export const PRECIOS_MODELOS: Record<string, Precio> = {
   'claude-opus-5-5': { entrada: 4, salida: 20, cache: 0.2 },
   'claude-opus-5': { entrada: 5, salida: 25, cache: 0.5 },
   'claude-opus-4-8': { entrada: 5, salida: 25, cache: 0.5 },
-  'claude-sonnet-5-5': { entrada: 2, salida: 10, cache: 0.2 },
+  'claude-sonnet-5-5': { entrada: 2, salida: 10, cache: 0.1 },
   'claude-sonnet-5': { entrada: 2, salida: 10, cache: 0.2 },
   'claude-sonnet-4-6': { entrada: 3, salida: 15, cache: 0.3 },
   'claude-haiku-5-5': { entrada: 0.1, salida: 0.5, cache: 0.01 },

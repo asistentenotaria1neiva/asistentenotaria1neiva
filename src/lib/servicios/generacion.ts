@@ -462,7 +462,7 @@ async function redactar(id: string, expedienteId: string, p: Progreso): Promise<
       // La plantilla y lo leído son iguales en una continuación y en otra versión aunque cambien las
       // observaciones o la fecha (van en <caso>, después del punto de caché, y son cortos)
       cachearBloques: 2,
-      cacheUnaHora: true,
+      sistemaUnaHora: true,
       esquema: ESQUEMA_REDACCION as unknown as Record<string, unknown>,
       maxTokens: MAXIMO_SALIDA,
     });
@@ -557,7 +557,7 @@ async function corregir(id: string, expedienteId: string, p: Progreso) {
       sistema: SISTEMA_REDACCION,
       contenido: [...await inicioRedaccion(c), { type: 'text', text: `<revisar>\n${texto}\n</revisar>` }, { type: 'text', text: INSTRUCCION_CORRECCION }],
       cachearBloques: 2,
-      cacheUnaHora: true,
+      sistemaUnaHora: true,
       esquema: ESQUEMA_REDACCION as unknown as Record<string, unknown>,
       maxTokens: MAXIMO_SALIDA,
     });
@@ -611,7 +611,7 @@ async function ajustar(id: string, expedienteId: string, p: Progreso) {
         { type: 'text', text: INSTRUCCION_AJUSTE },
       ],
       cachearBloques: 2,
-      cacheUnaHora: true,
+      sistemaUnaHora: true,
       esquema: ESQUEMA_REDACCION as unknown as Record<string, unknown>,
       maxTokens: MAXIMO_SALIDA,
     });

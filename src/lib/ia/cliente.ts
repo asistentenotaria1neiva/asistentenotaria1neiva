@@ -122,11 +122,13 @@ interface OpcionesLlamada {
    */
   cachearBloques?: number;
   /**
-   * La caché dura una hora en vez de 5 minutos (escribirla cuesta 2 × en vez de 1,25 ×): para la
-   * redacción, cuya plantilla y documentos se reutilizan en la corrección, en otra versión o en un
-   * ajuste aunque pase más de 5 minutos.
+   * El prompt de sistema queda en caché una hora en vez de 5 minutos (escribirlo cuesta 2 × en vez de
+   * 1,25 ×): para la redacción, cuyas instrucciones son iguales en todas las escrituras del día. Los
+   * bloques de `cachearBloques` (plantilla y documentos de UN expediente) siguen en 5 minutos: la
+   * continuación y la corrección llegan en segundos, y con los tiempos reales la caché de una hora
+   * para ellos costaba más de lo que ahorraba.
    */
-  cacheUnaHora?: boolean;
+  sistemaUnaHora?: boolean;
   /** A quién y a qué se carga el consumo de esta llamada (panel Consumo de IA) */
   registro: RegistroConsumo;
 }
@@ -175,14 +177,16 @@ function conCache(contenido: Anthropic.Beta.BetaContentBlockParam[], n: number |
 async function llamar<T>(opciones: OpcionesLlamada, modelo: string, esfuerzo: Esfuerzo): Promise<ResultadoLlamada<T>> {
   const usarRespaldo = tieneRespaldoServidor(modelo) && (process.env.CLAUDE_FALLBACKS ?? 'default') === 'default';
   const inicio = Date.now();
-  // El sistema y los bloques llevan la misma duración (una caché de una hora no puede ir después de una de 5 minutos)
-  const control: Anthropic.Beta.BetaCacheControlEphemeral = opciones.cacheUnaHora ? { type: 'ephemeral', ttl: '1h' } : { type: 'ephemeral' };
+  // El sistema va antes que los bloques: puede durar una hora aunque los bloques duren 5 minutos
+  // (lo que la API no admite es una caché de una hora después de una de 5 minutos)
+  const controlSistema: Anthropic.Beta.BetaCacheControlEphemeral = opciones.sistemaUnaHora ? { type: 'ephemeral', ttl: '1h' } : { type: 'ephemeral' };
+  const control: Anthropic.Beta.BetaCacheControlEphemeral = { type: 'ephemeral' };
   let mensaje: Anthropic.Beta.BetaMessage;
   try {
     const stream = obtenerCliente().beta.messages.stream({
       model: modelo,
       max_tokens: opciones.maxTokens ?? 32000,
-      system: [{ type: 'text', text: opciones.sistema, cache_control: control }],
+      system: [{ type: 'text', text: opciones.sistema, cache_control: controlSistema }],
       messages: [{ role: 'user', content: conCache(opciones.contenido, opciones.cachearBloques, control) }],
       output_config: { effort: esfuerzo, format: { type: 'json_schema', schema: opciones.esquema } },
       ...(usarRespaldo ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
