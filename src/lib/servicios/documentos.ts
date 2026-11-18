@@ -17,7 +17,7 @@ import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { abrirPdf, extraerPaginas } from '../pdf';
 import { textoDocx, ErrorDocx } from '../escritura/docx';
-import { llamarEstructurado, prepararDocumento, configuracionModelo, ErrorIA } from '../ia/cliente';
+import { llamarEstructurado, prepararDocumento, modeloPrecision, ErrorIA } from '../ia/cliente';
 import { esDatoCatastral, soloDigitos, problemaDeForma, difierenEnCeros } from '../escritura/catastral';
 import { rescatarArreglo } from '../ia/json';
 import { SISTEMA_LECTURA, ESQUEMA_LECTURA, type Lectura, type DocumentoLeido } from '../ia/instrucciones';
@@ -169,7 +169,7 @@ async function releerCatastrales(bytes: Buffer, mime: string, nombre: string, do
       liberar = d.liberar;
       const r = await llamarEstructurado<{ numeros: { rotulo: string; tal_como_aparece: string; grupos: string[]; cantidad_digitos: number }[] }>({
         proposito: 'LECTURA',
-        modelo: configuracionModelo('REDACCION').modelo,
+        modelo: modeloPrecision(),
         esfuerzo: 'high',
         registro,
         sistema: SISTEMA_CATASTRAL,

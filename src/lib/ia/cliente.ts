@@ -20,9 +20,28 @@ const PREDETERMINADOS: Record<Proposito, { variable: string; modelo: string; esf
 };
 const RESPALDO = 'claude-sonnet-5-5';
 
+/**
+ * Modelo de las relecturas de precisión (cédulas catastrales): fijo, NO el de la lectura general, que es
+ * justamente el que cuenta mal los ceros. CLAUDE_MODELO_PRECISION lo cambia.
+ */
+export const modeloPrecision = () => process.env.CLAUDE_MODELO_PRECISION?.trim() || RESPALDO;
+
+/**
+ * La redacción NO se hace con Haiku aunque la variable lo pida: probado en noviembre de 2026, gastó todo el
+ * límite razonando sin escribir en casi todas las escrituras; cada una pagaba el intento perdido más
+ * Sonnet con la caché fría (es de cada modelo): ~$0,30-0,45 en vez de ~$0,18.
+ */
+const NO_SIRVE_PARA: Partial<Record<Proposito, RegExp>> = { REDACCION: /^claude-haiku/ };
+let avisado = false;
+
 export function configuracionModelo(proposito: Proposito): { modelo: string; esfuerzo: Esfuerzo } {
   const d = PREDETERMINADOS[proposito];
-  const modelo = process.env[`CLAUDE_MODELO_${d.variable}`]?.trim() || d.modelo;
+  let modelo = process.env[`CLAUDE_MODELO_${d.variable}`]?.trim() || d.modelo;
+  if (NO_SIRVE_PARA[proposito]?.test(modelo)) {
+    if (!avisado) console.warn(`[ia] CLAUDE_MODELO_${d.variable}=${modelo} no sirve para la redacción: se usa ${d.modelo}`);
+    avisado = true;
+    modelo = d.modelo;
+  }
   const e = (process.env[`CLAUDE_ESFUERZO_${d.variable}`]?.trim() || d.esfuerzo) as Esfuerzo;
   return { modelo, esfuerzo: ['low', 'medium', 'high', 'xhigh', 'max'].includes(e) ? e : d.esfuerzo };
 }
