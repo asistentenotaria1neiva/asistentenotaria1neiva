@@ -181,7 +181,9 @@ export function conFormato(rPr: string, agregar: Record<string, string>): string
 /** Dato que el digitador llena a mano (precio, forma de pago, derechos…): en el Word va una raya resaltada, sin texto */
 export const EN_BLANCO = '«EN BLANCO»';
 const RAYA_EN_BLANCO = '_'.repeat(20);
-const MARCAS = /(«FALTA:[^»]*»|\[VERIFICAR:[^\]]*\]|«EN BLANCO»)/;
+/** «RESALTAR: texto»: el texto queda tal cual, resaltado en amarillo (para que la notaría lo confirme) */
+const RESALTAR = /^«RESALTAR:\s*([^»]*)»$/;
+const MARCAS = /(«FALTA:[^»]*»|\[VERIFICAR:[^\]]*\]|«EN BLANCO»|«RESALTAR:[^»]*»)/;
 const NEGRILLA = { b: '<w:b/>', bCs: '<w:bCs/>' };
 const RESALTADO = { highlight: '<w:highlight w:val="yellow"/>' };
 
@@ -215,7 +217,7 @@ export function runsDe(rPr: string, texto: string): string {
     if (!x) return '';
     const marca = MARCAS.test(x);
     const props = { ...(i % 2 === 1 || x.startsWith('«FALTA:') ? NEGRILLA : {}), ...(marca ? RESALTADO : {}) };
-    const c = contenido(x === EN_BLANCO ? RAYA_EN_BLANCO : x);
+    const c = contenido(x === EN_BLANCO ? RAYA_EN_BLANCO : RESALTAR.exec(x)?.[1] ?? x);
     return c ? `<w:r>${Object.keys(props).length ? conFormato(rPr, props) : rPr}${c}</w:r>` : '';
   })).join('');
 }
@@ -619,7 +621,7 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
     if (r.aplicados || nuevos.length) textos.set(c.p, [r.xml, ...nuevos].filter(Boolean).map((x) => textoParaIA(leerParrafo(x, 0, 0, false).texto)).filter(Boolean).join('\n'));
     xml = xml.slice(0, p.inicio) + r.xml + nuevos.join('') + xml.slice(p.fin);
   }
-  xml = hojasDePapelEnBlanco(rotulosDeDerechos(sinEstadoCivilEnFirmas(xml)));
+  xml = domicilioEnNeiva(hojasDePapelEnBlanco(rotulosDeDerechos(sinEstadoCivilEnFirmas(xml))));
   zip.file('word/document.xml', xml);
   return { docx: zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer, aplicados, noAplicados: noAplicados.reverse(), eliminados, insertados, textos, reubicados };
 }
@@ -719,6 +721,33 @@ export function hojasDePapelEnBlanco(xml: string): string {
       if (r.aplicados) cambios.push({ p, xml: comoEnLaPlantilla(p, r.xml) });
     }
     if (/doy\s+fe/i.test(p.texto)) break;
+  }
+  for (const c of cambios.reverse()) xml = xml.slice(0, c.p.inicio) + c.xml + xml.slice(c.p.fin);
+  return xml;
+}
+
+/** Domicilio de un otorgante: «domiciliada en la ciudad de Bogotá D.C.», «domiciliado en Neiva, Huila», «domiciliados en «FALTA: …»» */
+const DOMICILIO = /\b(domiciliad[oa]s?)\s+en\s+(?:la\s+ciudad\s+de\s+|el\s+municipio\s+de\s+)?((?:«[^»]{0,120}»|[^,;«\n]){1,60}?)(?:\s*[,-]\s*(?:Departamento\s+del\s+)?Huila\b)?(?=\s*[,;]|\s+(?:identificad|y\s+(?:vecin|residenciad)|quien|con\s+c[eé]dula)|\s*\.(?:\s|$)|\s*$)/gi;
+/** El domicilio que siempre lleva la escritura (la notaría lo cambia a mano si hace falta, por eso va resaltado) */
+export const DOMICILIO_NOTARIA = 'la ciudad de Neiva (H)';
+
+/**
+ * A TODOS los otorgantes (también apoderados y representantes) se les pone «domiciliado en la ciudad de
+ * Neiva (H)», con el género y el número que ya tenga la palabra, resaltado en amarillo para que la notaría
+ * lo confirme o lo cambie. No toca la zona de firmas («Dirección y Domicilio:» se llena a mano) ni el
+ * domicilio de una entidad («con domicilio principal en…»).
+ */
+export function domicilioEnNeiva(xml: string): string {
+  const parrafos = parrafosDe(xml);
+  const firmas = inicioZonaFirmas(parrafos);
+  const finFirmas = firmas === null ? -1 : finZonaFirmas(parrafos, firmas);
+  const cambios: { p: ParrafoDocx; xml: string }[] = [];
+  for (const p of parrafos) {
+    if (!p.editable || (firmas !== null && p.n >= firmas && p.n <= finFirmas)) continue;
+    const reemplazos = [...new Map([...p.texto.matchAll(DOMICILIO)].map((m) => [m[0], { original: m[0], nuevo: `${m[1]} en «RESALTAR: ${DOMICILIO_NOTARIA}»` }])).values()];
+    if (!reemplazos.length) continue;
+    const r = editarParrafo(p, { p: p.n, accion: 'REEMPLAZAR', reemplazos, texto: '', insertar_despues: [] }, []);
+    if (r.aplicados) cambios.push({ p, xml: comoEnLaPlantilla(p, r.xml) });
   }
   for (const c of cambios.reverse()) xml = xml.slice(0, c.p.inicio) + c.xml + xml.slice(c.p.fin);
   return xml;

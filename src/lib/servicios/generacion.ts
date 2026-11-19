@@ -29,6 +29,8 @@ import { plantillaNumerada, aplicarCambios, formatoPagina, textoDocx, textosPorP
 import { discordanciasDeGenero, describirDiscordancias } from '../escritura/genero';
 import { revisarCatastrales } from '../escritura/catastral';
 import { revisarLinderos } from '../escritura/linderos';
+import { actosPedidos, encabezadosDeActos, actosSinCumplir, nombraActo } from '../escritura/actos';
+import { referenciasInternas, sinCambiosEnReferencias } from '../escritura/cierre';
 import { datosDeLaPlantillaAnterior, restosDelNegocioAnterior, valoresEnLetras, medidasEnLetras, medidasPorRevisar, pendientes } from '../escritura/verificaciones';
 import { llamarEstructurado, configuracionModelo, ErrorIA, type ResultadoLlamada } from '../ia/cliente';
 import { rescatarArreglo, rescatarTexto } from '../ia/json';
@@ -65,7 +67,7 @@ const APURO_MS = 15 * 60_000;
 export const DURACION_MAXIMA_MS = 25 * 60_000;
 const MENSAJE_VENCIDA = `La generación tardó más de ${DURACION_MAXIMA_MS / 60_000} minutos y se detuvo. Genérela de nuevo (los documentos ya leídos no se vuelven a leer); si vuelve a pasar, revise que los documentos no sean demasiado largos o divídalos.`;
 /** Faltantes que no están en los documentos: se asignan en la notaría al otorgar */
-const NO_SE_BUSCA = /fecha de(l)? otorgamiento|n[uú]mero de (la )?escritura|derechos notariales|\biva\b|recaudo|retenci[oó]n|aporte|superintendencia|fondo (cuenta|especial)/i;
+const NO_SE_BUSCA = /fecha de(l)? otorgamiento|domicilio|n[uú]mero de (la )?escritura|derechos notariales|\biva\b|recaudo|retenci[oó]n|aporte|superintendencia|fondo (cuenta|especial)/i;
 /**
  * Avisos de la IA sobre los datos que el digitador llena a mano (van «EN BLANCO»): precio, forma de
  * pago, derechos, IVA, retención, hojas de papel notarial. No se muestran.
@@ -511,6 +513,36 @@ function parrafosMencionados(a: Advertencia): number[] {
 }
 
 /**
+ * Si un acto que piden las observaciones falta o quedó en otra posición, marca para la corrección: el
+ * párrafo tras el cual va (el anterior al encabezado que hoy ocupa esa posición), los encabezados de los
+ * actos (se renumeran), la especificación de los actos de la carátula y los párrafos donde quedó mal
+ * insertado. Devuelve esos párrafos (son urgentes).
+ */
+function revisionDeActos(observaciones: string | null, plantilla: Map<number, string>, actuales: Map<number, string>, agregar: (n: number, motivo: string) => void): number[] {
+  const pedidos = actosPedidos(observaciones);
+  if (!pedidos.length) return [];
+  const problemas = actosSinCumplir(pedidos, encabezadosDeActos(actuales), [...actuales.values()].join('\n'));
+  if (!problemas.length) return [];
+  const motivo = problemas.join(' ');
+  const deLaPlantilla = encabezadosDeActos(plantilla);
+  const marcados = new Set<number>();
+  const marcar = (n: number, que: string) => { agregar(n, `${motivo} ${que}`); marcados.add(n); };
+  const anterior = (n: number) => Math.max(0, ...[...plantilla].filter(([m, t]) => m < n && t.trim()).map(([m]) => m));
+  for (const x of pedidos) {
+    const ocupa = x.posicion ? deLaPlantilla.find((e) => e.posicion === x.posicion) : deLaPlantilla[0];
+    const ancla = ocupa ? anterior(ocupa.p) : 0;
+    if (ancla) marcar(ancla, `Inserta el acto ${x.acto} COMPLETO (encabezado en negrilla, comparecencia y cláusulas) con "insertar_despues" de ESTE párrafo, conservando su propio texto y sus cambios.`);
+    // Donde quedó mal puesto (insertado en otro párrafo)
+    for (const [n, t] of actuales) {
+      if (n !== ancla && t.split('\n').slice(1).some((l) => nombraActo(l, x.acto))) marcar(n, `Aquí quedó insertado el acto ${x.acto} en un lugar distinto al pedido: quítalo de este párrafo (va donde se indica).`);
+    }
+  }
+  for (const e of deLaPlantilla) marcar(e.p, 'Renumera este encabezado según el nuevo orden de los actos.');
+  for (const [n, t] of plantilla) if (/ESPECIFICACION VALOR DEL ACTO/.test(normalizar(t))) marcar(n, 'Agrega en la carátula el renglón del acto pedido, en el orden de los actos, con "insertar_despues" de este rótulo si va primero.');
+  return [...marcados];
+}
+
+/**
  * Segunda pasada de la redacción: con los cambios ya aplicados, el sistema busca en cada párrafo los
  * datos que siguen siendo del negocio anterior, los cambios que no se aplicaron y los que la IA dejó
  * escritos como advertencia en vez de hacerlos; la IA los corrige (o deja lo que se conserva) y su
@@ -518,12 +550,15 @@ function parrafosMencionados(a: Advertencia): number[] {
  */
 async function corregir(id: string, expedienteId: string, p: Progreso) {
   const c = await contexto(expedienteId, p);
-  const r = aplicarCambios(c.plantilla, p.cambios);
   const plantilla = textosPorParrafo(c.plantilla);
+  // La referencia interna del cierre («HIPOTECA BBVA 23/ MILAN.») es de la notaría: queda como en la plantilla
+  p.cambios = sinCambiosEnReferencias(p.cambios, plantilla, c.e.observaciones);
+  const r = aplicarCambios(c.plantilla, p.cambios);
   const actuales = new Map(plantilla);
   for (const [n, t] of r.textos) actuales.set(n, t);
   const notaria = await obtenerConfig('notaria');
   const revisar = restosDelNegocioAnterior(plantilla, actuales, `${c.textoDocs}\n${c.e.observaciones ?? ''}`, [notaria.codigo, notaria.resolucion_tarifas]);
+  for (const n of referenciasInternas(plantilla)) revisar.delete(n);
   const agregar = (n: number, motivo: string) => { if (plantilla.get(n)) revisar.set(n, [...(revisar.get(n) ?? []), motivo]); };
   // Medidas (linderos, áreas) que quedaron solo en cifras o con letras que no cuadran (sin contar las que la plantilla ya traía así)
   for (const [n, t] of r.textos) {
@@ -539,6 +574,8 @@ async function corregir(id: string, expedienteId: string, p: Progreso) {
     for (const m of motivos) agregar(n, m);
     if (motivos.length) urgentes.add(n);
   }
+  // Actos que piden las observaciones («en el primer acto… cancelación de hipoteca») y no quedaron donde se pidió
+  for (const n of revisionDeActos(c.e.observaciones, plantilla, actuales, agregar)) urgentes.add(n);
   if (!revisar.size) return;
 
   // Si son más de los que caben, primero los cambios no aplicados y los que la IA dejó pendientes, luego
@@ -760,7 +797,8 @@ async function terminar(id: string, expedienteId: string, version: number, p: Pr
     ...lecturas.flatMap((d) => d.textos_literales ?? []).filter((t) => /\[VERIFICAR/i.test(t.texto) && /linder/i.test(`${t.titulo} ${t.texto}`)).map((t) => `Linderos con cifras poco legibles: ${t.titulo}`),
   ];
   const linderos = revisarLinderos(p.cambios, avisosLinderos);
-  p.cambios = linderos.cambios;
+  const textosPlantilla = textosPorParrafo(c.plantilla);
+  p.cambios = sinCambiosEnReferencias(linderos.cambios, textosPlantilla, c.e.observaciones);
   const r = aplicarCambios(c.plantilla, p.cambios);
   const docx = formatoPagina(r.docx);
   const texto = textoDocx(docx);
@@ -775,6 +813,9 @@ async function terminar(id: string, expedienteId: string, version: number, p: Pr
     ...datosDeLaPlantillaAnterior({ plantilla: textosPorParrafo(c.plantilla), escritura: texto, fuentes, ignorar: [notaria.codigo, notaria.resolucion_tarifas] }),
     // Cédulas catastrales: exactas, como en los documentos
     ...revisarCatastrales(texto, c.leidos.flatMap((d) => (d.lectura as unknown as Lectura).documentos ?? [])).map((detalle) => ({ nivel: 'CRITICA' as const, origen: 'SISTEMA' as const, p: 0, detalle })),
+    // Los actos que piden las observaciones, en la posición pedida
+    ...actosSinCumplir(actosPedidos(c.e.observaciones), encabezadosDeActos(texto.split('\n').map((t, i): [number, string] => [i, t])), texto)
+      .map((detalle) => ({ nivel: 'CRITICA' as const, origen: 'SISTEMA' as const, p: 0, detalle: `${detalle} Corríjalo (puede pedirlo en «Corregir la versión») antes de imprimir.` })),
     ...valoresEnLetras(texto),
     ...medidasEnLetras(textosPorParrafo(c.plantilla), r.textos),
     ...[...r.textos].flatMap(([n, t]) => describirDiscordancias(discordanciasDeGenero(t, p.otorgantes)).map((detalle) => ({ nivel: 'ADVERTENCIA' as const, origen: 'SISTEMA' as const, p: n, detalle: `Párrafo ${n}: ${detalle.replace(/ Corrige .*$/, ' Corríjalo antes de imprimir.')}` }))).slice(0, 10),
