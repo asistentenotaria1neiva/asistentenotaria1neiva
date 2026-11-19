@@ -5,7 +5,8 @@ import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { expedienteDePagina, puedeEditar, ErrorNegocio } from '@/lib/servicios/expedientes';
 import { generacionEnCurso, generacionPorReanudar, cambiosDeVersion, type ResultadoGeneracion } from '@/lib/servicios/generacion';
-import { leerDocumento, LECTURA_CORTADA_MS } from '@/lib/servicios/documentos';
+import { leerDocumento, LECTURA_CORTADA_MS, PAGINAS_POR_TRAMO } from '@/lib/servicios/documentos';
+import { urlAplicacion } from '@/lib/seguridad/red';
 import { lecturaComoTexto, type Lectura } from '@/lib/ia/instrucciones';
 import { EtiquetaVersion, Tabla, fecha, hace } from '../../componentes';
 import { Icono, type NombreIcono } from '../../../Icono';
@@ -63,7 +64,10 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
   ]);
   const trabados = documentos.filter((d) => (d.estadoLectura === 'PENDIENTE' && Date.now() - d.creadoEn.getTime() > 60_000) || (d.estadoLectura === 'EN_CURSO' && Date.now() - d.actualizadoEn.getTime() > LECTURA_CORTADA_MS));
   if (editable && !enCurso && trabados.length && process.env.ANTHROPIC_API_KEY) {
-    after(async () => { for (const d of trabados.slice(0, 3)) await leerDocumento(d.id, s.usuario.id).catch((err) => console.error('[leerDocumento]', err)); });
+    // Con el mismo inicio: si el primero agota el tiempo de esta invocación, los demás siguen en otra
+    const base = await urlAplicacion();
+    const inicio = Date.now();
+    after(async () => { for (const d of trabados.slice(0, 3)) await leerDocumento(d.id, s.usuario.id, { base, inicio }).catch((err) => console.error('[leerDocumento]', err)); });
   }
   const leyendo = documentos.some((d) => d.estadoLectura === 'EN_CURSO' || d.estadoLectura === 'PENDIENTE');
   // Una generación cancelada no reemplaza a la versión anterior: se sigue mostrando la última terminada
@@ -240,7 +244,13 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
             {documentos.length > 0 && (
               <ul className="lista-documentos">
                 {documentos.map((d) => {
-                  const est = ESTADO_LECTURA[d.estadoLectura] ?? { texto: d.estadoLectura, clase: '', li: '' };
+                  let est = ESTADO_LECTURA[d.estadoLectura] ?? { texto: d.estadoLectura, clase: '', li: '' };
+                  // Un PDF largo a medio leer: «Leyendo… 120 de 306 pág.» (también entre una invocación y la siguiente)
+                  const tramos = (d.estadoLectura === 'EN_CURSO' || d.estadoLectura === 'PENDIENTE') ? Object.keys((d.lectura as { tramos?: Record<string, unknown> } | null)?.tramos ?? {}).map(Number) : [];
+                  if (tramos.length && d.paginas) {
+                    const listas = tramos.reduce((n, desde) => n + Math.max(0, Math.min(PAGINAS_POR_TRAMO, d.paginas! - desde + 1)), 0);
+                    est = { ...ESTADO_LECTURA.EN_CURSO, texto: `Leyendo… ${Math.min(listas, d.paginas)} de ${d.paginas} pág.` };
+                  }
                   const leido = d.estadoLectura === 'LEIDO' && d.lectura ? lecturaComoTexto('D', d.nombreOriginal, d.lectura as unknown as Lectura) : '';
                   const tipos = d.estadoLectura === 'LEIDO' ? ((d.lectura as unknown as Lectura | null)?.documentos ?? []).map((x) => x.tipo).filter(Boolean) : [];
                   return (

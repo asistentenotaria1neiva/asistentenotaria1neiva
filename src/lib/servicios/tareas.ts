@@ -31,12 +31,32 @@ const ESPERAS = [0, 2_000, 8_000, 30_000];
  * Devuelve false si no se pudo (la página la reanudará).
  */
 export async function pedirEtapa(base: string, id: string, turno: number): Promise<boolean> {
+  return pedir(`${base}/api/tareas`, { id, turno, firma: firma(id, turno) });
+}
+
+/**
+ * Continuación de la lectura de un documento largo (src/lib/servicios/documentos.ts) en una invocación
+ * nueva (`base`/api/lecturas). Repetirla no duplica nada: la lectura solo se toma si nadie la tiene.
+ */
+const firmaLectura = (documentoId: string, usuarioId: string) => huellaToken(`lectura:${documentoId}:${usuarioId}`);
+
+export function firmaLecturaValida(documentoId: string, usuarioId: string, recibida: string): boolean {
+  const a = Buffer.from(firmaLectura(documentoId, usuarioId));
+  const b = Buffer.from(String(recibida));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export async function pedirLectura(base: string, documentoId: string, usuarioId: string): Promise<boolean> {
+  return pedir(`${base}/api/lecturas`, { id: documentoId, usuario: usuarioId, firma: firmaLectura(documentoId, usuarioId) });
+}
+
+async function pedir(url: string, cuerpo: Record<string, unknown>): Promise<boolean> {
   for (const [i, espera] of ESPERAS.entries()) {
     if (espera) await new Promise((r) => setTimeout(r, espera));
     try {
-      const r = await fetch(`${base}/api/tareas`, {
+      const r = await fetch(url, {
         method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, turno, firma: firma(id, turno) }),
+        body: JSON.stringify(cuerpo),
         signal: AbortSignal.timeout(20_000),
       });
       if (r.ok) return true;

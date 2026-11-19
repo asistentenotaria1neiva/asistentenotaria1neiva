@@ -137,8 +137,12 @@ export async function leerCifrado(relativa: string): Promise<Buffer> {
   const contenido = await leerUno(relativa);
   const total = piezasDe(contenido);
   if (!total) return contenido;
-  const piezas: Buffer[] = [];
-  for (let i = 1; i <= total; i++) piezas.push(await leerUno(rutaPieza(relativa, i)));
+  // Las piezas se descargan a la vez (de a 4: cada una pesa hasta 40 MB)
+  const piezas: Buffer[] = new Array(total);
+  let siguiente = 1;
+  await Promise.all(Array.from({ length: Math.min(4, total) }, async () => {
+    while (siguiente <= total) { const i = siguiente++; piezas[i - 1] = await leerUno(rutaPieza(relativa, i)); }
+  }));
   return Buffer.concat(piezas);
 }
 

@@ -393,20 +393,24 @@ async function leerPendientes(id: string, expedienteId: string, p: Progreso, lim
   // Los que se están leyendo desde la carga (otra invocación) se esperan; si su lectura se cortó, se toman
   const ajenos = pendientes.filter((d) => d.estadoLectura === 'EN_CURSO' && Date.now() - d.actualizadoEn.getTime() < LECTURA_CORTADA_MS);
   const cola = pendientes.filter((d) => !ajenos.includes(d));
+  let siguen = false;
   const trabajador = async () => {
     while (cola.length && Date.now() - inicio < CORTE_MS && Date.now() < limite) {
       const d = cola.shift()!;
       p.leyendo.push(d.nombreOriginal);
       if (!(await guardar(id, p))) return;
-      await leerDocumento(d.id, p.sesion.usuario.id);
-      p.intentados.push(d.id);
+      await leerDocumento(d.id, p.sesion.usuario.id, { base: p.base, inicio });
+      // Un PDF largo puede seguir leyéndose en otra invocación (o lo tomó otra): se espera, no se da por intentado
+      const fin = await db.documento.findUnique({ where: { id: d.id }, select: { estadoLectura: true } });
+      if (fin && fin.estadoLectura !== 'LEIDO' && fin.estadoLectura !== 'ERROR') siguen = true;
+      else p.intentados.push(d.id);
       p.leyendo = p.leyendo.filter((x) => x !== d.nombreOriginal);
       if (!(await guardar(id, p))) return; // cancelada (o tomada por otra invocación)
     }
   };
   await Promise.all(Array.from({ length: CONCURRENCIA }, trabajador));
   if (cola.length) return true;
-  if (!ajenos.length) return false;
+  if (!ajenos.length && !siguen) return false;
   // Espera breve a las lecturas que empezaron al cargar los documentos y vuelve a mirar
   await new Promise((r) => setTimeout(r, 15_000));
   return true;

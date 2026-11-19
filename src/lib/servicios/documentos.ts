@@ -22,6 +22,7 @@ import { esDatoCatastral, soloDigitos, problemaDeForma, difierenEnCeros } from '
 import { rescatarArreglo } from '../ia/json';
 import { SISTEMA_LECTURA, ESQUEMA_LECTURA, type Lectura, type DocumentoLeido } from '../ia/instrucciones';
 import { expedienteEditable, obtenerExpediente, ErrorNegocio } from './expedientes';
+import { pedirLectura } from './tareas';
 
 /** El navegador envía cada archivo en partes (Vercel limita cada petición a 4,5 MB) */
 const TAMANO_MAXIMO_PARTE = 4 * 1024 * 1024;
@@ -31,8 +32,12 @@ const TAMANO_MAXIMO_PARTE = 4 * 1024 * 1024;
  * por debajo (90 páginas la pasaban casi siempre). También reduce las lecturas cortadas por longitud.
  */
 export const PAGINAS_POR_TRAMO = 30;
-/** Una lectura «en curso» que no avanza en este tiempo se cortó y se puede repetir */
-export const LECTURA_CORTADA_MS = 6 * 60_000;
+/**
+ * Una lectura «en curso» sin latido en este tiempo se cortó y se puede retomar. Mientras se lee, el
+ * latido se renueva cada LATIDO_MS (antes solo al terminar un tramo, y había que esperar 6 minutos).
+ */
+export const LECTURA_CORTADA_MS = 2 * 60_000;
+const LATIDO_MS = 30_000;
 /**
  * Salida máxima de una lectura (Haiku 5.5 admite 128.000). Solo se paga lo que se escribe: el límite
  * alto no encarece las lecturas normales y evita que un tramo denso (linderos, textos literales) se corte.
@@ -105,10 +110,9 @@ export async function bloquesDeArchivo(bytes: Buffer, mime: string, titulo: stri
   const paginas = pdf?.getPageCount() ?? 1;
   const partes = !pdf || paginas <= PAGINAS_POR_TRAMO
     ? [{ bytes, desde: 1 }]
-    : await Promise.all(Array.from({ length: Math.ceil(paginas / PAGINAS_POR_TRAMO) }, async (_, i) => ({
-      bytes: await extraerPaginas(pdf, i * PAGINAS_POR_TRAMO + 1, Math.min(paginas, (i + 1) * PAGINAS_POR_TRAMO)),
-      desde: i * PAGINAS_POR_TRAMO + 1,
-    })));
+    : await Promise.all(Array.from({ length: Math.ceil(paginas / PAGINAS_POR_TRAMO) }, (_, i) => i * PAGINAS_POR_TRAMO + 1)
+      .filter((desde) => !omitir.has(desde))
+      .map(async (desde) => ({ bytes: await extraerPaginas(pdf, desde, Math.min(paginas, desde + PAGINAS_POR_TRAMO - 1)), desde })));
   const liberar: (() => Promise<void>)[] = [];
   const tramos = [];
   for (const p of partes) {
@@ -156,7 +160,7 @@ const SISTEMA_CATASTRAL = `Transcribes, con exactitud absoluta, las cédulas cat
  * la redacción y esfuerzo alto; si la relectura es coherente (sus grupos y su cantidad cuadran) y
  * difiere de lo leído, manda la relectura y queda una alerta. Un fallo aquí no daña la lectura.
  */
-async function releerCatastrales(bytes: Buffer, mime: string, nombre: string, documentos: DocumentoLeido[], registro: { usuarioId: string; expedienteId: string }): Promise<void> {
+async function releerCatastrales(bytes: Buffer, mime: string, nombre: string, documentos: DocumentoLeido[], registro: { usuarioId: string; expedienteId: string }, abierto?: Awaited<ReturnType<typeof abrirPdf>>): Promise<void> {
   if (mime === MIME_DOCX) return; // el texto de un Word es exacto
   const porPagina = new Map<number, { doc: DocumentoLeido; i: number }[]>();
   for (const doc of documentos) doc.datos.forEach((x, i) => {
@@ -165,7 +169,7 @@ async function releerCatastrales(bytes: Buffer, mime: string, nombre: string, do
     porPagina.set(p, [...(porPagina.get(p) ?? []), { doc, i }]);
   });
   if (!porPagina.size) return;
-  const pdf = mime === 'application/pdf' ? await abrirPdf(bytes) : null;
+  const pdf = mime !== 'application/pdf' ? null : abierto !== undefined ? abierto : await abrirPdf(bytes);
   await Promise.all([...porPagina].slice(0, 6).map(async ([pagina, datos]) => {
     let liberar = async () => {};
     try {
@@ -208,8 +212,27 @@ async function releerCatastrales(bytes: Buffer, mime: string, nombre: string, do
   }));
 }
 
-/** Tramos de un PDF largo que se leen a la vez (cada uno tarda de 1 a 4 minutos) */
-const TRAMOS_A_LA_VEZ = 3;
+/**
+ * Tramos de un PDF largo que se leen a la vez (cada uno tarda de 1 a 3 minutos: Haiku escribe unos
+ * 300 tokens por segundo y un tramo denso escribe 30.000-45.000). Con 3, un PDF de 300 páginas tomaba
+ * más de 10 minutos y varias invocaciones. CLAUDE_TRAMOS_A_LA_VEZ lo cambia (1 a 12).
+ */
+const TRAMOS_A_LA_VEZ = Math.min(Math.max(Math.trunc(Number(process.env.CLAUDE_TRAMOS_A_LA_VEZ)) || 8, 1), 12);
+/**
+ * Pasado este tiempo de la invocación no se empieza otro tramo: el que empiece termina antes del corte
+ * de Vercel (5 minutos) y lo que falte sigue enseguida en una invocación nueva (pedirLectura), en vez
+ * de perder los tramos a medio leer y esperar a que la lectura parezca cortada.
+ */
+const INICIAR_TRAMOS_HASTA_MS = 120_000;
+
+export interface OpcionesLectura {
+  /** false: no copia la lectura de otro documento con el mismo archivo («Leer de nuevo») */
+  reutilizar?: boolean;
+  /** Dirección de la aplicación para seguir en otra invocación; sin ella se lee todo en esta (pruebas) */
+  base?: string | null;
+  /** Cuándo empezó la invocación (si la lectura no es lo primero que hace) */
+  inicio?: number;
+}
 
 /** Lo leído de cada tramo (por su página inicial) mientras la lectura sigue EN_CURSO o quedó en ERROR */
 type LecturaParcial = { tramos?: Record<string, DocumentoLeido[]> };
@@ -218,11 +241,11 @@ type LecturaParcial = { tramos?: Record<string, DocumentoLeido[]> };
  * Lee un documento con la IA y guarda lo leído. Toma el documento solo si nadie lo está leyendo (o si
  * su lectura se cortó); devuelve false si otro ya lo tomó. Un error queda en el documento (ERROR).
  *
- * Un PDF largo se lee por tramos, varios a la vez, y cada tramo terminado se guarda enseguida (y renueva
- * el latido): en Vercel cada invocación se corta a los 5 minutos y, sin eso, un PDF de 100+ páginas
- * volvía a empezar desde el primer tramo en cada intento y nunca terminaba.
+ * Un PDF largo se lee por tramos, varios a la vez, y cada tramo terminado se guarda enseguida: en Vercel
+ * cada invocación se corta a los 5 minutos y, sin eso, un PDF de 100+ páginas volvía a empezar desde el
+ * primer tramo en cada intento y nunca terminaba. Con `base`, lo que no alcanza sigue en otra invocación.
  */
-export async function leerDocumento(documentoId: string, usuarioId: string, { reutilizar = true }: { reutilizar?: boolean } = {}): Promise<boolean> {
+export async function leerDocumento(documentoId: string, usuarioId: string, { reutilizar = true, base = null, inicio = Date.now() }: OpcionesLectura = {}): Promise<boolean> {
   const tomado = await db.documento.updateMany({
     where: { id: documentoId, OR: [{ estadoLectura: { in: ['PENDIENTE', 'ERROR'] } }, { estadoLectura: 'EN_CURSO', actualizadoEn: { lt: new Date(Date.now() - LECTURA_CORTADA_MS) } }] },
     data: { estadoLectura: 'EN_CURSO', errorLectura: null },
@@ -231,7 +254,9 @@ export async function leerDocumento(documentoId: string, usuarioId: string, { re
   const doc = await db.documento.findUniqueOrThrow({ where: { id: documentoId } });
   // El mismo archivo (mismo SHA-256) ya leído en este u otro expediente: misma lectura, sin pagarla otra
   // vez (un certificado o una escritura de mayor extensión se carga en varios negocios). «Leer de nuevo» no reutiliza.
-  if (reutilizar) {
+  const hechos: Record<string, DocumentoLeido[]> = { ...((doc.lectura as LecturaParcial | null)?.tramos ?? {}) };
+  // Con tramos ya leídos es la continuación de una lectura (quizá de «Leer de nuevo»): no se copia otra
+  if (reutilizar && !Object.keys(hechos).length) {
     const gemelo = await db.documento.findFirst({ where: { hashSha256: doc.hashSha256, id: { not: doc.id }, estadoLectura: 'LEIDO' }, orderBy: { actualizadoEn: 'desc' }, select: { lectura: true } });
     const documentos = (gemelo?.lectura as { documentos?: DocumentoLeido[] } | null)?.documentos;
     if (documentos?.length) {
@@ -239,16 +264,25 @@ export async function leerDocumento(documentoId: string, usuarioId: string, { re
       return true;
     }
   }
-  const hechos: Record<string, DocumentoLeido[]> = { ...((doc.lectura as LecturaParcial | null)?.tramos ?? {}) };
   const guardarAvance = () => db.documento.updateMany({ where: { id: doc.id, estadoLectura: 'EN_CURSO' }, data: { lectura: { tramos: hechos } as unknown as Prisma.InputJsonValue } });
-  let liberar = async () => {};
+  // Latido: mientras esta invocación lee, nadie más toma el documento; si se corta, en 2 minutos se retoma
+  const latido = setInterval(() => {
+    db.documento.updateMany({ where: { id: doc.id, estadoLectura: 'EN_CURSO' }, data: { actualizadoEn: new Date() } }).catch((e) => console.error('[leerDocumento] latido', e));
+  }, LATIDO_MS);
   try {
     const bytes = await leerCifrado(doc.rutaCifrada);
-    const archivo = await bloquesDeArchivo(bytes, doc.mime, doc.nombreOriginal, new Set(Object.keys(hechos).map(Number)));
-    liberar = archivo.liberar;
-    const porTramos = archivo.tramos.length > 1 || Object.keys(hechos).length > 0;
     const pdf = doc.mime === 'application/pdf' ? await abrirPdf(bytes) : null;
     const totalPaginas = pdf?.getPageCount() ?? 1;
+    // Cada tramo se extrae y se prepara cuando le toca (antes se preparaban todos antes de leer el primero)
+    const desdes = pdf && totalPaginas > PAGINAS_POR_TRAMO ? Array.from({ length: Math.ceil(totalPaginas / PAGINAS_POR_TRAMO) }, (_, i) => i * PAGINAS_POR_TRAMO + 1) : [1];
+    const porTramos = desdes.length > 1 || Object.keys(hechos).length > 0;
+    const prepararTramo = async (desde: number): Promise<{ bloque: Anthropic.Beta.BetaContentBlockParam; liberar: () => Promise<void> }> => {
+      if (desdes.length === 1) {
+        const a = await bloquesDeArchivo(bytes, doc.mime, doc.nombreOriginal);
+        return { bloque: a.tramos[0].bloque, liberar: a.liberar };
+      }
+      return prepararDocumento(await extraerPaginas(pdf!, desde, Math.min(totalPaginas, desde + PAGINAS_POR_TRAMO - 1)), doc.mime, doc.nombreOriginal);
+    };
     /** Páginas del tramo, numeradas dentro del tramo, pasadas a páginas del archivo */
     const desplazar = (desde: number) => (x: DocumentoLeido): DocumentoLeido => (desde === 1 ? x : {
       ...x,
@@ -302,19 +336,34 @@ export async function leerDocumento(documentoId: string, usuarioId: string, { re
         }
       }
     };
-    const cola = [...archivo.tramos];
-    const leerTramo = async (t: (typeof cola)[number]) => {
-      const hasta = pdf ? Math.min(totalPaginas, t.desde + PAGINAS_POR_TRAMO - 1) : t.desde;
-      hechos[t.desde] = await leerRango(t.bloque, t.desde, hasta, porTramos);
-      // Guarda el avance y renueva el latido (actualizadoEn): si la invocación se corta, la siguiente sigue desde aquí
+    const cola = desdes.filter((d) => !(String(d) in hechos));
+    const leerTramo = async (desde: number) => {
+      const hasta = pdf ? Math.min(totalPaginas, desde + PAGINAS_POR_TRAMO - 1) : desde;
+      const t = await prepararTramo(desde);
+      try {
+        hechos[desde] = await leerRango(t.bloque, desde, hasta, porTramos);
+      } finally {
+        await t.liberar();
+      }
+      // Guarda el avance: si la invocación se corta, la siguiente sigue desde aquí
       await guardarAvance();
     };
+    // Con `base`, pasado INICIAR_TRAMOS_HASTA_MS no se empiezan más tramos: siguen en otra invocación
+    const aTiempo = () => !base || Date.now() - inicio < INICIAR_TRAMOS_HASTA_MS;
     await Promise.all(Array.from({ length: Math.min(TRAMOS_A_LA_VEZ, cola.length) }, async () => {
-      while (cola.length) await leerTramo(cola.shift()!);
+      while (cola.length && aTiempo()) await leerTramo(cola.shift()!);
     }));
+    if (cola.length && base) {
+      // Queda «por leer» con su avance: la invocación nueva (o la página, si no se pudo pedir) la retoma
+      clearInterval(latido);
+      await db.documento.updateMany({ where: { id: doc.id, estadoLectura: 'EN_CURSO' }, data: { estadoLectura: 'PENDIENTE', lectura: { tramos: hechos } as unknown as Prisma.InputJsonValue } });
+      console.info(`[leerDocumento] ${Object.keys(hechos).length}/${desdes.length} tramos leídos: sigue en otra invocación`);
+      if (!(await pedirLectura(base, doc.id, usuarioId))) console.error('[leerDocumento] no se pudo pedir la continuación: la retoma la página');
+      return true;
+    }
     const documentos = Object.keys(hechos).map(Number).sort((a, b) => a - b).flatMap((k) => hechos[k]);
     // Las cédulas catastrales, releídas una por una (deben quedar exactas)
-    await releerCatastrales(bytes, doc.mime, doc.nombreOriginal, documentos, { usuarioId, expedienteId: doc.expedienteId });
+    await releerCatastrales(bytes, doc.mime, doc.nombreOriginal, documentos, { usuarioId, expedienteId: doc.expedienteId }, pdf);
     await db.documento.update({ where: { id: doc.id }, data: { estadoLectura: 'LEIDO', lectura: { documentos } as unknown as Prisma.InputJsonValue } });
     return true;
   } catch (e) {
@@ -324,12 +373,12 @@ export async function leerDocumento(documentoId: string, usuarioId: string, { re
     await db.documento.update({ where: { id: doc.id }, data: { estadoLectura: 'ERROR', errorLectura: mensaje, lectura: { tramos: hechos } as unknown as Prisma.InputJsonValue } });
     return true;
   } finally {
-    await liberar();
+    clearInterval(latido);
   }
 }
 
 /** Vuelve a leer un documento (p. ej. si la lectura falló) */
-export async function releerDocumento(s: SesionActiva, documentoId: string) {
+export async function releerDocumento(s: SesionActiva, documentoId: string, base: string | null = null) {
   const doc = await db.documento.findUniqueOrThrow({ where: { id: documentoId }, select: { expedienteId: true, estadoLectura: true, actualizadoEn: true } });
   await expedienteEditable(s, doc.expedienteId);
   if (!process.env.ANTHROPIC_API_KEY) throw new ErrorNegocio('La IA no está configurada en el servidor.');
@@ -337,7 +386,7 @@ export async function releerDocumento(s: SesionActiva, documentoId: string) {
   if (!(await consumirLimite(`ia:${s.usuario.id}`, 200, 3600)).permitido) throw new ErrorNegocio('Límite de lecturas por hora alcanzado.');
   await db.documento.update({ where: { id: documentoId }, data: { estadoLectura: 'PENDIENTE', lectura: Prisma.DbNull } });
   // Se relee de verdad (si la lectura falló o salió mal, la de una copia del mismo archivo tampoco sirve)
-  return () => leerDocumento(documentoId, s.usuario.id, { reutilizar: false }).then(() => undefined);
+  return () => leerDocumento(documentoId, s.usuario.id, { reutilizar: false, base }).then(() => undefined);
 }
 
 export async function eliminarDocumento(s: SesionActiva, documentoId: string) {

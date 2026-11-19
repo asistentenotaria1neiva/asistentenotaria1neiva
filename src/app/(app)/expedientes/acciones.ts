@@ -79,7 +79,8 @@ export async function accionCompletarDocumento(expedienteId: string, carga: stri
   const s = await requerirSesion();
   return ejecutar(async () => {
     const id = await completarDocumento(s, expedienteId, carga, partes, String(nombre).slice(0, 300));
-    if (process.env.ANTHROPIC_API_KEY) after(() => leerDocumento(id, s.usuario.id).then(() => revalidatePath(`/expedientes/${expedienteId}`)).catch((e) => console.error('[leerDocumento]', e)));
+    const base = await urlAplicacion();
+    if (process.env.ANTHROPIC_API_KEY) after(() => leerDocumento(id, s.usuario.id, { base }).then(() => revalidatePath(`/expedientes/${expedienteId}`)).catch((e) => console.error('[leerDocumento]', e)));
     return 'Documento cargado y cifrado.';
   }, `/expedientes/${expedienteId}`);
 }
@@ -87,7 +88,7 @@ export async function accionCompletarDocumento(expedienteId: string, carga: stri
 export async function accionReleerDocumento(expedienteId: string, documentoId: string): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {
-    const tarea = await releerDocumento(s, documentoId);
+    const tarea = await releerDocumento(s, documentoId, await urlAplicacion());
     after(() => tarea().catch((e) => console.error('[releerDocumento]', e)));
     return 'Leyendo el documento de nuevo…';
   }, `/expedientes/${expedienteId}`);
