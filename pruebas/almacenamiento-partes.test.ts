@@ -31,3 +31,29 @@ describe('carga de documentos en partes', () => {
     await expect(guardarParte('../../x', 0, Buffer.from('a'))).rejects.toThrow(/no válida/);
   });
 });
+
+describe('archivos de más de 50 MB (límite de Supabase)', () => {
+  it('se guardan en piezas, se leen completos y se borran todas', async () => {
+    const { guardarCifrado, leerCifrado, borrarCifrado } = await import('@/lib/almacenamiento');
+    const original = crypto.randomBytes(63 * 1024 * 1024 + 7); // como «CAPITULACIONES 1.pdf»
+    const ruta = await guardarCifrado(original, 'documentos');
+    const raiz = process.env.RUTA_ALMACENAMIENTO!;
+    expect(fs.existsSync(path.join(raiz, `${ruta}.1`))).toBe(true);
+    expect(fs.existsSync(path.join(raiz, `${ruta}.2`))).toBe(true);
+    expect(fs.statSync(path.join(raiz, ruta)).size).toBeLessThan(200);
+    expect((await leerCifrado(ruta)).equals(original)).toBe(true);
+    await borrarCifrado(ruta);
+    expect(fs.existsSync(path.join(raiz, ruta))).toBe(false);
+    expect(fs.existsSync(path.join(raiz, `${ruta}.1`))).toBe(false);
+    expect(fs.existsSync(path.join(raiz, `${ruta}.2`))).toBe(false);
+  });
+
+  it('un archivo normal sigue en un solo objeto', async () => {
+    const { guardarCifrado, leerCifrado, borrarCifrado } = await import('@/lib/almacenamiento');
+    const original = crypto.randomBytes(1024);
+    const ruta = await guardarCifrado(original, 'documentos');
+    expect(fs.existsSync(path.join(process.env.RUTA_ALMACENAMIENTO!, `${ruta}.1`))).toBe(false);
+    expect((await leerCifrado(ruta)).equals(original)).toBe(true);
+    await borrarCifrado(ruta);
+  });
+});
