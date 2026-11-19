@@ -277,6 +277,28 @@ Cada párrafo que devuelvas lleva su cambio COMPLETO respecto del texto de la PL
 Si el pedido trae un dato, úsalo tal cual; si pide algo que necesita un dato que no está en el pedido, los documentos ni las observaciones, pon «FALTA: …».
 En "advertencias", solo lo nuevo que surja de esta corrección (lo que no pudiste hacer y por qué), sin repetir las anteriores. "resumen" y "otorgantes" van vacíos salvo que el pedido cambie quiénes comparecen o el negocio.`;
 
+/**
+ * Redacción de un acto que piden las observaciones y que la IA no dejó completo. El sistema ya lo ubicó
+ * (encabezado en la posición pedida, demás actos renumerados, renglón de la carátula): aquí la IA solo
+ * escribe su cuerpo, con el mismo sistema, plantilla y documentos en caché.
+ */
+export function instruccionActo(o: { pedido: string; acto: string; encabezado: string; antesDe: string; borrador: string[] }): string {
+  return `ACTO PEDIDO EN LAS OBSERVACIONES: «${o.pedido}». La escritura ya está adaptada, pero el acto de ${o.acto} no quedó redactado completo. El sistema ya lo ubicó en el lugar pedido: va con el encabezado «${o.encabezado.replace(/\*\*/g, '')}», justo antes de «${o.antesDe}»; ya renumeró los demás actos y agregó el renglón en la carátula.
+Redacta ahora ese acto COMPLETO, como lo haría la notaría y como dice la regla AGREGAR UN ACTO de las instrucciones: devuelve en "parrafos" sus párrafos en orden, SIN el encabezado (ya está), un párrafo por elemento: la comparecencia de quien lo otorga con sus datos y la calidad con que actúa, las cláusulas del acto y, si la plantilla las trae en sus otros actos, la aceptación y las declaraciones. Con el estilo, las fórmulas y las mayúsculas de la plantilla. Los datos salen de los documentos y de las observaciones; lo que no esté, «FALTA: …». No repitas los actos que ya trae la plantilla.${o.borrador.length ? `\nLo que había quedado escrito de este acto (úsalo si sirve, complétalo):\n${o.borrador.join('\n')}` : ''}
+En "valor_caratula", la cuantía del acto para el renglón de «ESPECIFICACION VALOR DEL ACTO», con la forma de los demás renglones («$60.000.000» o «SIN CUANTIA»), solo si consta en los documentos o las observaciones; si no, vacío. En "advertencias", solo lo que no pudiste completar y por qué.`;
+}
+
+export const ESQUEMA_ACTO = {
+  type: 'object',
+  properties: {
+    parrafos: { type: 'array', items: { type: 'string' } },
+    valor_caratula: { type: 'string' },
+    advertencias: ESQUEMA_REDACCION.properties.advertencias,
+  },
+  required: ['parrafos', 'valor_caratula', 'advertencias'],
+  additionalProperties: false,
+} as const;
+
 export type NivelAdvertencia = 'CRITICA' | 'ADVERTENCIA' | 'INFORMATIVA';
 export interface Advertencia { nivel: NivelAdvertencia; detalle: string; p: number; origen?: 'IA' | 'SISTEMA' }
 /** `genero` falta en las versiones generadas antes de que se pidiera */

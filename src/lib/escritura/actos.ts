@@ -19,23 +19,23 @@ const ACTOS = [
   'ENGLOBE', 'DESENGLOBE', 'LOTEO', 'DIVISION MATERIAL', 'CESION DE DERECHOS', 'RESTITUCION', 'CONSTITUCION DE PROPIEDAD HORIZONTAL',
 ].sort((a, b) => b.length - a.length);
 
-const ORDINALES: Record<string, number> = { PRIMER: 1, PRIMERO: 1, SEGUNDO: 2, TERCER: 3, TERCERO: 3, CUARTO: 4, QUINTO: 5, SEXTO: 6 };
-const NOMBRE_ORDINAL = ['', 'PRIMER', 'SEGUNDO', 'TERCER', 'CUARTO', 'QUINTO', 'SEXTO'];
+export const ORDINALES: Record<string, number> = { PRIMER: 1, PRIMERO: 1, SEGUNDO: 2, TERCER: 3, TERCERO: 3, CUARTO: 4, QUINTO: 5, SEXTO: 6 };
+export const NOMBRE_ORDINAL = ['', 'PRIMER', 'SEGUNDO', 'TERCER', 'CUARTO', 'QUINTO', 'SEXTO'];
 const ORDINAL = '(PRIMER|PRIMERO|SEGUNDO|TERCER|TERCERO|CUARTO|QUINTO|SEXTO)';
-const ORDINAL_ACTO = new RegExp(`\\b${ORDINAL}\\s+ACTO\\b|\\bACTO\\s+${ORDINAL}\\b`);
+export const ORDINAL_ACTO = new RegExp(`\\b${ORDINAL}\\s+ACTO\\b|\\bACTO\\s+${ORDINAL}\\b`);
 /** Encabezado de un acto: «PRIMER ACTO - COMPRAVENTA», «SEGUNDO ACTO: HIPOTECA», «ACTO PRIMERO. …» */
-const ENCABEZADO = new RegExp(`^(?:${ORDINAL}\\s+ACTO|ACTO\\s+${ORDINAL})\\b\\s*[-–—:.]*\\s*(.*)$`);
+export const ENCABEZADO = new RegExp(`^(?:${ORDINAL}\\s+ACTO|ACTO\\s+${ORDINAL})\\b\\s*[-–—:.]*\\s*(.*)$`);
 /** Verbos con los que se pide un acto sin decir su lugar («realizar cancelación de hipoteca») */
 const PEDIDO = /\b(REALIZA|HACE|HACER|AGREGA|INCLU|ADICION|ANADI|ANEXA|ELABORA|INCORPORA|LLEVA|DEBE|VA\b|CONTIENE|TIENE QUE)/;
 
 /** El acto más largo que se nombra en el texto (normalizado), o null */
-function actoEn(t: string): string | null {
+export function actoEn(t: string): string | null {
   return ACTOS.find((a) => new RegExp(`\\b${a}\\b`).test(t)) ?? null;
 }
 
 /** Mismo acto aunque cambie la variante: «HIPOTECA ABIERTA SIN LIMITE DE CUANTIA» es HIPOTECA; «CANCELACION DE AMPLIACION DE HIPOTECA», CANCELACION DE HIPOTECA */
 const familia = (a: string) => a.replace(/ PARCIAL\b/, '').replace(/\bAMPLIACION DE /, '').replace(/ ABIERTA\b.*$/, '');
-const mismoActo = (a: string, b: string) => familia(a) === familia(b);
+export const mismoActo = (a: string, b: string) => familia(a) === familia(b);
 
 /** El renglón nombra el acto en sus primeras palabras (un encabezado o un rótulo «CANCELACIÓN DE HIPOTECA: Presente, …») */
 export function nombraActo(renglon: string, acto: string): boolean {

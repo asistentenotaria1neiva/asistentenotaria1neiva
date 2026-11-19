@@ -37,8 +37,8 @@ export async function accionActivarPlantilla(id: string, activa: boolean): Promi
   });
 }
 
-/** Solo el administrador elimina plantillas (el revisor puede retirarlas) */
+/** El revisor y el administrador eliminan plantillas */
 export async function accionEliminarPlantilla(id: string): Promise<Resultado> {
-  const s = await requerirSesion({ roles: ['ADMINISTRADOR'] });
+  const s = await requerirSesion({ roles: ['REVISOR', 'ADMINISTRADOR'] });
   return ejecutar(async () => { await eliminarPlantilla(s, id); return 'Plantilla eliminada de la biblioteca.'; });
 }

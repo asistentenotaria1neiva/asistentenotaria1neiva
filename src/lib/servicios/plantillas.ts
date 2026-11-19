@@ -142,9 +142,9 @@ export async function editarPlantilla(s: SesionActiva, id: string, datos: DatosP
   await auditar({ ...datosAuditoria(s), accion: datos.activa === false ? 'PLANTILLA_RETIRADA' : datos.activa === true && !actual.activa ? 'PLANTILLA_REACTIVADA' : 'PLANTILLA_EDITADA', entidad: 'plantilla', entidadId: id, detalle: { nombre, categoria, subcategoria } });
 }
 
-/** Solo el administrador: elimina la plantilla y su archivo. Las escrituras que la usaban conservan su nombre y deben elegir otra. */
+/** El revisor o el administrador: elimina la plantilla y su archivo. Las escrituras que la usaban conservan su nombre y deben elegir otra. */
 export async function eliminarPlantilla(s: SesionActiva, id: string) {
-  if (s.usuario.rol !== 'ADMINISTRADOR') throw new ErrorPlantilla('Solo el administrador puede eliminar plantillas de la biblioteca. Puede retirarla para que deje de aparecer.');
+  exigirAdministrar(s);
   const p = await db.plantilla.findUnique({ where: { id }, select: { nombre: true, rutaCifrada: true, hashSha256: true, _count: { select: { expedientes: true } } } });
   if (!p) throw new ErrorPlantilla('La plantilla no existe.');
   await db.plantilla.delete({ where: { id } });

@@ -14,7 +14,7 @@ export default async function Biblioteca({ searchParams }: { searchParams: Promi
   const s = await requerirSesion();
   const parametros = await searchParams;
   const admin = puedeAdministrar(s);
-  const puedeEliminar = s.usuario.rol === 'ADMINISTRADOR';
+  const puedeEliminar = admin;
   const opciones = admin ? await opcionesFiltro() : null;
   return (
     <>

@@ -30,18 +30,19 @@ import { discordanciasDeGenero, describirDiscordancias } from '../escritura/gene
 import { revisarCatastrales } from '../escritura/catastral';
 import { revisarLinderos } from '../escritura/linderos';
 import { actosPedidos, encabezadosDeActos, actosSinCumplir, nombraActo } from '../escritura/actos';
+import { ubicarActos } from '../escritura/ubicar-actos';
 import { referenciasInternas, sinCambiosEnReferencias } from '../escritura/cierre';
 import { datosDeLaPlantillaAnterior, restosDelNegocioAnterior, valoresEnLetras, medidasEnLetras, medidasPorRevisar, pendientes } from '../escritura/verificaciones';
 import { llamarEstructurado, configuracionModelo, ErrorIA, type ResultadoLlamada } from '../ia/cliente';
 import { rescatarArreglo, rescatarTexto } from '../ia/json';
 import { normalizar } from '../texto/normalizar';
-import { SISTEMA_REDACCION, ESQUEMA_REDACCION, INSTRUCCION_CORRECCION, INSTRUCCION_AJUSTE, SISTEMA_FALTANTES, ESQUEMA_FALTANTES, lecturaComoTexto, type Lectura, type Advertencia, type Otorgante } from '../ia/instrucciones';
+import { SISTEMA_REDACCION, ESQUEMA_REDACCION, INSTRUCCION_CORRECCION, INSTRUCCION_AJUSTE, instruccionActo, ESQUEMA_ACTO, SISTEMA_FALTANTES, ESQUEMA_FALTANTES, lecturaComoTexto, type Lectura, type Advertencia, type Otorgante } from '../ia/instrucciones';
 import { expedienteEditable, obtenerExpediente, bytesPlantilla, ErrorNegocio } from './expedientes';
 import { leerDocumento, bloquesDeArchivo, LECTURA_CORTADA_MS, PAGINAS_POR_TRAMO, MIME_DOCX } from './documentos';
 import { notificar } from './notificaciones';
 import { pedirEtapa, LIMITE_SIN_LATIDO_MS } from './tareas';
 
-type Etapa = 'LECTURA' | 'REDACCION' | 'CORRECCION' | 'AJUSTE' | 'FALTANTES' | 'FINAL';
+type Etapa = 'LECTURA' | 'REDACCION' | 'CORRECCION' | 'AJUSTE' | 'ACTOS' | 'FALTANTES' | 'FINAL';
 
 /** Caracteres máximos de la plantilla que se envían a la IA (~100.000 tokens) */
 const MAXIMO_PLANTILLA = 350_000;
@@ -156,11 +157,12 @@ export async function generacionEnCurso(expedienteId: string) {
     db.documento.count({ where: { expedienteId } }),
     db.documento.count({ where: { expedienteId, estadoLectura: 'LEIDO' } }),
   ]);
-  const porcentaje = p.etapa === 'LECTURA' ? Math.round((total ? leidos / total : 1) * 30) : p.etapa === 'REDACCION' ? 40 + Math.min(p.continuaciones, 4) * 10 : p.etapa === 'AJUSTE' ? 60 : p.etapa === 'CORRECCION' ? 82 : p.etapa === 'FALTANTES' ? 85 : 95;
+  const porcentaje = p.etapa === 'LECTURA' ? Math.round((total ? leidos / total : 1) * 30) : p.etapa === 'REDACCION' ? 40 + Math.min(p.continuaciones, 4) * 10 : p.etapa === 'AJUSTE' ? 60 : p.etapa === 'CORRECCION' ? 82 : p.etapa === 'ACTOS' ? 84 : p.etapa === 'FALTANTES' ? 85 : 95;
   const detalle = p.etapa === 'LECTURA' ? `Leyendo los documentos (${leidos} de ${total})${p.leyendo.length ? `: ${p.leyendo.join(', ')}` : ''}`
     : p.etapa === 'REDACCION' ? `Adaptando la plantilla con los datos de los documentos${p.continuaciones ? ` (continuando desde el párrafo ${p.hasta})` : ''}`
       : p.etapa === 'AJUSTE' ? `Aplicando su corrección a la versión ${p.ajuste?.version ?? ''}`
       : p.etapa === 'CORRECCION' ? 'Revisando que no queden datos del negocio anterior y corrigiéndolos'
+      : p.etapa === 'ACTOS' ? 'Ubicando y redactando los actos que pidió en las indicaciones'
       : p.etapa === 'FALTANTES' ? 'Buscando en los documentos originales los datos que faltan'
         : 'Armando el Word y revisando la escritura';
   return { id: g.id, version: g.version, iniciada: g.creadaEn, porcentaje, detalle };
@@ -331,6 +333,8 @@ export async function ejecutarEtapa(id: string, turno: number): Promise<void> {
     if (edad() > DURACION_MAXIMA_MS) throw new ErrorNegocio(MENSAJE_VENCIDA);
     const apurada = () => edad() > APURO_MS;
     const despuesDeRedactar = (): Etapa => (buscables(p).length && !apurada() ? 'FALTANTES' : 'FINAL');
+    // Los actos que piden las indicaciones se ubican y se completan antes de seguir
+    const pideActos = async () => actosPedidos((await db.expediente.findUnique({ where: { id: g.expedienteId }, select: { observaciones: true } }))?.observaciones).length > 0;
     // Una etapa que solo ayuda y se reanudó tarde se salta
     if (apurada() && p.etapa === 'CORRECCION') { omitidoPorTiempo(p, 'la revisión final de datos del negocio anterior'); p.etapa = 'FINAL'; }
     if (apurada() && p.etapa === 'FALTANTES') { omitidoPorTiempo(p, 'la búsqueda de los datos «FALTA» en los documentos'); p.etapa = 'FINAL'; }
@@ -347,9 +351,13 @@ export async function ejecutarEtapa(id: string, turno: number): Promise<void> {
       }
     } else if (p.etapa === 'AJUSTE') {
       await ajustar(id, g.expedienteId, p);
-      p.etapa = despuesDeRedactar();
+      p.etapa = (await pideActos()) ? 'ACTOS' : despuesDeRedactar();
     } else if (p.etapa === 'CORRECCION') {
       await corregir(id, g.expedienteId, p);
+      p.etapa = (await pideActos()) ? 'ACTOS' : despuesDeRedactar();
+    } else if (p.etapa === 'ACTOS') {
+      // Con poco tiempo, el sistema igual los ubica (sin IA); el acto incompleto queda como crítica
+      await asegurarActos(id, g.expedienteId, p, !apurada());
       p.etapa = despuesDeRedactar();
     } else if (p.etapa === 'FALTANTES') {
       await buscarFaltantes(id, g.expedienteId, p);
@@ -674,6 +682,55 @@ async function ajustar(id: string, expedienteId: string, p: Progreso) {
   else p.advertencias.push({ nivel: 'INFORMATIVA', origen: 'SISTEMA', p: 0, detalle: `Corrección sobre la versión ${p.ajuste?.version}: se cambiaron ${tocados.size} párrafo(s) (${[...tocados].sort((a, b) => a - b).slice(0, 20).join(', ')}); el resto quedó igual.` });
 }
 
+// ------------------------------------------------------------------ 2d. actos que piden las indicaciones
+
+/**
+ * Las indicaciones del digitador se cumplen aunque haya que cambiar la estructura de la plantilla: si
+ * piden un acto (y su lugar), el sistema lo ubica, renumera los demás y pone su renglón en la carátula
+ * (src/lib/escritura/ubicar-actos.ts, sin IA). Si la IA no lo dejó redactado completo, le pide SOLO ese
+ * acto y lo pone en su lugar. `conIA` falso (generación apurada): solo la parte del sistema.
+ */
+async function asegurarActos(id: string, expedienteId: string, p: Progreso, conIA: boolean) {
+  const c = await contexto(expedienteId, p);
+  const plantilla = textosPorParrafo(c.plantilla);
+  const u = ubicarActos(actosPedidos(c.e.observaciones), plantilla, p.cambios);
+  p.cambios = u.cambios;
+  if (u.hechos.length) p.advertencias.push({ nivel: 'INFORMATIVA', origen: 'SISTEMA', p: 0, detalle: `Para cumplir sus indicaciones, el sistema ${u.hechos.join('; ')}.` });
+  if (!conIA) return;
+  for (const r of u.porRedactar) {
+    try {
+      const res = await llamarEstructurado<{ parrafos: string[]; valor_caratula: string; advertencias: Advertencia[] }>({
+        proposito: 'REDACCION',
+        registro: { usuarioId: p.sesion.usuario.id, expedienteId, generacionId: id },
+        // Mismo sistema e inicio que la redacción: la plantilla y lo leído se pagan al 10 %
+        sistema: SISTEMA_REDACCION,
+        contenido: [...await inicioRedaccion(c), { type: 'text', text: instruccionActo({ pedido: r.pedido.texto, acto: r.pedido.acto, encabezado: r.bloque[0], antesDe: r.antesDe, borrador: r.bloque.slice(1) }) }],
+        cachearBloques: 2,
+        sistemaUnaHora: true,
+        esquema: ESQUEMA_ACTO as unknown as Record<string, unknown>,
+        maxTokens: 12_000,
+      });
+      sumar(p, res);
+      let parrafos = (res.datos.parrafos ?? []).filter((t) => typeof t === 'string' && t.trim());
+      // Si la IA repitió el encabezado, ya está puesto
+      if (parrafos.length && encabezadosDeActos([[0, parrafos[0]]]).length) parrafos = parrafos.slice(1);
+      const ancla = p.cambios.find((x) => x.p === r.ancla);
+      if (ancla && parrafos.length) ancla.insertar_despues.splice(0, r.bloque.length, r.bloque[0], ...parrafos);
+      const valor = res.datos.valor_caratula?.trim();
+      if (valor) {
+        const renglon = new RegExp(`^${r.pedido.acto}([\\t ]+)«EN BLANCO»$`);
+        for (const x of p.cambios) x.insertar_despues = x.insertar_despues.map((t) => t.replace(renglon, `${r.pedido.acto}$1${valor}`));
+      }
+      p.advertencias.push(...(res.datos.advertencias ?? []).filter((a) => a?.detalle?.trim()).map((a) => ({ ...a, p: Number.isInteger(a.p) ? a.p : 0, origen: 'IA' as const })));
+    } catch (err) {
+      // Queda el acto ubicado con lo que había; la verificación final lo marca como crítica
+      if (!(err instanceof ErrorIA)) throw err;
+      console.error('[generacion] redacción del acto pedido', err.message);
+    }
+    if (!(await guardar(id, p))) return;
+  }
+}
+
 // ------------------------------------------------------------------ 3. búsqueda de lo que falta
 
 /** Textos nuevos de los cambios (donde pueden ir marcas «FALTA») */
@@ -799,6 +856,11 @@ async function terminar(id: string, expedienteId: string, version: number, p: Pr
   const linderos = revisarLinderos(p.cambios, avisosLinderos);
   const textosPlantilla = textosPorParrafo(c.plantilla);
   p.cambios = sinCambiosEnReferencias(linderos.cambios, textosPlantilla, c.e.observaciones);
+  // Red de seguridad (generación apurada, sin la etapa ACTOS): los actos pedidos quedan en su lugar
+  const ubicados = ubicarActos(actosPedidos(c.e.observaciones), textosPlantilla, p.cambios);
+  p.cambios = ubicados.cambios;
+  if (ubicados.hechos.length) p.advertencias.push({ nivel: 'INFORMATIVA', origen: 'SISTEMA', p: 0, detalle: `Para cumplir sus indicaciones, el sistema ${ubicados.hechos.join('; ')}.` });
+  const actosIncompletos = ubicados.porRedactar.map((x) => ({ nivel: 'CRITICA' as const, origen: 'SISTEMA' as const, p: x.ancla, detalle: `El acto de ${x.pedido.acto} que piden sus indicaciones quedó en su lugar («${x.encabezado.replace(/\*\*/g, '')}»), pero sin redactar completo. Pídalo en «Corregir la versión» o genere de nuevo antes de imprimir.` }));
   const r = aplicarCambios(c.plantilla, p.cambios);
   const docx = formatoPagina(r.docx);
   const texto = textoDocx(docx);
@@ -816,6 +878,7 @@ async function terminar(id: string, expedienteId: string, version: number, p: Pr
     // Los actos que piden las observaciones, en la posición pedida
     ...actosSinCumplir(actosPedidos(c.e.observaciones), encabezadosDeActos(texto.split('\n').map((t, i): [number, string] => [i, t])), texto)
       .map((detalle) => ({ nivel: 'CRITICA' as const, origen: 'SISTEMA' as const, p: 0, detalle: `${detalle} Corríjalo (puede pedirlo en «Corregir la versión») antes de imprimir.` })),
+    ...actosIncompletos,
     ...valoresEnLetras(texto),
     ...medidasEnLetras(textosPorParrafo(c.plantilla), r.textos),
     ...[...r.textos].flatMap(([n, t]) => describirDiscordancias(discordanciasDeGenero(t, p.otorgantes)).map((detalle) => ({ nivel: 'ADVERTENCIA' as const, origen: 'SISTEMA' as const, p: n, detalle: `Párrafo ${n}: ${detalle.replace(/ Corrige .*$/, ' Corríjalo antes de imprimir.')}` }))).slice(0, 10),
