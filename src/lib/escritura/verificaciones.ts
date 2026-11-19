@@ -67,7 +67,7 @@ export function datosDeLaPlantillaAnterior(e: EntradaVerificacion): Advertencia[
   return datosAnteriores(e.plantilla, e.fuentes, e.ignorar).filter((d) => d.esta(e.escritura)).slice(0, 25).map((d) => ({
     nivel: 'ADVERTENCIA', origen: 'SISTEMA', p: d.p,
     detalle: d.tipo === 'numero'
-      ? `El número «${d.valor}» viene de la plantilla (párrafo ${d.p}) y sigue en la escritura, pero no aparece en ningún documento cargado ni en las observaciones: verifique que no sea un dato del negocio anterior (si es de la parte que se conserva, como el banco o su apoderado, está bien).`
+      ? `El número «${d.valor}» viene de la plantilla (párrafo ${d.p}) y sigue en la escritura, pero no aparece en ningún documento cargado ni en las indicaciones para la IA: verifique que no sea un dato del negocio anterior (si es de la parte que se conserva, como el banco o su apoderado, está bien).`
       : `«${d.valor}» comparecía en la plantilla (párrafo ${d.p}) y sigue en la escritura, pero no aparece en los documentos cargados: verifique que no sea una persona del negocio anterior (si es de la parte que se conserva, como el apoderado del banco, está bien).`,
   }));
 }
@@ -81,8 +81,8 @@ export function restosDelNegocioAnterior(plantilla: Map<number, string>, actuale
   const salida = new Map<number, string[]>();
   for (const [n, texto] of actuales) {
     const aqui = datos.filter((d) => d.esta(texto)).map((d) => d.tipo === 'numero'
-      ? `El número «${d.valor}» es de la plantilla y no aparece en los documentos ni en las observaciones.`
-      : `«${d.valor}» es una persona de la plantilla que no aparece en los documentos ni en las observaciones.`);
+      ? `El número «${d.valor}» es de la plantilla y no aparece en los documentos ni en las indicaciones para la IA.`
+      : `«${d.valor}» es una persona de la plantilla que no aparece en los documentos ni en las indicaciones para la IA.`);
     if (aqui.length) salida.set(n, aqui);
   }
   return salida;
@@ -176,7 +176,7 @@ export function medidasEnLetras(plantilla: Map<number, string>, cambiados: Map<n
 /** Advertencias de lo que quedó pendiente y de los cambios que no se aplicaron */
 export function pendientes(faltantes: string[], verificar: string[], noAplicados: NoAplicado[]): Advertencia[] {
   const salida: Advertencia[] = [];
-  if (faltantes.length) salida.push({ nivel: 'ADVERTENCIA', origen: 'SISTEMA', p: 0, detalle: `Quedaron ${faltantes.length} dato(s) «FALTA» (resaltados en amarillo en el Word): ${faltantes.slice(0, 12).join('; ')}${faltantes.length > 12 ? '…' : ''}. Cargue el documento que los trae o escríbalos en las observaciones y genere de nuevo.` });
+  if (faltantes.length) salida.push({ nivel: 'ADVERTENCIA', origen: 'SISTEMA', p: 0, detalle: `Quedaron ${faltantes.length} dato(s) «FALTA» (resaltados en amarillo en el Word): ${faltantes.slice(0, 12).join('; ')}${faltantes.length > 12 ? '…' : ''}. Cargue el documento que los trae o escríbalos en las indicaciones para la IA y genere de nuevo.` });
   if (verificar.length) salida.push({ nivel: 'ADVERTENCIA', origen: 'SISTEMA', p: 0, detalle: `Hay ${verificar.length} punto(s) [VERIFICAR] resaltados en el Word: ${verificar.slice(0, 8).join('; ')}${verificar.length > 8 ? '…' : ''}.` });
   for (const n of noAplicados.slice(0, 15)) {
     salida.push({ nivel: 'ADVERTENCIA', origen: 'SISTEMA', p: n.p, detalle: `Párrafo ${n.p}: un cambio de la IA no se pudo aplicar (${n.motivo})${n.original ? ` — «${n.original}»` : ''}. Revise ese párrafo en el Word.` });

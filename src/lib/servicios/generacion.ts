@@ -206,7 +206,7 @@ export async function iniciarGeneracion(s: SesionActiva, expedienteId: string, b
   if (!process.env.ANTHROPIC_API_KEY) throw new ErrorNegocio('La IA no está configurada en el servidor: sin ella no se puede generar la escritura.');
   if (await generacionEnCurso(expedienteId)) throw new ErrorNegocio('La IA ya está generando esta escritura. Espere a que termine.');
   const documentos = await db.documento.count({ where: { expedienteId } });
-  if (!documentos && !e.observaciones?.trim()) throw new ErrorNegocio('Cargue los documentos del negocio (o escriba los datos en las observaciones) antes de generar.');
+  if (!documentos && !e.observaciones?.trim()) throw new ErrorNegocio('Cargue los documentos del negocio (o escriba los datos en las indicaciones para la IA) antes de generar.');
   let caracteres: number;
   try {
     caracteres = plantillaNumerada(await bytesPlantilla(e)).caracteres;
