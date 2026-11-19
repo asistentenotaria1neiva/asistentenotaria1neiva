@@ -619,9 +619,30 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
     if (r.aplicados || nuevos.length) textos.set(c.p, [r.xml, ...nuevos].filter(Boolean).map((x) => textoParaIA(leerParrafo(x, 0, 0, false).texto)).filter(Boolean).join('\n'));
     xml = xml.slice(0, p.inicio) + r.xml + nuevos.join('') + xml.slice(p.fin);
   }
-  xml = hojasDePapelEnBlanco(rotulosDeDerechos(xml));
+  xml = hojasDePapelEnBlanco(rotulosDeDerechos(sinEstadoCivilEnFirmas(xml)));
   zip.file('word/document.xml', xml);
   return { docx: zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer, aplicados, noAplicados: noAplicados.reverse(), eliminados, insertados, textos, reubicados };
+}
+
+/** Rótulos que la notaría no lleva bajo las firmas (en la comparecencia sí van) */
+const ROTULO_FIRMA_QUE_NO_VA = /^(?:Estado\s+Civil|Actividad\s+Econ[oó]mica)\b/i;
+
+/**
+ * En la hoja de firmas no van «Estado Civil:» ni «Actividad Económica:»: se quitan esos renglones de
+ * cada bloque de firma (los de la plantilla y los que agregó la IA). El resto de la escritura no cambia.
+ */
+export function sinEstadoCivilEnFirmas(xml: string): string {
+  const parrafos = parrafosDe(xml);
+  const inicio = inicioZonaFirmas(parrafos);
+  if (inicio === null) return xml;
+  const fin = finZonaFirmas(parrafos, inicio);
+  const quitar = parrafos.filter((p) => p.n >= inicio && p.n <= fin && p.editable && ROTULO_FIRMA_QUE_NO_VA.test(p.texto.trim()) && !p.texto.trim().includes('\n') && !p.xml.includes('<w:sectPr'));
+  for (const p of quitar.reverse()) {
+    // En una tabla la celda necesita su párrafo: queda vacío, con su formato
+    const nuevo = p.enTabla ? `${/^<w:p\b[^>]*>/.exec(p.xml)?.[0] ?? '<w:p>'}${pPrDe(p.xml)}</w:p>` : '';
+    xml = xml.slice(0, p.inicio) + nuevo + xml.slice(p.fin);
+  }
+  return xml;
 }
 
 const DERECHOS = /^\s*DERECHOS\s+NOTARIALES\s*:?/i;

@@ -227,9 +227,29 @@ describe('bloque de firma agregado por la IA', () => {
     expect(xml).toContain('<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">LAURA MORENO BOLIVAR</w:t></w:r>');
     expect(xml).not.toContain('BOLÍVAR');
     expect(xml.match(/<w:b\/><\/w:rPr><w:t xml:space="preserve">C\.C\. No\.<\/w:t>/g)).toHaveLength(2);
-    expect(xml.match(/<w:b\/><\/w:rPr><w:t xml:space="preserve">Estado Civil:<\/w:t>/g)).toHaveLength(2);
+    // En la hoja de firmas no va el estado civil
+    expect(xml).not.toContain('Estado Civil');
     expect(xml.match(/día \( {7}\) mes/g)).toHaveLength(2);
-    expect(parrafosDe(xml).filter((x) => x.texto.trim())).toHaveLength(12);
+    expect(parrafosDe(xml).filter((x) => x.texto.trim())).toHaveLength(10);
+  });
+});
+
+describe('hoja de firmas sin estado civil ni actividad económica', () => {
+  it('se quitan de cada bloque de firma, pero no de la comparecencia', () => {
+    const plantilla = docx([
+      p(r('Compareció PEDRO PEREZ GOMEZ, estado civil SOLTERO, actividad económica INDEPENDIENTE.')),
+      p(r('Estado Civil: anotado antes de las firmas')),
+      p(r('LOS OTORGANTES,')), p(r('PEDRO PEREZ GOMEZ', true)), p(r('C.C. No.')), p(r('Estado Civil:')),
+      p(r('Dirección y Domicilio:')), p(r('Teléfono:')), p(r('Actividad Económica:')), p(r('E-mail:')),
+      p(r('EL NOTARIO,')), p(r('LUIS IGNACIO VIVAS CEDEÑO')),
+    ].join(''));
+    const textos = parrafosDe(documentoXml(aplicarCambios(plantilla, []).docx)).map((x) => x.texto.trim());
+    expect(textos).toEqual([
+      'Compareció PEDRO PEREZ GOMEZ, estado civil SOLTERO, actividad económica INDEPENDIENTE.',
+      'Estado Civil: anotado antes de las firmas',
+      'LOS OTORGANTES,', 'PEDRO PEREZ GOMEZ', 'C.C. No.', 'Dirección y Domicilio:', 'Teléfono:', 'E-mail:',
+      'EL NOTARIO,', 'LUIS IGNACIO VIVAS CEDEÑO',
+    ]);
   });
 });
 
