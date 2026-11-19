@@ -56,7 +56,7 @@ export async function accionGuardarObservaciones(expedienteId: string, _: Result
   const s = await requerirSesion();
   return ejecutar(async () => {
     await guardarObservaciones(s, expedienteId, { observaciones: String(f.get('observaciones') ?? ''), ...(f.has('titulo') ? { titulo: String(f.get('titulo') ?? '') } : {}) });
-    return 'Observaciones guardadas.';
+    return 'Indicaciones guardadas.';
   }, `/expedientes/${expedienteId}`);
 }
 

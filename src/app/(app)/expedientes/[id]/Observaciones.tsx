@@ -35,18 +35,18 @@ export function FormularioObservaciones({ inicial, guardar, generar, puedeGenera
       <details id="paso-observaciones" className={`paso orden-3 ${clasePaso}`} open={abierto}>
         <summary>
           <span className="numero-paso" aria-hidden="true">{clasePaso.includes('hecho') ? <Icono nombre="check" tamano={16} /> : 3}</span>
-          <span className="titulo-paso"><h2>Observaciones</h2><span className="resumen">{resumen}</span></span>
+          <span className="titulo-paso"><h2>Indicaciones para la IA</h2><span className="resumen">{resumen}</span></span>
         </summary>
         <div className="cuerpo-paso">
           {!generando && rg && (rg.error || rg.ok) && <Mensaje r={rg} />}
           <div className="campo">
-            <label htmlFor="observaciones">Lo que la IA debe tener en cuenta y no está en los documentos <span className="opcional">(opcional)</span></label>
+            <label htmlFor="observaciones">Escríbale a la IA cualquier instrucción para la escritura: datos que no están en los documentos, cambios, cláusulas que debe agregar o quitar <span className="opcional">(opcional)</span></label>
             <textarea id="observaciones" name="observaciones" defaultValue={inicial} rows={6} maxLength={8000}
-              placeholder="Por ejemplo: «El precio es $180.000.000, pagaderos con crédito del FNA por $120.000.000 y el resto de contado», «La compradora es soltera sin unión marital», «No incluir la afectación a vivienda familiar»." />
-            <div className="ayuda">La IA sigue la plantilla al pie de la letra y solo cambia los datos del negocio. Lo que no encuentre queda <span className="muestra-falta">FALTA</span> en amarillo.</div>
+              placeholder="Por ejemplo: «El precio es $180.000.000, pagaderos con crédito del FNA por $120.000.000 y el resto de contado», «La compradora es soltera sin unión marital», «Agregar la constitución de patrimonio de familia a favor de los hijos menores», «No incluir la afectación a vivienda familiar»." />
+            <div className="ayuda">La IA sigue la plantilla y cambia los datos del negocio; además aplica lo que usted le indique aquí y lo agrega a la escritura que genere. Lo que no encuentre queda <span className="muestra-falta">FALTA</span> en amarillo.</div>
           </div>
           <button type="submit" className="secundario" disabled={pendiente} aria-busy={guardando}>
-            {guardando ? <span className="girador pequeno" aria-hidden="true" /> : <Icono nombre="check" tamano={18} />}{guardando ? 'Guardando…' : 'Guardar observaciones'}
+            {guardando ? <span className="girador pequeno" aria-hidden="true" /> : <Icono nombre="check" tamano={18} />}{guardando ? 'Guardando…' : 'Guardar indicaciones'}
           </button>
         </div>
       </details>

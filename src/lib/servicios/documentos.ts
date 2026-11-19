@@ -33,6 +33,11 @@ const TAMANO_MAXIMO_PARTE = 4 * 1024 * 1024;
 export const PAGINAS_POR_TRAMO = 30;
 /** Una lectura «en curso» que no avanza en este tiempo se cortó y se puede repetir */
 export const LECTURA_CORTADA_MS = 6 * 60_000;
+/**
+ * Salida máxima de una lectura (Haiku 5.5 admite 128.000). Solo se paga lo que se escribe: el límite
+ * alto no encarece las lecturas normales y evita que un tramo denso (linderos, textos literales) se corte.
+ */
+const MAXIMO_SALIDA_LECTURA = 64_000;
 /** Texto máximo de un documento de Word que se envía a leer */
 const MAXIMO_TEXTO = 150_000;
 
@@ -242,32 +247,65 @@ export async function leerDocumento(documentoId: string, usuarioId: string, { re
     const archivo = await bloquesDeArchivo(bytes, doc.mime, doc.nombreOriginal, new Set(Object.keys(hechos).map(Number)));
     liberar = archivo.liberar;
     const porTramos = archivo.tramos.length > 1 || Object.keys(hechos).length > 0;
+    const pdf = doc.mime === 'application/pdf' ? await abrirPdf(bytes) : null;
+    const totalPaginas = pdf?.getPageCount() ?? 1;
+    /** Páginas del tramo, numeradas dentro del tramo, pasadas a páginas del archivo */
+    const desplazar = (desde: number) => (x: DocumentoLeido): DocumentoLeido => (desde === 1 ? x : {
+      ...x,
+      paginas: x.paginas.replace(/\d+/g, (n) => String(Number(n) + desde - 1)),
+      datos: x.datos.map((d) => ({ ...d, pagina: d.pagina ? d.pagina + desde - 1 : d.pagina })),
+      textos_literales: x.textos_literales.map((d) => ({ ...d, pagina: d.pagina ? d.pagina + desde - 1 : d.pagina })),
+    });
+    const leerBloque = async (bloque: Anthropic.Beta.BetaContentBlockParam, desde: number, enTramos: boolean, esfuerzo?: 'low') =>
+      (await llamarEstructurado<Lectura>({
+        proposito: 'LECTURA',
+        registro: { usuarioId, expedienteId: doc.expedienteId },
+        sistema: SISTEMA_LECTURA,
+        contenido: [bloque, { type: 'text', text: enTramos ? `Este tramo empieza en la página ${desde} del archivo: numera las páginas desde 1 dentro del tramo.` : 'Transcribe los datos de este archivo.' }],
+        esquema: ESQUEMA_LECTURA as unknown as Record<string, unknown>,
+        maxTokens: MAXIMO_SALIDA_LECTURA,
+        esfuerzo,
+      })).datos.documentos ?? [];
+    /**
+     * Lee las páginas desde-hasta (ya en `bloque`) y devuelve lo leído con páginas del archivo. Si la
+     * respuesta no cabe en el límite de salida, el tramo se parte por la mitad y se lee cada mitad (así
+     * hasta una sola página): nada se pierde. Una sola página (o una imagen o un Word) que aún no cabe se
+     * repite razonando menos y, como último recurso, se conservan los documentos que salieron completos.
+     */
+    const leerRango = async (bloque: Anthropic.Beta.BetaContentBlockParam, desde: number, hasta: number, enTramos: boolean): Promise<DocumentoLeido[]> => {
+      try {
+        return (await leerBloque(bloque, desde, enTramos)).map(desplazar(desde));
+      } catch (e) {
+        if (!(e instanceof ErrorIA) || e.codigo !== 'TRUNCADO') throw e;
+        if (pdf && hasta > desde) {
+          console.warn(`[leerDocumento] lectura de las páginas ${desde}-${hasta} cortada por longitud: se divide`);
+          const mitad = Math.floor((desde + hasta) / 2);
+          const resultado: DocumentoLeido[] = [];
+          for (const [a, b] of [[desde, mitad], [mitad + 1, hasta]]) {
+            const parte = await prepararDocumento(await extraerPaginas(pdf, a, b), doc.mime, doc.nombreOriginal);
+            try {
+              resultado.push(...(await leerRango(parte.bloque, a, b, true)));
+            } finally {
+              await parte.liberar();
+            }
+          }
+          return resultado;
+        }
+        console.warn(`[leerDocumento] lectura de la página ${desde} cortada por longitud: se repite razonando menos`);
+        try {
+          return (await leerBloque(bloque, desde, enTramos, 'low')).map(desplazar(desde));
+        } catch (e2) {
+          if (!(e2 instanceof ErrorIA) || e2.codigo !== 'TRUNCADO' || !e2.parcial) throw e2;
+          const rescatados = rescatarArreglo<DocumentoLeido>(e2.parcial, 'documentos');
+          if (!rescatados.length) throw e2;
+          return rescatados.map(desplazar(desde));
+        }
+      }
+    };
     const cola = [...archivo.tramos];
     const leerTramo = async (t: (typeof cola)[number]) => {
-      const desplazar = (x: DocumentoLeido): DocumentoLeido => (t.desde === 1 ? x : {
-        ...x,
-        paginas: x.paginas.replace(/\d+/g, (n) => String(Number(n) + t.desde - 1)),
-        datos: x.datos.map((d) => ({ ...d, pagina: d.pagina ? d.pagina + t.desde - 1 : d.pagina })),
-        textos_literales: x.textos_literales.map((d) => ({ ...d, pagina: d.pagina ? d.pagina + t.desde - 1 : d.pagina })),
-      });
-      let leidos: DocumentoLeido[];
-      try {
-        const r = await llamarEstructurado<Lectura>({
-          proposito: 'LECTURA',
-          registro: { usuarioId, expedienteId: doc.expedienteId },
-          sistema: SISTEMA_LECTURA,
-          contenido: [t.bloque, { type: 'text', text: porTramos ? `Este tramo empieza en la página ${t.desde} del archivo: numera las páginas desde 1 dentro del tramo.` : 'Transcribe los datos de este archivo.' }],
-          esquema: ESQUEMA_LECTURA as unknown as Record<string, unknown>,
-          maxTokens: 32000,
-        });
-        leidos = r.datos.documentos ?? [];
-      } catch (e) {
-        // Cortada por longitud: se conservan los documentos que alcanzaron a salir completos
-        if (!(e instanceof ErrorIA) || e.codigo !== 'TRUNCADO' || !e.parcial) throw e;
-        leidos = rescatarArreglo<DocumentoLeido>(e.parcial, 'documentos');
-        if (!leidos.length) throw e;
-      }
-      hechos[t.desde] = leidos.map(desplazar);
+      const hasta = pdf ? Math.min(totalPaginas, t.desde + PAGINAS_POR_TRAMO - 1) : t.desde;
+      hechos[t.desde] = await leerRango(t.bloque, t.desde, hasta, porTramos);
       // Guarda el avance y renueva el latido (actualizadoEn): si la invocación se corta, la siguiente sigue desde aquí
       await guardarAvance();
     };

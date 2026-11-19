@@ -94,7 +94,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
   const pasos: { nombre: string; ancla: string; estado: string }[] = [
     { nombre: 'Plantilla', ancla: 'paso-plantilla', estado: conPlantilla ? (e.plantilla?.categoria ?? 'Plantilla personal') : 'Sin plantilla' },
     { nombre: 'Documentos', ancla: 'paso-documentos', estado: resumenDocumentos },
-    { nombre: 'Observaciones', ancla: 'paso-observaciones', estado: conObservaciones ? 'Escritas' : 'Opcional' },
+    { nombre: 'Indicaciones', ancla: 'paso-observaciones', estado: conObservaciones ? 'Escritas' : 'Opcional' },
     { nombre: 'Generación', ancla: 'paso-observaciones', estado: enCurso ? `${enCurso.porcentaje} %` : version ? plural(version, 'versión', 'versiones') : 'Pendiente' },
     { nombre: 'Revisión', ancla: 'paso-revision', estado: resultado ? (criticas ? plural(criticas, 'crítica', 'críticas') : 'Sin críticas') : '—' },
   ];
@@ -106,7 +106,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
     : resultado ? (criticas ? `Revise las ${plural(criticas, 'advertencia crítica', 'advertencias críticas')} y lea la escritura completa antes de descargarla.` : 'Lea la escritura completa y compárela con los documentos antes de descargarla.')
     : ultima?.estado === 'ERROR' ? `La versión ${ultima.version} no se pudo generar. Revise el error y genere de nuevo.`
     : !documentos.length ? 'Cargue los documentos del negocio: de ellos toma la IA los datos que cambian en la plantilla.'
-    : 'Todo listo. Escriba sus observaciones si hace falta y genere la escritura.';
+    : 'Todo listo. Escriba sus indicaciones para la IA si hace falta y genere la escritura.';
   const panel = (
     <>
       <h2><span className="tres-lineas" aria-hidden="true" />Siguiente paso</h2>
@@ -144,7 +144,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
             <span className="marca-req" aria-hidden="true">{documentos.length > 0 && !enLectura && <Icono nombre="check" tamano={12} />}</span>
             <span>Documentos del negocio{documentos.length ? ` · ${resumenDocumentos}` : ''}{enLectura ? <span className="tenue"> (puede generar ya: la generación espera a que terminen)</span> : null}</span>
           </li>
-          <li className={conObservaciones ? 'hecho' : undefined}><span className="marca-req" aria-hidden="true">{conObservaciones && <Icono nombre="check" tamano={12} />}</span>Observaciones <span className="tenue">(opcional)</span></li>
+          <li className={conObservaciones ? 'hecho' : undefined}><span className="marca-req" aria-hidden="true">{conObservaciones && <Icono nombre="check" tamano={12} />}</span>Indicaciones para la IA <span className="tenue">(opcional)</span></li>
         </ul>
       )}
       {!conPlantilla && editable && <Link className="boton grande bloque" href={`/expedientes/${id}/plantilla`}><Icono nombre="biblioteca" tamano={18} />Elegir otra plantilla</Link>}
@@ -276,7 +276,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
             version={version}
             abierto={!resultado}
             clasePaso={estadoPaso[2]!}
-            resumen={conObservaciones ? e.observaciones!.slice(0, 120) : 'Opcional: lo que no está en los documentos'}
+            resumen={conObservaciones ? e.observaciones!.slice(0, 120) : 'Opcional: instrucciones, datos o cambios para la escritura'}
             panel={panel}
             pie={pie}
             generarPrincipal={!descargaPrincipal && conPlantilla}
@@ -286,9 +286,9 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
             <section id="paso-observaciones" className={`paso orden-3 ${estadoPaso[2]}`}>
               <div className="cabeza-paso">
                 <span className="numero-paso" aria-hidden="true">{estadoPaso[2] === 'hecho' ? <Icono nombre="check" tamano={16} /> : 3}</span>
-                <span className="titulo-paso"><h2>Observaciones</h2></span>
+                <span className="titulo-paso"><h2>Indicaciones para la IA</h2></span>
               </div>
-              <div className="cuerpo-paso"><p className="suave">{e.observaciones ? e.observaciones : 'Sin observaciones.'}</p></div>
+              <div className="cuerpo-paso"><p className="suave">{e.observaciones ? e.observaciones : 'Sin indicaciones.'}</p></div>
             </section>
             <aside className="panel-accion" aria-label="Siguiente paso">{panel}{pie}</aside>
           </>
