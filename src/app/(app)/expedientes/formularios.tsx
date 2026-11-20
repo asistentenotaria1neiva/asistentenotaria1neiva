@@ -87,21 +87,37 @@ const TAMANO_PARTE = 3 * 1024 * 1024;
 /** Partes que se suben a la vez */
 const PARTES_EN_PARALELO = 4;
 
-/** Sube una parte (api/documentos/partes); reintenta una vez si se cae la conexión. Devuelve el error, si lo hay. */
+/** Esperas antes de cada reintento (una conexión que se cae unos segundos no tumba la carga) */
+const ESPERAS_REINTENTO_MS = [1500, 4000, 8000];
+
+/**
+ * Sube una parte (api/documentos/partes); reintenta si se cae la conexión o el servidor falla.
+ * Devuelve el error, si lo hay.
+ */
 async function subirParte(expedienteId: string, carga: string, indice: number, parte: Blob): Promise<string | null> {
+  // Se lee antes de enviar: un archivo que el equipo no puede leer (en OneDrive sin descargar, abierto o
+  // movido mientras se carga) hacía fallar el envío y se mostraba como si se hubiera caído la conexión
+  let datos: ArrayBuffer;
+  try {
+    datos = await parte.arrayBuffer();
+  } catch {
+    return 'No se pudo leer el archivo en este equipo: si está en OneDrive, ábralo o descárguelo primero; si está abierto en otro programa, ciérrelo, y cárguelo de nuevo.';
+  }
   for (let intento = 0; ; intento++) {
+    const ultimo = intento >= ESPERAS_REINTENTO_MS.length;
     const f = new FormData();
     f.set('expedienteId', expedienteId);
     f.set('carga', carga);
     f.set('indice', String(indice));
-    f.set('parte', parte);
+    f.set('parte', new Blob([datos]));
     try {
       const r = await fetch('/api/documentos/partes', { method: 'POST', body: f });
       if (r.ok) return null;
-      if (r.status < 500 || intento) return ((await r.json().catch(() => ({}))) as { error?: string }).error ?? 'No se pudo subir el archivo.';
+      if (r.status < 500 || ultimo) return ((await r.json().catch(() => ({}))) as { error?: string }).error ?? 'No se pudo subir el archivo.';
     } catch {
-      if (intento) return 'Se perdió la conexión con el servidor.';
+      if (ultimo) return 'Se perdió la conexión con el servidor (se intentó 4 veces). Revise el internet y cargue el archivo de nuevo.';
     }
+    await new Promise((listo) => setTimeout(listo, ESPERAS_REINTENTO_MS[intento]));
   }
 }
 
