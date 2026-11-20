@@ -264,6 +264,60 @@ export function patronFragmento(fragmento: string): RegExp {
   return new RegExp(palabras.map((p) => [...p].map(caracter).join('')).join('(?:[\\s\\u00a0]|-{3,}(?!-))+'), 'giu');
 }
 
+/** Letra comparable: minúscula, sin tilde, comillas y guiones unificados (una letra por letra: no cambia las posiciones) */
+function letraComparable(c: string): string {
+  const l = c.toLowerCase().normalize('NFD')[0] ?? c;
+  if ('"“”«»'.includes(c)) return '"';
+  if ("'‘’´`".includes(c)) return "'";
+  if ('-‐‑–—'.includes(c)) return '-';
+  return /\s/.test(c) ? ' ' : l;
+}
+
+/**
+ * Ubica un fragmento que la IA copió CASI igual (p. ej. «CIENTO TREINTA Y SIETE PUNTO …» cuando el
+ * párrafo dice «CIENTO TREINTA Y CINCO PUNTO … (135.74 M2)»): el tramo del párrafo con menos diferencias,
+ * si son pocas (hasta el 12 % del fragmento). Para no reemplazar donde no es, el fragmento debe ser largo,
+ * sus cifras deben estar idénticas en el tramo y no puede haber otro tramo igual de parecido.
+ * Búsqueda aproximada de Sellers (distancia de edición con inicio libre).
+ */
+export function ubicarAproximado(texto: string, fragmento: string): { inicio: number; fin: number } | null {
+  const f = fragmento.trim();
+  if (f.length < 25 || f.length > 600 || !texto) return null;
+  const a = [...f].map(letraComparable);
+  const t = [...texto].map(letraComparable);
+  if ([...f].length !== f.length || [...texto].length !== texto.length) return null; // letras fuera del BMP: sin aproximación
+  const m = a.length;
+  const limite = Math.max(2, Math.floor(m * 0.12));
+  let prev = Array.from({ length: m + 1 }, (_, i) => i);
+  let prevIni = new Array<number>(m + 1).fill(0);
+  const candidatos: { d: number; inicio: number; fin: number }[] = [];
+  for (let j = 1; j <= t.length; j++) {
+    const cur = new Array<number>(m + 1);
+    const curIni = new Array<number>(m + 1);
+    cur[0] = 0; curIni[0] = j;
+    for (let i = 1; i <= m; i++) {
+      const sub = prev[i - 1] + (a[i - 1] === t[j - 1] ? 0 : 1);
+      const del = cur[i - 1] + 1;
+      const ins = prev[i] + 1;
+      if (sub <= del && sub <= ins) { cur[i] = sub; curIni[i] = prevIni[i - 1]; }
+      else if (del <= ins) { cur[i] = del; curIni[i] = curIni[i - 1]; }
+      else { cur[i] = ins; curIni[i] = prevIni[i]; }
+    }
+    if (cur[m] <= limite) candidatos.push({ d: cur[m], inicio: curIni[m], fin: j });
+    prev = cur; prevIni = curIni;
+  }
+  if (!candidatos.length) return null;
+  const minimo = Math.min(...candidatos.map((c) => c.d));
+  const mejores = candidatos.filter((c) => c.d === minimo);
+  // Tramos del mismo lugar se solapan; dos lugares distintos igual de parecidos = ambiguo
+  const lugares = mejores.filter((c, i) => i === 0 || c.inicio >= mejores[i - 1].fin);
+  if (lugares.length !== 1) return null;
+  const { inicio, fin } = mejores[0];
+  const cifras = (s: string) => (s.match(/\d+(?:[.,]\d+)*/g) ?? []).join('|');
+  if (cifras(texto.slice(inicio, fin)) !== cifras(f)) return null;
+  return { inicio, fin };
+}
+
 /** Reemplaza [a, b) del texto del párrafo; el texto nuevo queda en la primera corrida que toca */
 function reemplazarRango(textos: (string | null)[], a: number, b: number, nuevo: string): void {
   let pos = 0, primero = true;
@@ -429,6 +483,11 @@ function editarParrafo(p: ParrafoDocx, c: CambioParrafo, noAplicados: NoAplicado
       if (!r.original?.trim()) continue;
       const completo = textos.map((t) => t ?? '').join('');
       const encontrados = [...completo.matchAll(patronFragmento(r.original))];
+      if (!encontrados.length) {
+        // La IA copió el fragmento con un error pequeño (una palabra de una cifra en letras): el tramo casi igual
+        const aprox = ubicarAproximado(completo, r.original);
+        if (aprox) { reemplazarRango(textos, aprox.inicio, aprox.fin, r.nuevo ?? ''); aplicados++; continue; }
+      }
       if (!encontrados.length) { noAplicados.push({ p: p.n, original: r.original.slice(0, 200), motivo: 'No se encontró el texto en el párrafo.' }); continue; }
       // De atrás hacia adelante: las posiciones anteriores no se mueven
       for (const m of encontrados.reverse()) reemplazarRango(textos, m.index, m.index + m[0].length, r.nuevo ?? '');
