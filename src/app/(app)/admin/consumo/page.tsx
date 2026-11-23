@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
-import { consumoIA, type Totales } from '@/lib/servicios/consumo-ia';
+import { consumoIA, modelosUsados, type Totales } from '@/lib/servicios/consumo-ia';
+import { Icono } from '@/app/Icono';
 import { Tabla, fecha } from '../../componentes';
 
 const TAREAS: Record<string, string> = {
@@ -15,7 +16,70 @@ const TAREAS: Record<string, string> = {
 
 const n = (x: number) => x.toLocaleString('es-CO');
 
-type Parametros = { mes?: string; usuario?: string; tarea?: string; q?: string; estado?: string; orden?: string; ordenu?: string };
+type Parametros = {
+  periodo?: string; desde?: string; hasta?: string; mes?: string;
+  usuario?: string; tarea?: string; modelo?: string; q?: string; estado?: string; orden?: string; ordenu?: string;
+};
+
+/** Periodos rápidos; los días son de Colombia (UTC−5, sin horario de verano) */
+const PERIODOS = {
+  hoy: 'Hoy',
+  ayer: 'Ayer',
+  '7d': 'Últimos 7 días',
+  '30d': 'Últimos 30 días',
+  mes: 'Este mes',
+  mesant: 'Mes anterior',
+  todo: 'Todo el historial',
+} as const;
+type Periodo = keyof typeof PERIODOS;
+
+const DIA = /^\d{4}-\d{2}-\d{2}$/;
+const hoyColombia = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+/** Suma días a una fecha AAAA-MM-DD */
+const sumarDias = (iso: string, dias: number) => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+};
+/** Medianoche de Colombia de ese día, en UTC */
+const inicioDia = (iso: string) => new Date(`${iso}T05:00:00Z`);
+const ultimoDiaMes = (anio: number, mes: number) => new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10);
+const diaLargo = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('es-CO', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const diaCorto = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('es-CO', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
+const nombreMes = (anio: number, mes: number) => new Date(Date.UTC(anio, mes - 1, 15)).toLocaleDateString('es-CO', { timeZone: 'UTC', month: 'long', year: 'numeric' });
+
+/** Resuelve el periodo pedido: rango de fechas (gana), mes AAAA-MM (enlaces anteriores) o periodo rápido */
+function resolverPeriodo(p: Parametros): { clave: Periodo | null; desde?: string; hasta?: string; etiqueta: string } {
+  const hoy = hoyColombia();
+  const [a, m] = hoy.split('-').map(Number);
+  let desde = p.desde && DIA.test(p.desde) ? p.desde : undefined;
+  let hasta = p.hasta && DIA.test(p.hasta) ? p.hasta : undefined;
+  if (desde || hasta) {
+    if (desde && hasta && desde > hasta) [desde, hasta] = [hasta, desde];
+    const etiqueta = desde && hasta
+      ? desde === hasta ? diaLargo(desde) : `Del ${diaCorto(desde)} al ${diaCorto(hasta)}`
+      : desde ? `Desde el ${diaCorto(desde)}` : `Hasta el ${diaCorto(hasta!)}`;
+    return { clave: null, desde, hasta, etiqueta };
+  }
+  if (p.mes && /^\d{4}-\d{2}$/.test(p.mes) && !p.periodo) {
+    const [ma, mm] = p.mes.split('-').map(Number);
+    if (ma === a && mm === m) return { clave: 'mes', desde: `${p.mes}-01`, hasta: hoy, etiqueta: PERIODOS.mes };
+    return { clave: null, desde: `${p.mes}-01`, hasta: ultimoDiaMes(ma, mm), etiqueta: nombreMes(ma, mm) };
+  }
+  const clave: Periodo = p.periodo && p.periodo in PERIODOS ? (p.periodo as Periodo) : 'mes';
+  switch (clave) {
+    case 'hoy': return { clave, desde: hoy, hasta: hoy, etiqueta: `Hoy, ${diaLargo(hoy)}` };
+    case 'ayer': { const d = sumarDias(hoy, -1); return { clave, desde: d, hasta: d, etiqueta: `Ayer, ${diaLargo(d)}` }; }
+    case '7d': return { clave, desde: sumarDias(hoy, -6), hasta: hoy, etiqueta: PERIODOS['7d'] };
+    case '30d': return { clave, desde: sumarDias(hoy, -29), hasta: hoy, etiqueta: PERIODOS['30d'] };
+    case 'mesant': {
+      const [pa, pm] = m === 1 ? [a - 1, 12] : [a, m - 1];
+      return { clave, desde: `${pa}-${String(pm).padStart(2, '0')}-01`, hasta: ultimoDiaMes(pa, pm), etiqueta: `Mes anterior · ${nombreMes(pa, pm)}` };
+    }
+    case 'todo': return { clave, etiqueta: PERIODOS.todo };
+    default: return { clave: 'mes', desde: `${hoy.slice(0, 7)}-01`, hasta: hoy, etiqueta: `Este mes · ${nombreMes(a, m)}` };
+  }
+}
 type Dir = 'asc' | 'desc';
 type Orden = { campo: string; dir: Dir };
 
@@ -54,18 +118,19 @@ const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLo
 export default async function ConsumoIA({ searchParams }: { searchParams: Promise<Parametros> }) {
   await requerirSesion({ roles: ['ADMINISTRADOR'] });
   const params = await searchParams;
-  const { mes, usuario, q, estado } = params;
+  const { usuario, q, estado } = params;
   const tarea = params.tarea && params.tarea in TAREAS ? params.tarea : undefined;
-  const hoy = new Date();
-  const todo = mes === 'todo';
-  const periodo = !todo && mes && /^\d{4}-\d{2}$/.test(mes) ? mes : `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
-  const [anio, m] = periodo.split('-').map(Number);
-  const rango = todo ? {} : { desde: new Date(anio, m - 1, 1), hasta: new Date(anio, m, 1) };
+  // Compatibilidad: ?mes=todo de los enlaces anteriores
+  const periodo = resolverPeriodo(params.mes === 'todo' ? { ...params, mes: undefined, periodo: 'todo' } : params);
+  const esRango = periodo.clave === null;
+  const rango = { desde: periodo.desde ? inicioDia(periodo.desde) : undefined, hasta: periodo.hasta ? inicioDia(sumarDias(periodo.hasta, 1)) : undefined };
 
-  const [datos, personal] = await Promise.all([
-    consumoIA({ ...rango, usuarioId: usuario || undefined, proposito: tarea }),
+  const [personal, modelos] = await Promise.all([
     db.usuario.findMany({ orderBy: { nombreCompleto: 'asc' }, select: { id: true, nombreCompleto: true } }),
+    modelosUsados(),
   ]);
+  const modelo = params.modelo && modelos.includes(params.modelo) ? params.modelo : undefined;
+  const datos = await consumoIA({ ...rango, usuarioId: usuario || undefined, proposito: tarea, modelo });
   type Escritura = (typeof datos.escrituras)[number];
   type Digitador = (typeof datos.digitadores)[number];
 
@@ -102,10 +167,16 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
 
   const usd = (x: number) => `US$ ${x.toFixed(x > 0 && x < 1 ? 3 : 2)}`;
   const filtroUsuario = usuario ? personal.find((p) => p.id === usuario)?.nombreCompleto : null;
+  /** El periodo tal como va en la dirección: rango de fechas o periodo rápido */
+  const estadoPeriodo: Partial<Record<'periodo' | 'desde' | 'hasta', string>> = esRango
+    ? { desde: periodo.desde, hasta: periodo.hasta }
+    : periodo.clave === 'mes' ? {} : { periodo: periodo.clave! };
+  /** Cambiar de periodo quita el rango de fechas (y el mes de los enlaces anteriores) */
+  const conPeriodo = (cambios: Partial<Record<'periodo' | 'desde' | 'hasta', string | null>>) => ({ periodo: null, desde: null, hasta: null, ...cambios });
 
   /** Enlace a esta misma página conservando los filtros, con los cambios indicados (null quita el parámetro) */
   const enlace = (cambios: Partial<Record<keyof Parametros, string | null>> = {}) => {
-    const actual: Record<string, string | undefined> = { mes: todo ? 'todo' : periodo, usuario, tarea, q, estado, orden: params.orden, ordenu: params.ordenu };
+    const actual: Record<string, string | undefined> = { ...estadoPeriodo, usuario, tarea, modelo, q, estado, orden: params.orden, ordenu: params.ordenu };
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries({ ...actual, ...cambios })) if (v) p.set(k, v);
     return `/admin/consumo?${p}`;
@@ -147,6 +218,7 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
   );
 
   const hayFiltrosTabla = !!(busqueda || estado);
+  const maxDia = Math.max(0, ...datos.porDia.map((d) => d.costoUSD));
 
   return (
     <>
@@ -155,29 +227,54 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
           <h1>Consumo de IA{filtroUsuario ? ` · ${filtroUsuario}` : ''}</h1>
           <p className="suave">Tokens y costo por usuario, escritura, tarea y modelo.</p>
         </div>
-        <form className="fila chica filtros-linea" method="get" aria-label="Periodo y filtros">
-          <input type="month" name="mes" defaultValue={todo ? '' : periodo} aria-label="Mes" />
-          <select name="usuario" defaultValue={usuario ?? ''} aria-label="Digitador">
+      </div>
+
+      <nav className="pestanas" aria-label="Periodo">
+        {(Object.keys(PERIODOS) as Periodo[]).map((k) => (
+          <Link key={k} href={enlace(conPeriodo(k === 'mes' ? {} : { periodo: k }))} aria-current={periodo.clave === k ? 'page' : undefined} scroll={false}>{PERIODOS[k]}</Link>
+        ))}
+      </nav>
+
+      <form className="tarjeta compacta filtros" method="get" aria-label="Fechas y filtros">
+        <label>Desde<input type="date" name="desde" defaultValue={esRango ? periodo.desde ?? '' : ''} max={hoyColombia()} /></label>
+        <label>Hasta<input type="date" name="hasta" defaultValue={esRango ? periodo.hasta ?? '' : ''} max={hoyColombia()} /></label>
+        <label>Usuario
+          <select name="usuario" defaultValue={usuario ?? ''}>
             <option value="">Todos los usuarios</option>
             {personal.map((p) => <option key={p.id} value={p.id}>{p.nombreCompleto}</option>)}
           </select>
-          <select name="tarea" defaultValue={tarea ?? ''} aria-label="Tarea">
+        </label>
+        <label>Tarea
+          <select name="tarea" defaultValue={tarea ?? ''}>
             <option value="">Todas las tareas</option>
             {Object.entries(TAREAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-          {q && <input type="hidden" name="q" value={q} />}
-          {estado && <input type="hidden" name="estado" value={estado} />}
-          {params.orden && <input type="hidden" name="orden" value={params.orden} />}
-          {params.ordenu && <input type="hidden" name="ordenu" value={params.ordenu} />}
-          <button type="submit" className="secundario">Ver</button>
-          <Link className="boton fantasma" href={enlace({ mes: 'todo' })}>Todo el historial</Link>
-        </form>
+        </label>
+        <label>Modelo
+          <select name="modelo" defaultValue={modelo ?? ''}>
+            <option value="">Todos los modelos</option>
+            {modelos.map((x) => <option key={x} value={x}>{x}</option>)}
+          </select>
+        </label>
+        {/* Sin fechas, se conserva el periodo rápido elegido */}
+        {!esRango && periodo.clave !== 'mes' && <input type="hidden" name="periodo" value={periodo.clave!} />}
+        {q && <input type="hidden" name="q" value={q} />}
+        {estado && <input type="hidden" name="estado" value={estado} />}
+        {params.orden && <input type="hidden" name="orden" value={params.orden} />}
+        {params.ordenu && <input type="hidden" name="ordenu" value={params.ordenu} />}
+        <div className="acciones-filtro">
+          <button type="submit" className="secundario">Aplicar</button>
+          {(esRango || usuario || tarea || modelo) && <Link className="boton fantasma" href="/admin/consumo">Quitar filtros</Link>}
+        </div>
+      </form>
+
+      <div className="filtros-activos">
+        <strong>{periodo.etiqueta}</strong>
+        {esRango && <Link className="chip-filtro" href={enlace(conPeriodo({}))} aria-label="Quitar el rango de fechas">Fechas<Icono nombre="cerrar" tamano={14} /></Link>}
+        {filtroUsuario && <Link className="chip-filtro" href={enlace({ usuario: null })} aria-label={`Quitar el filtro ${filtroUsuario}`}>{filtroUsuario}<Icono nombre="cerrar" tamano={14} /></Link>}
+        {tarea && <Link className="chip-filtro" href={enlace({ tarea: null })} aria-label="Quitar el filtro de tarea">{TAREAS[tarea]}<Icono nombre="cerrar" tamano={14} /></Link>}
+        {modelo && <Link className="chip-filtro" href={enlace({ modelo: null })} aria-label="Quitar el filtro de modelo">{modelo}<Icono nombre="cerrar" tamano={14} /></Link>}
       </div>
-      <p className="tenue">
-        {todo ? 'Todo el historial' : `Mes ${periodo}`}
-        {filtroUsuario && <> · solo {filtroUsuario} · <Link href={enlace({ usuario: null })}>ver todos</Link></>}
-        {tarea && <> · solo {TAREAS[tarea].toLowerCase()} · <Link href={enlace({ tarea: null })}>todas las tareas</Link></>}
-      </p>
 
       <div className="rejilla cuatro">
         <div className="tarjeta compacta indicador"><span className="rotulo">Costo estimado</span><span className="cifra">{usd(datos.total.costoUSD)}</span><span className="tenue">tarifa de cada modelo</span></div>
@@ -185,6 +282,31 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
         <div className="tarjeta compacta indicador"><span className="rotulo">Llamadas a la IA</span><span className="cifra">{n(datos.total.llamadas)}</span><span className="tenue">{datos.escrituras.length} escrituras{datos.revisiones.length ? ` · ${datos.revisiones.length} revisiones` : ''}</span></div>
         <div className="tarjeta compacta indicador"><span className="rotulo">Promedio por escritura</span><span className="cifra">{datos.promedioPorEscrituraUSD === null ? '—' : usd(datos.promedioPorEscrituraUSD)}</span><span className="tenue">costo medio</span></div>
       </div>
+
+      {datos.porDia.length > 1 && (
+        <section className="tarjeta">
+          <h2>Por día</h2>
+          <p className="suave">
+            {datos.porDia.length} días con consumo · promedio {usd(datos.total.costoUSD / datos.porDia.length)} por día con uso · día más alto {usd(maxDia)}.
+            Haga clic en un día para ver solo ese día.
+          </p>
+          <Tabla etiqueta="Consumo por día">
+            <thead><tr>
+              <th>Día</th>
+              <th className="numero">Llamadas</th><th className="numero">Tokens entrada</th><th className="numero">Tokens caché</th><th className="numero">Tokens salida</th><th className="numero">US$</th>
+            </tr></thead>
+            <tbody>{datos.porDia.map((d) => (
+              <tr key={d.dia}>
+                <td className="principal-celda">
+                  <Link href={enlace(conPeriodo({ desde: d.dia, hasta: d.dia }))}>{diaLargo(d.dia)}</Link>
+                  <span className="barra-uso" aria-hidden><span style={{ width: `${maxDia ? (d.costoUSD / maxDia) * 100 : 0}%` }} /></span>
+                </td>
+                <Columnas t={d} />
+              </tr>
+            ))}</tbody>
+          </Tabla>
+        </section>
+      )}
 
       <section className="tarjeta">
         <h2>Por digitador</h2>
@@ -214,7 +336,7 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
         <div className="tarjeta-cabecera">
           <h2>Por escritura</h2>
           <form className="fila chica filtros-linea" method="get" role="search" aria-label="Filtrar escrituras">
-            {Object.entries({ mes: todo ? 'todo' : periodo, usuario, tarea, orden: params.orden, ordenu: params.ordenu }).map(([k, v]) => v && <input key={k} type="hidden" name={k} value={v} />)}
+            {Object.entries({ ...estadoPeriodo, usuario, tarea, modelo, orden: params.orden, ordenu: params.ordenu }).map(([k, v]) => v && <input key={k} type="hidden" name={k} value={v} />)}
             <input type="search" name="q" defaultValue={q ?? ''} placeholder="Buscar expediente, escritura, acto o responsable" aria-label="Buscar" className="busqueda-ancha" />
             <select name="estado" defaultValue={estado ?? ''} aria-label="Estado">
               <option value="">Todos los estados</option>
@@ -309,7 +431,7 @@ export default async function ConsumoIA({ searchParams }: { searchParams: Promis
             <Tabla apilable={false}>
               <thead><tr><th>Modelo</th><th className="numero">Llamadas</th><th className="numero">Tokens</th><th className="numero">US$</th></tr></thead>
               <tbody>{datos.porModelo.map((p) => (
-                <tr key={p.modelo}><td><code>{p.modelo}</code></td><td className="numero">{n(p.llamadas)}</td><td className="numero">{n(p.tokensEntrada + p.tokensCache + p.tokensSalida)}</td><td className="numero"><strong>{usd(p.costoUSD)}</strong></td></tr>
+                <tr key={p.modelo}><td>{modelo ? <code>{p.modelo}</code> : <Link href={enlace({ modelo: p.modelo })}><code>{p.modelo}</code></Link>}</td><td className="numero">{n(p.llamadas)}</td><td className="numero">{n(p.tokensEntrada + p.tokensCache + p.tokensSalida)}</td><td className="numero"><strong>{usd(p.costoUSD)}</strong></td></tr>
               ))}</tbody>
             </Tabla>
           )}

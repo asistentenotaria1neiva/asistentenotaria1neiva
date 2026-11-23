@@ -4,7 +4,7 @@
  * facturado por Anthropic está en Estadísticas (src/lib/ia/consumo.ts).
  */
 import 'server-only';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { db } from '../db';
 
 export interface Totales {
@@ -28,13 +28,50 @@ function totales(g: Suma): Totales {
   };
 }
 
-export async function consumoIA(filtro: { desde?: Date; hasta?: Date; usuarioId?: string; proposito?: string }) {
+export interface FiltroConsumo { desde?: Date; hasta?: Date; usuarioId?: string; proposito?: string; modelo?: string }
+
+/** Consumo agrupado por día de Colombia (UTC−5, sin horario de verano), del más reciente al más antiguo */
+async function consumoPorDia(filtro: FiltroConsumo): Promise<(Totales & { dia: string })[]> {
+  const condiciones = [Prisma.sql`TRUE`];
+  if (filtro.desde) condiciones.push(Prisma.sql`"creadoEn" >= ${filtro.desde}`);
+  if (filtro.hasta) condiciones.push(Prisma.sql`"creadoEn" < ${filtro.hasta}`);
+  if (filtro.usuarioId) condiciones.push(Prisma.sql`"usuarioId" = ${filtro.usuarioId}`);
+  if (filtro.proposito) condiciones.push(Prisma.sql`"proposito" = ${filtro.proposito}`);
+  if (filtro.modelo) condiciones.push(Prisma.sql`"modelo" = ${filtro.modelo}`);
+  const filas = await db.$queryRaw<{ dia: string; llamadas: bigint; entrada: bigint | null; salida: bigint | null; cache: bigint | null; costo: number | null }[]>`
+    SELECT to_char("creadoEn" - interval '5 hours', 'YYYY-MM-DD') AS dia,
+           COUNT(*) AS llamadas,
+           SUM("tokensEntrada") AS entrada,
+           SUM("tokensSalida") AS salida,
+           SUM("tokensCacheLectura" + "tokensCacheEscritura") AS cache,
+           SUM("costoUSD") AS costo
+    FROM consumo_ia
+    WHERE ${Prisma.join(condiciones, ' AND ')}
+    GROUP BY 1 ORDER BY 1 DESC`;
+  return filas.map((f) => ({
+    dia: f.dia,
+    llamadas: Number(f.llamadas),
+    tokensEntrada: Number(f.entrada ?? 0),
+    tokensSalida: Number(f.salida ?? 0),
+    tokensCache: Number(f.cache ?? 0),
+    costoUSD: Number(f.costo ?? 0),
+  }));
+}
+
+/** Modelos que aparecen en el registro (para el filtro) */
+export async function modelosUsados(): Promise<string[]> {
+  const filas = await db.consumoIA.findMany({ distinct: ['modelo'], select: { modelo: true }, orderBy: { modelo: 'asc' } });
+  return filas.map((f) => f.modelo);
+}
+
+export async function consumoIA(filtro: FiltroConsumo) {
   const where: Prisma.ConsumoIAWhereInput = {
     ...(filtro.desde || filtro.hasta ? { creadoEn: { ...(filtro.desde ? { gte: filtro.desde } : {}), ...(filtro.hasta ? { lt: filtro.hasta } : {}) } } : {}),
     ...(filtro.usuarioId ? { usuarioId: filtro.usuarioId } : {}),
     ...(filtro.proposito ? { proposito: filtro.proposito } : {}),
+    ...(filtro.modelo ? { modelo: filtro.modelo } : {}),
   };
-  const [total, porUsuario, porUsuarioExpediente, porExpediente, porProposito, porModelo, plantillas, historicos, porRevision] = await Promise.all([
+  const [total, porUsuario, porUsuarioExpediente, porExpediente, porProposito, porModelo, plantillas, historicos, porRevision, porDia] = await Promise.all([
     db.consumoIA.aggregate({ where, ...SUMA }),
     db.consumoIA.groupBy({ by: ['usuarioId'], where, ...SUMA, _max: { creadoEn: true } }),
     db.consumoIA.groupBy({ by: ['usuarioId', 'expedienteId'], where: { ...where, expedienteId: { not: null } }, _count: true }),
@@ -44,6 +81,7 @@ export async function consumoIA(filtro: { desde?: Date; hasta?: Date; usuarioId?
     db.consumoIA.aggregate({ where: { ...where, plantillaId: { not: null } }, ...SUMA }),
     db.consumoIA.count({ where: { ...where, historico: true } }),
     db.consumoIA.groupBy({ by: ['revisionId'], where: { ...where, revisionId: { not: null } }, ...SUMA, _min: { creadoEn: true }, _max: { creadoEn: true } }),
+    consumoPorDia(filtro),
   ]);
 
   const idsUsuarios = porUsuario.map((u) => u.usuarioId).filter((x): x is string => !!x);
@@ -118,6 +156,7 @@ export async function consumoIA(filtro: { desde?: Date; hasta?: Date; usuarioId?
     porModelo: porModelo.map((g) => ({ modelo: g.modelo, ...totales(g) })).sort((a, b) => b.costoUSD - a.costoUSD),
     plantillas: totales(plantillas),
     historicos,
+    porDia,
   };
 }
 

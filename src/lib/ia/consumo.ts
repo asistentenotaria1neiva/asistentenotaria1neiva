@@ -2,10 +2,11 @@
  * Costo real facturado por Anthropic (Usage and Cost Admin API, /v1/organizations/cost_report).
  * Requiere una clave de administrador (ANTHROPIC_ADMIN_KEY, sk-ant-admin...) o una clave de API
  * que no esté asignada a un workspace. Anthropic no publica el saldo de créditos por API:
- * el saldo restante se calcula con el saldo registrado en Configuración menos el costo real
- * desde esa fecha.
+ * el saldo restante se calcula con el saldo registrado en el panel del administrador menos lo
+ * gastado desde ese momento (costo real o, sin clave de administrador, el calculado por la aplicación).
  */
 import 'server-only';
+import { db } from '../db';
 
 const URL_COSTOS = 'https://api.anthropic.com/v1/organizations/cost_report';
 
@@ -47,10 +48,55 @@ export async function costoRealUSD(desde: Date, hasta: Date): Promise<CostoReal>
   return { ok: true, usd: Math.round(centavos) / 100 };
 }
 
-/** Saldo restante = saldo registrado en la fecha indicada − costo real desde ese día (UTC) hasta ahora */
-export async function creditosRestantes(registro: { saldoUSD: number; fecha: string }): Promise<CostoReal & { gastadoUSD?: number }> {
-  if (!registro.saldoUSD || !/^\d{4}-\d{2}-\d{2}$/.test(registro.fecha)) return { ok: false, error: 'Registre el saldo de créditos en Configuración (ia.creditos).' };
-  const gasto = await costoRealUSD(new Date(`${registro.fecha}T00:00:00Z`), new Date());
-  if (!gasto.ok) return gasto;
-  return { ok: true, usd: Math.round((registro.saldoUSD - gasto.usd) * 100) / 100, gastadoUSD: gasto.usd };
+/** Momento del registro del saldo: fecha y hora ISO, o solo AAAA-MM-DD (medianoche de Colombia) */
+export function instanteRegistro(fecha: string): Date | null {
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? new Date(`${fecha}T05:00:00Z`) : new Date(fecha);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** Costo calculado por la aplicación (tabla consumo_ia) en [desde, hasta) */
+async function costoEstimadoUSD(desde: Date, hasta: Date): Promise<number> {
+  if (hasta <= desde) return 0;
+  const r = await db.consumoIA.aggregate({ where: { creadoEn: { gte: desde, lt: hasta } }, _sum: { costoUSD: true } });
+  return r._sum.costoUSD ?? 0;
+}
+
+export type Creditos =
+  | { ok: true; saldoUSD: number; gastadoUSD: number; registradoUSD: number; registradoEn: Date; fuente: 'real' | 'estimado'; aviso?: string; diarioUSD: number; diasRestantes: number | null }
+  | { ok: false; error: string };
+
+/**
+ * Saldo restante = saldo registrado − lo gastado desde ese momento.
+ * Con clave de administrador se usa el costo real de Anthropic (días completos UTC; el resto del día del registro
+ * se toma del costo calculado). Sin ella, el costo calculado por la aplicación con la tarifa de cada modelo.
+ */
+export async function creditosRestantes(registro: { saldoUSD: number; fecha: string }): Promise<Creditos> {
+  const inicio = registro.fecha ? instanteRegistro(registro.fecha) : null;
+  if (!registro.saldoUSD || !inicio) return { ok: false, error: 'Aún no se ha registrado el saldo de créditos.' };
+  const ahora = new Date();
+  const finDia = new Date(Date.UTC(inicio.getUTCFullYear(), inicio.getUTCMonth(), inicio.getUTCDate() + 1));
+  const hace7 = new Date(ahora.getTime() - 7 * 86_400_000);
+  const [parcial, real, semana] = await Promise.all([
+    costoEstimadoUSD(inicio, finDia < ahora ? finDia : ahora),
+    finDia < ahora ? costoRealUSD(finDia, ahora) : Promise.resolve<CostoReal>({ ok: true, usd: 0 }),
+    costoEstimadoUSD(hace7, ahora),
+  ]);
+  let gastado: number;
+  let fuente: 'real' | 'estimado';
+  let aviso: string | undefined;
+  if (real.ok) {
+    gastado = parcial + real.usd;
+    fuente = 'real';
+  } else {
+    gastado = await costoEstimadoUSD(inicio, ahora);
+    fuente = 'estimado';
+    aviso = real.error;
+  }
+  const saldo = Math.round((registro.saldoUSD - gastado) * 100) / 100;
+  // Ritmo de gasto: promedio diario de los últimos 7 días
+  const diario = semana / 7;
+  return {
+    ok: true, saldoUSD: saldo, gastadoUSD: Math.round(gastado * 100) / 100, registradoUSD: registro.saldoUSD, registradoEn: inicio,
+    fuente, aviso, diarioUSD: diario, diasRestantes: diario > 0 ? Math.max(0, saldo) / diario : null,
+  };
 }
