@@ -150,6 +150,24 @@ export async function accionVerificarAuditoria(): Promise<ResultadoAdmin> {
     : { error: `¡ATENCIÓN! La cadena de auditoría está alterada a partir del registro #${r.primeraFalla}. Informe de inmediato al notario.` };
 }
 
+/** Registra el saldo de créditos de la API tal como aparece ahora en la consola de Anthropic (Billing) */
+export async function accionCreditos(_: ResultadoAdmin, f: FormData): Promise<ResultadoAdmin> {
+  const s = await admin();
+  return hacer('/admin', async () => {
+    const texto = t(f, 'saldo').replace(/[^\d.,]/g, '');
+    // Acepta 25.40, 25,40 y 1.025,40
+    const normal = /,\d{1,2}$/.test(texto) ? texto.replace(/\./g, '').replace(',', '.') : texto.replace(/,/g, '');
+    const saldoUSD = Number(normal);
+    if (!texto || !Number.isFinite(saldoUSD) || saldoUSD <= 0) throw new ErrorAdmin('Escriba el saldo en dólares, p. ej. 25,40.');
+    const valor = { saldoUSD: Math.round(saldoUSD * 100) / 100, fecha: new Date().toISOString() };
+    const anterior = await db.configuracion.findUnique({ where: { clave: 'ia.creditos' } });
+    await db.configuracion.upsert({ where: { clave: 'ia.creditos' }, create: { clave: 'ia.creditos', valor, actualizadoPor: s.usuario.id }, update: { valor, actualizadoPor: s.usuario.id } });
+    invalidarConfig();
+    await auditar({ ...datosAuditoria(s), accion: 'CONFIGURACION_CAMBIADA', entidad: 'configuracion', entidadId: 'ia.creditos', detalle: { anterior: (anterior?.valor ?? POR_DEFECTO['ia.creditos']) as object, nuevo: valor } });
+    return `Saldo registrado: US$ ${valor.saldoUSD.toFixed(2)}.`;
+  });
+}
+
 export async function accionConfiguracion(_: ResultadoAdmin, f: FormData): Promise<ResultadoAdmin> {
   const s = await admin();
   return hacer('/admin/configuracion', async () => {
@@ -164,7 +182,7 @@ export async function accionConfiguracion(_: ResultadoAdmin, f: FormData): Promi
     if (clave === 'ia.creditos') {
       const c = valor as { saldoUSD?: unknown; fecha?: unknown };
       if (typeof c.saldoUSD !== 'number' || c.saldoUSD < 0) throw new ErrorAdmin('saldoUSD debe ser un número (US$), p. ej. 25.40.');
-      if (typeof c.fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(c.fecha) || isNaN(Date.parse(c.fecha))) throw new ErrorAdmin('fecha debe tener el formato AAAA-MM-DD, p. ej. "2026-10-21".');
+      if (typeof c.fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(c.fecha) || isNaN(Date.parse(c.fecha))) throw new ErrorAdmin('fecha debe tener el formato AAAA-MM-DD, p. ej. "2026-10-21".');
     }
     if (clave === 'red.ips_oficina' && Array.isArray(valor) && !valor.length) throw new ErrorAdmin('Debe haber al menos una IP de la oficina (si no, el personal no podría ingresar).');
     const anterior = await db.configuracion.findUnique({ where: { clave } });

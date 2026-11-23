@@ -290,6 +290,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
             panel={panel}
             pie={pie}
             generarPrincipal={!descargaPrincipal && conPlantilla}
+            corregible={ultima?.estado === 'COMPLETADA' && cambiosDeVersion(ultima) ? ultima.version : null}
           />
         ) : (
           <>

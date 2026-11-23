@@ -480,6 +480,9 @@ async function redactar(id: string, expedienteId: string, p: Progreso): Promise<
       sistemaUnaHora: true,
       esquema: ESQUEMA_REDACCION as unknown as Record<string, unknown>,
       maxTokens: MAXIMO_SALIDA,
+      // La continuación solo sigue escribiendo los párrafos que faltan: razonando poco (el razonamiento
+      // se cobra como salida y la continuación lo repetía desde cero), con la caché intacta
+      ...(continua ? { esfuerzoTurno: 'low' as const } : {}),
     });
   } catch (err) {
     if (!(err instanceof ErrorIA) || err.codigo !== 'TRUNCADO' || !err.parcial) throw err;

@@ -1,8 +1,14 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
+import { obtenerConfig } from '@/lib/configuracion';
+import { creditosRestantes } from '@/lib/ia/consumo';
 import { Vacio, fecha } from '../componentes';
 import { Icono } from '../../Icono';
+import { accionCreditos } from './acciones';
+import { FormAdmin } from './formularios';
+
+const usd = (x: number) => `US$ ${x.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const SEVERIDAD: Record<string, string> = { ALTA: 'critica', MEDIA: 'advertencia' };
 
@@ -23,6 +29,8 @@ export default async function PanelAdmin() {
     db.sesion.count({ where: { revocadaEn: null, expiraEn: { gt: new Date() }, ultimaActividad: { gt: new Date(Date.now() - 20 * 60_000) } } }),
     db.alerta.findMany({ where: { atendida: false, creadaEn: { gt: hace30 } }, orderBy: { creadaEn: 'desc' }, take: 5 }),
   ]);
+  const creditos = await creditosRestantes(await obtenerConfig('ia.creditos'));
+  const bajo = creditos.ok && (creditos.saldoUSD < 5 || (creditos.diasRestantes !== null && creditos.diasRestantes < 3));
   return (
     <>
       <div className="encabezado">
@@ -35,6 +43,42 @@ export default async function PanelAdmin() {
         <Link className={`tarjeta compacta indicador${alertas ? ' con-alerta' : ''}`} href="/admin/alertas"><span className="rotulo"><Icono nombre="alerta" tamano={16} />Alertas sin atender</span><span className={`cifra${alertas ? ' peligro' : ''}`}>{alertas}</span><span className="tenue">alertas de seguridad</span></Link>
         <Link className="tarjeta compacta indicador" href="/plantillas"><span className="rotulo"><Icono nombre="biblioteca" tamano={16} />Plantillas</span><span className="cifra">{plantillas.toLocaleString('es-CO')}</span><span className="tenue">{plantillasRevisor} agregadas por revisores</span></Link>
       </div>
+      <section className={`tarjeta${bajo ? ' con-alerta' : ''}`}>
+        <div className="tarjeta-cabecera">
+          <h2>Créditos de la API de Claude</h2>
+          <Link className="tenue" href="/admin/consumo">Ver consumo</Link>
+        </div>
+        <div className="rejilla dos">
+          <div className="indicador">
+            <span className="rotulo"><Icono nombre="consumo" tamano={16} />Saldo disponible</span>
+            {creditos.ok ? (
+              <>
+                <span className={`cifra${bajo ? ' peligro' : ''}`}>{usd(creditos.saldoUSD)}</span>
+                <span className="tenue">
+                  {creditos.diasRestantes === null ? 'sin consumo en los últimos 7 días' : `alcanza para unos ${Math.floor(creditos.diasRestantes)} días al ritmo actual (${usd(creditos.diarioUSD)} por día)`}
+                </span>
+                <span className="tenue">
+                  {usd(creditos.registradoUSD)} registrados el {fecha(creditos.registradoEn)} − {usd(creditos.gastadoUSD)} gastados
+                  {creditos.fuente === 'real' ? ' (costo real de Anthropic)' : ' (costo calculado por la aplicación)'}
+                </span>
+              </>
+            ) : (
+              <><span className="cifra">—</span><span className="tenue">{creditos.error} Escriba el saldo que muestra la consola de Anthropic.</span></>
+            )}
+          </div>
+          <div>
+            <FormAdmin
+              accion={accionCreditos}
+              campos={[{ nombre: 'saldo', etiqueta: 'Saldo actual (US$)', ayuda: 'El que aparece en console.anthropic.com → Billing. Regístrelo cada vez que recargue: desde ese momento se descuenta lo que se gaste.' }]}
+              botones={[{ texto: 'Registrar saldo', clase: 'secundario' }]}
+            />
+          </div>
+        </div>
+        {creditos.ok && creditos.fuente === 'estimado' && (
+          <p className="suave">El saldo es aproximado: se calcula con la tarifa de cada modelo porque no se pudo consultar el costo real ({creditos.aviso}).</p>
+        )}
+      </section>
+
       <div className="rejilla dos">
         <section className="tarjeta">
           <div className="tarjeta-cabecera"><h2>Requiere su atención</h2></div>

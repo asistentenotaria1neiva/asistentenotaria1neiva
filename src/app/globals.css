@@ -903,7 +903,9 @@ progress::-moz-progress-bar { background: var(--primario); border-radius: 8px; }
 }
 
 /* «Corregir esta versión» (debajo de la vista previa de la escritura) */
-.corregir-version { margin-top: 16px; border: 1px solid var(--borde); border-radius: var(--radio-tarjeta); padding: 12px 16px; background: var(--superficie); }
-.corregir-version > summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.corregir-version { margin-top: 16px; border: 1px solid var(--primario-linea); border-radius: var(--radio-tarjeta); padding: 12px 16px; background: var(--superficie); box-shadow: inset 3px 0 0 var(--primario); scroll-margin-top: 24px; }
+.corregir-version > summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.etiqueta-economica { font-size: 12px; line-height: 18px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--primario-tinte); color: var(--primario); }
+.panel-accion .sugerencia-corregir { font-size: 13px; line-height: 19px; padding: 10px 12px; }
 .corregir-version form { margin-top: 12px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 .corregir-version .campo { width: 100%; }

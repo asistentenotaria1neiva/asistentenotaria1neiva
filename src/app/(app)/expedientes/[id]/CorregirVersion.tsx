@@ -16,14 +16,15 @@ export function CorregirVersion({ corregir, version, siguiente }: {
 }) {
   const [r, accion, pendiente] = useActionState(corregir, {});
   return (
-    <details className="corregir-version">
-      <summary><Icono nombre="editar" tamano={16} />Corregir la versión {version}</summary>
+    // Abierto y destacado: corregir cuesta cerca de un tercio de una versión completa (panel Consumo de IA)
+    <details id="corregir-version" className="corregir-version" open>
+      <summary><Icono nombre="editar" tamano={16} />Corregir la versión {version}<span className="etiqueta-economica">Más económico</span></summary>
       <form action={accion}>
         <div className="campo">
           <label htmlFor="pedido">¿Qué hay que corregir?</label>
           <textarea id="pedido" name="pedido" rows={4} maxLength={3000} required
             placeholder="Por ejemplo: «La compradora es casada con sociedad conyugal vigente», «Quitar la constitución del patrimonio de familia», «El crédito es por $130.000.000»." />
-          <div className="ayuda">La IA cambia solo lo que usted pide (y donde ese dato se repite); el resto de la escritura queda igual. Cuesta mucho menos que generar una versión completa. Si cargó documentos nuevos o cambió la plantilla, mejor genere una versión completa.</div>
+          <div className="ayuda">La IA cambia solo lo que usted pide (y donde ese dato se repite); el resto de la escritura queda igual. <strong>Cuesta cerca de la tercera parte de generar una versión completa</strong>: úselo para cualquier ajuste de datos, cláusulas o redacción. Genere una versión completa solo si cargó documentos nuevos o cambió la plantilla.</div>
         </div>
         <Mensaje r={pendiente ? undefined : r.error || r.ok ? r : undefined} />
         <button type="submit" className="secundario" disabled={pendiente} aria-busy={pendiente}>

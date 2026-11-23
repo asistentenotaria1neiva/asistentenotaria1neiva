@@ -109,6 +109,11 @@ export async function llamarEstructurado<T>(opciones: OpcionesLlamada): Promise<
     return await llamar<T>(opciones, modelo, esfuerzo);
   } catch (e) {
     if (!(e instanceof ErrorIA)) throw e;
+    // Si la API no acepta el esfuerzo por mensaje, se repite con ese esfuerzo arriba (sin la caché, pero funciona)
+    if (e.codigo === 'API' && opciones.esfuerzoTurno && e.message.startsWith('Solicitud rechazada')) {
+      console.warn(`[ia] esfuerzo por mensaje rechazado (${e.message}): se repite con esfuerzo ${opciones.esfuerzoTurno}`);
+      return llamar<T>({ ...opciones, esfuerzoTurno: undefined }, modelo, opciones.esfuerzoTurno);
+    }
     // La redacción gastó toda la salida razonando y no escribió nada (no hay qué continuar): se repite
     // una vez con el modelo de respaldo o, si ya era ese, razonando menos. Nunca se queda sin escritura.
     if (e.codigo === 'TRUNCADO' && !e.parcial?.trim() && opciones.proposito === 'REDACCION') {
@@ -131,6 +136,12 @@ interface OpcionesLlamada {
   maxTokens?: number;
   /** Esfuerzo de razonamiento para esta llamada (p. ej. 'low' para identificar un documento); si no, el del propósito */
   esfuerzo?: Esfuerzo;
+  /**
+   * Esfuerzo de razonamiento SOLO de esta respuesta, sin cambiar el de arriba: va como mensaje de sistema
+   * después del contenido (beta mid-conversation-output-config). Cambiar el esfuerzo de arriba invalida la
+   * caché de la plantilla y los documentos; así se conserva. Para la continuación de una redacción cortada.
+   */
+  esfuerzoTurno?: Esfuerzo;
   /** Modelo para esta llamada (p. ej. uno más fuerte para releer un dato crítico); si no, el del propósito */
   modelo?: string;
   /**
@@ -201,14 +212,21 @@ async function llamar<T>(opciones: OpcionesLlamada, modelo: string, esfuerzo: Es
   const controlSistema: Anthropic.Beta.BetaCacheControlEphemeral = opciones.sistemaUnaHora ? { type: 'ephemeral', ttl: '1h' } : { type: 'ephemeral' };
   const control: Anthropic.Beta.BetaCacheControlEphemeral = { type: 'ephemeral' };
   let mensaje: Anthropic.Beta.BetaMessage;
+  const betas: Anthropic.Beta.AnthropicBeta[] = [];
+  if (usarRespaldo) betas.push('server-side-fallback-2026-07-01');
+  if (opciones.esfuerzoTurno) betas.push('mid-conversation-output-config-2026-07-01');
+  const mensajes: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: conCache(opciones.contenido, opciones.cachearBloques, control) }];
+  // Justo después del mensaje del usuario: fija el esfuerzo de esta respuesta sin tocar el prefijo en caché
+  if (opciones.esfuerzoTurno) mensajes.push({ role: 'system', content: [], output_config: { effort: opciones.esfuerzoTurno } });
   try {
     const stream = obtenerCliente().beta.messages.stream({
       model: modelo,
       max_tokens: opciones.maxTokens ?? 32000,
       system: [{ type: 'text', text: opciones.sistema, cache_control: controlSistema }],
-      messages: [{ role: 'user', content: conCache(opciones.contenido, opciones.cachearBloques, control) }],
+      messages: mensajes,
       output_config: { effort: esfuerzo, format: { type: 'json_schema', schema: opciones.esquema } },
-      ...(usarRespaldo ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+      ...(betas.length ? { betas } : {}),
+      ...(usarRespaldo ? { fallbacks: 'default' as const } : {}),
     });
     mensaje = await stream.finalMessage();
   } catch (e) {

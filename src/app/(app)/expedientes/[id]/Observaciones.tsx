@@ -9,7 +9,7 @@ import type { Resultado } from '../acciones';
 import { Mensaje } from '../formularios';
 import { Icono } from '../../../Icono';
 
-export function FormularioObservaciones({ inicial, guardar, generar, puedeGenerar, version, abierto, clasePaso, resumen, panel, pie, generarPrincipal }: {
+export function FormularioObservaciones({ inicial, guardar, generar, puedeGenerar, version, abierto, clasePaso, resumen, panel, pie, generarPrincipal, corregible = null }: {
   inicial: string;
   guardar: (r: Resultado, f: FormData) => Promise<Resultado>;
   generar: (r: Resultado, f: FormData) => Promise<Resultado>;
@@ -25,6 +25,8 @@ export function FormularioObservaciones({ inicial, guardar, generar, puedeGenera
   pie: React.ReactNode;
   /** Generar es la acción principal (si ya hay una versión para revisar, pasa a ser secundaria) */
   generarPrincipal: boolean;
+  /** Versión que se puede corregir (en vez de generar otra completa, que cuesta unas tres veces más) */
+  corregible?: number | null;
 }) {
   const [rg, accionGuardar, guardando] = useActionState(guardar, {});
   const [rn, accionGenerar, generando] = useActionState(generar, {});
@@ -54,6 +56,12 @@ export function FormularioObservaciones({ inicial, guardar, generar, puedeGenera
       <aside className="panel-accion" aria-label="Siguiente paso">
         {panel}
         <Mensaje r={generando ? undefined : rn.error || rn.ok ? rn : undefined} />
+        {corregible != null && (
+          <div className="aviso info sugerencia-corregir">
+            <Icono nombre="info" />
+            <div>¿Solo hay que ajustar algo de la versión {corregible}? <a href="#corregir-version">Corríjala</a>: cuesta cerca de la tercera parte. Genere una versión completa solo si cargó documentos nuevos o cambió la plantilla.</div>
+          </div>
+        )}
         <button type="submit" formAction={accionGenerar} className={generarPrincipal ? 'grande bloque' : 'secundario bloque'} disabled={pendiente || !puedeGenerar} aria-busy={generando}>
           {generando ? <span className="girador pequeno" aria-hidden="true" /> : <Icono nombre={generarPrincipal ? 'ia' : 'refrescar'} tamano={18} />}{generando ? 'Iniciando…' : textoGenerar}
         </button>
