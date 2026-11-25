@@ -29,6 +29,7 @@ import { plantillaNumerada, aplicarCambios, formatoPagina, textoDocx, textosPorP
 import { discordanciasDeGenero, describirDiscordancias } from '../escritura/genero';
 import { revisarCatastrales } from '../escritura/catastral';
 import { revisarLinderos } from '../escritura/linderos';
+import { revisarBloquesDeInmuebles, revisarRemisionDeLinderos } from '../escritura/inmuebles';
 import { actosPedidos, encabezadosDeActos, actosSinCumplir, nombraActo } from '../escritura/actos';
 import { ubicarActos } from '../escritura/ubicar-actos';
 import { referenciasInternas, sinCambiosEnReferencias } from '../escritura/cierre';
@@ -591,6 +592,11 @@ async function corregir(id: string, expedienteId: string, p: Progreso) {
   }
   // Actos que piden las observaciones («en el primer acto… cancelación de hipoteca») y no quedaron donde se pidió
   for (const n of revisionDeActos(c.e.observaciones, plantilla, actuales, agregar)) urgentes.add(n);
+  // Varios inmuebles: bloques revueltos en la carátula o incompletos en la descripción, y linderos que
+  // quedaron como remisión del certificado aunque la escritura cargada los trae
+  const lecturas = c.leidos.flatMap((d) => (d.lectura as unknown as Lectura).documentos ?? []);
+  const deInmuebles = [...revisarBloquesDeInmuebles(plantilla, actuales), revisarRemisionDeLinderos(plantilla, actuales, lecturas)].filter((x) => x !== null);
+  for (const x of deInmuebles) for (const n of x.parrafos) { agregar(n, x.motivo); urgentes.add(n); }
   if (!revisar.size) return;
 
   // Si son más de los que caben, primero los cambios no aplicados y los que la IA dejó pendientes, luego
@@ -875,7 +881,14 @@ async function terminar(id: string, expedienteId: string, version: number, p: Pr
   const verificar = verificarEn(texto);
   const notaria = await obtenerConfig('notaria');
   const fuentes = `${c.textoDocs}\n${c.e.observaciones ?? ''}`;
+  // Lo que la corrección no alcanzó a arreglar en los inmuebles queda como crítica
+  const actuales = new Map(textosPlantilla);
+  for (const [n, t] of r.textos) actuales.set(n, t);
+  const deInmuebles = [...revisarBloquesDeInmuebles(textosPlantilla, actuales), revisarRemisionDeLinderos(textosPlantilla, actuales, lecturas)]
+    .filter((x) => x !== null)
+    .map((x) => ({ nivel: 'CRITICA' as const, origen: 'SISTEMA' as const, p: x.parrafos[0] ?? 0, detalle: `${x.detalle} Genere de nuevo o pídalo en «Corregir la versión» antes de imprimir.` }));
   const automaticas: Advertencia[] = [
+    ...deInmuebles,
     ...c.sinLeer.map((n) => ({ nivel: 'ADVERTENCIA' as const, origen: 'SISTEMA' as const, p: 0, detalle: `El documento «${n}» no se pudo leer: sus datos no se usaron. Ábralo en la lista de documentos y léalo de nuevo, o cárguelo con mejor calidad.` })),
     ...linderos.advertencias,
     ...pendientes(faltantes, verificar, r.noAplicados),
