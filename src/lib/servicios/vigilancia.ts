@@ -20,7 +20,8 @@ export async function vigilarExpediente(s: SesionActiva, id: string, editable: b
   // Primero la generación en curso: si pasó el tiempo máximo la cierra con error, y la lista de
   // versiones (que se lee después) ya la muestra con su error y no como «Generando»
   const enCurso = await generacionEnCurso(id);
-  const documentos = await db.documento.findMany({ where: { expedienteId: id }, orderBy: { creadoEn: 'asc' } });
+  // Solo los campos del estado: lo leído por la IA (decenas de KB por documento) no se trae en cada consulta
+  const documentos = await db.documento.findMany({ where: { expedienteId: id }, orderBy: { creadoEn: 'asc' }, select: { id: true, estadoLectura: true, creadoEn: true, actualizadoEn: true } });
   const trabados = documentos.filter((d) => (d.estadoLectura === 'PENDIENTE' && Date.now() - d.creadoEn.getTime() > 60_000) || (d.estadoLectura === 'EN_CURSO' && Date.now() - d.actualizadoEn.getTime() > LECTURA_CORTADA_MS));
   if (editable && !enCurso && trabados.length && process.env.ANTHROPIC_API_KEY) {
     // Con el mismo inicio: si el primero agota el tiempo de esta invocación, los demás siguen en otra

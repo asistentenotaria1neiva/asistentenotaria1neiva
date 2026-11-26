@@ -74,8 +74,11 @@ export async function subirParteDocumento(s: SesionActiva, expedienteId: string,
   await guardarParte(claveCarga(s, expedienteId, carga), indice, Buffer.from(await parte.arrayBuffer()));
 }
 
-/** Une las partes recibidas y registra el documento (pendiente de lectura). Devuelve su id. */
-export async function completarDocumento(s: SesionActiva, expedienteId: string, carga: string, partes: number, nombre: string): Promise<string> {
+/**
+ * Une las partes recibidas y registra el documento (pendiente de lectura). Devuelve su id y los bytes,
+ * para que la primera lectura use el archivo que ya está en memoria y no lo vuelva a bajar de Supabase.
+ */
+export async function completarDocumento(s: SesionActiva, expedienteId: string, carga: string, partes: number, nombre: string): Promise<{ id: string; bytes: Buffer }> {
   if (!Number.isInteger(partes) || partes < 1 || partes > 99_999) throw new ErrorNegocio('Carga no válida.');
   await expedienteEditable(s, expedienteId);
   let bytes: Buffer;
@@ -99,7 +102,7 @@ export async function completarDocumento(s: SesionActiva, expedienteId: string, 
     },
   });
   await auditar({ ...datosAuditoria(s), accion: 'DOCUMENTO_CARGADO', entidad: 'documento', entidadId: d.id, detalle: { expedienteId, tamano: bytes.length, sha256: d.hashSha256 } });
-  return d.id;
+  return { id: d.id, bytes };
 }
 
 /** Bloques de contenido de un archivo para la IA (un PDF largo, por tramos de páginas) */
@@ -245,6 +248,8 @@ export interface OpcionesLectura {
   base?: string | null;
   /** Cuándo empezó la invocación (si la lectura no es lo primero que hace) */
   inicio?: number;
+  /** El archivo ya en memoria (recién cargado): no se vuelve a bajar del almacenamiento */
+  bytes?: Buffer;
 }
 
 /** Lo leído de cada tramo (por su página inicial) mientras la lectura sigue EN_CURSO o quedó en ERROR */
@@ -258,7 +263,7 @@ type LecturaParcial = { tramos?: Record<string, DocumentoLeido[]> };
  * cada invocación se corta a los 5 minutos y, sin eso, un PDF de 100+ páginas volvía a empezar desde el
  * primer tramo en cada intento y nunca terminaba. Con `base`, lo que no alcanza sigue en otra invocación.
  */
-export async function leerDocumento(documentoId: string, usuarioId: string, { reutilizar = true, base = null, inicio = Date.now() }: OpcionesLectura = {}): Promise<boolean> {
+export async function leerDocumento(documentoId: string, usuarioId: string, { reutilizar = true, base = null, inicio = Date.now(), bytes: enMemoria }: OpcionesLectura = {}): Promise<boolean> {
   const tomado = await db.documento.updateMany({
     where: { id: documentoId, OR: [{ estadoLectura: { in: ['PENDIENTE', 'ERROR'] } }, { estadoLectura: 'EN_CURSO', actualizadoEn: { lt: new Date(Date.now() - LECTURA_CORTADA_MS) } }] },
     data: { estadoLectura: 'EN_CURSO', errorLectura: null },
@@ -283,7 +288,7 @@ export async function leerDocumento(documentoId: string, usuarioId: string, { re
     db.documento.updateMany({ where: { id: doc.id, estadoLectura: 'EN_CURSO' }, data: { actualizadoEn: new Date() } }).catch((e) => console.error('[leerDocumento] latido', e));
   }, LATIDO_MS);
   try {
-    const bytes = await leerCifrado(doc.rutaCifrada);
+    const bytes = enMemoria ?? await leerCifrado(doc.rutaCifrada);
     const pdf = doc.mime === 'application/pdf' ? await abrirPdf(bytes) : null;
     const totalPaginas = pdf?.getPageCount() ?? 1;
     // Cada tramo se extrae y se prepara cuando le toca (antes se preparaban todos antes de leer el primero)

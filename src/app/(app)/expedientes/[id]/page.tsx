@@ -54,7 +54,8 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
 
   // Reanuda la generación cortada, cierra la vencida y vuelve a leer los documentos trabados (antes de
   // leer las versiones, para que la vencida ya salga con su error y no como «Generando»)
-  const { enCurso, documentos } = await vigilarExpediente(s, id, editable);
+  const { enCurso } = await vigilarExpediente(s, id, editable);
+  const documentos = await db.documento.findMany({ where: { expedienteId: id }, orderBy: { creadoEn: 'asc' } });
   const generaciones = await db.generacion.findMany({ where: { expedienteId: id }, orderBy: { version: 'desc' }, take: 20, include: { generadaPor: { select: { nombreCompleto: true } } } });
   const leyendo = documentos.some((d) => d.estadoLectura === 'EN_CURSO' || d.estadoLectura === 'PENDIENTE');
   // Una generación cancelada no reemplaza a la versión anterior: se sigue mostrando la última terminada

@@ -78,9 +78,9 @@ export async function accionGenerar(expedienteId: string, _: Resultado, f: FormD
 export async function accionCompletarDocumento(expedienteId: string, carga: string, partes: number, nombre: string): Promise<Resultado> {
   const s = await requerirSesion();
   return ejecutar(async () => {
-    const id = await completarDocumento(s, expedienteId, carga, partes, String(nombre).slice(0, 300));
+    const { id, bytes } = await completarDocumento(s, expedienteId, carga, partes, String(nombre).slice(0, 300));
     const base = await urlAplicacion();
-    if (process.env.ANTHROPIC_API_KEY) after(() => leerDocumento(id, s.usuario.id, { base }).then(() => revalidatePath(`/expedientes/${expedienteId}`)).catch((e) => console.error('[leerDocumento]', e)));
+    if (process.env.ANTHROPIC_API_KEY) after(() => leerDocumento(id, s.usuario.id, { base, bytes }).then(() => revalidatePath(`/expedientes/${expedienteId}`)).catch((e) => console.error('[leerDocumento]', e)));
     return 'Documento cargado y cifrado.';
   }, `/expedientes/${expedienteId}`);
 }
