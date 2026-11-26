@@ -29,8 +29,8 @@ function exigirAdministrar(s: SesionActiva) {
 export const ORDENES = {
   recientes: { texto: 'Más recientes', orderBy: [{ fecha: 'desc' }, { nombre: 'asc' }] },
   antiguas: { texto: 'Más antiguas', orderBy: [{ fecha: 'asc' }, { nombre: 'asc' }] },
-  'nombre-az': { texto: 'Nombre (A a Z)', orderBy: [{ nombre: 'asc' }, { fecha: 'desc' }] },
-  'nombre-za': { texto: 'Nombre (Z a A)', orderBy: [{ nombre: 'desc' }, { fecha: 'desc' }] },
+  'nombre-az': { texto: 'Número y nombre (1 a 9, A a Z)', orderBy: [{ nombre: 'asc' }, { fecha: 'desc' }] },
+  'nombre-za': { texto: 'Número y nombre (9 a 1, Z a A)', orderBy: [{ nombre: 'desc' }, { fecha: 'desc' }] },
   categoria: { texto: 'Categoría y banco', orderBy: [{ categoria: 'asc' }, { subcategoria: 'asc' }, { nombre: 'asc' }] },
   usadas: { texto: 'Más usadas', orderBy: [{ expedientes: { _count: 'desc' } }, { fecha: 'desc' }] },
 } satisfies Record<string, { texto: string; orderBy: Prisma.PlantillaOrderByWithRelationInput[] }>;
@@ -89,16 +89,24 @@ export async function buscarPlantillas(s: SesionActiva, f: FiltroPlantillas) {
 
 const SELECCION_FILA = { id: true, nombre: true, categoria: true, subcategoria: true, anio: true, fecha: true, activa: true, origen: true, caracteres: true } as const;
 const comparar = new Intl.Collator('es', { numeric: true, sensitivity: 'base' }).compare;
-/** «410 - CASA HABITACION - SOLTERA» se ordena por «CASA HABITACION - SOLTERA» y después por su número */
-const sinNumeroInicial = (n: string) => n.replace(/^\s*\d+\s*[-–.]\s*/, '').trim() || n;
+/** Número inicial del nombre («410 - CASA HABITACION» → 410); sin número, al final */
+const numeroInicial = (n: string) => { const m = /^\s*(\d+)/.exec(n); return m ? Number(m[1]) : Number.POSITIVE_INFINITY; };
+const sinNumeroInicial = (n: string) => n.replace(/^\s*\d+\s*[-–.]?\s*/, '').trim();
 
 /**
  * Orden por nombre: casi todos empiezan con el número del catálogo, que la base ordenaría como texto
- * («1, 10, 100, 2…»). Se ordenan aquí por la descripción (orden natural, sin tildes) y se trae solo la página.
+ * («1, 10, 100, 2…»). Se ordenan aquí por ese número, de menor a mayor (1, 2, 3… 10… 100), y con el
+ * mismo número por el texto (sin tildes); los que no traen número van después. Se trae solo la página.
  */
+export function compararNombres(a: string, b: string): number {
+  const na = numeroInicial(a), nb = numeroInicial(b);
+  if (na !== nb) return na < nb ? -1 : 1;
+  return comparar(sinNumeroInicial(a), sinNumeroInicial(b)) || comparar(a, b);
+}
+
 async function porNombre(where: Prisma.PlantillaWhereInput, pagina: number, descendente: boolean) {
   const todas = await db.plantilla.findMany({ where, select: { id: true, nombre: true } });
-  todas.sort((a, b) => (comparar(sinNumeroInicial(a.nombre), sinNumeroInicial(b.nombre)) || comparar(a.nombre, b.nombre)) * (descendente ? -1 : 1));
+  todas.sort((a, b) => compararNombres(a.nombre, b.nombre) * (descendente ? -1 : 1));
   const ids = todas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA).map((x) => x.id);
   const filas = await db.plantilla.findMany({ where: { id: { in: ids } }, select: SELECCION_FILA });
   filas.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
