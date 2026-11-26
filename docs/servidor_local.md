@@ -1,4 +1,4 @@
-# Migración al servidor local (Windows)
+# Migración al servidor local (Windows Server 2019)
 
 Esta carpeta es la **versión para el servidor local** de la notaría (rama `servidor-local`). Es la misma
 aplicación que corre hoy en Vercel + Supabase, con estos cambios:
@@ -10,7 +10,7 @@ aplicación que corre hoy en Vercel + Supabase, con estos cambios:
 - La IP real de cada usuario se lee de la cabecera `CF-Connecting-IP` del túnel (para la restricción por
   red de la oficina).
 - La limpieza automática conserva los PDF 180 días y las escrituras 10 años (`.env.servidor.ejemplo`).
-- Copias de seguridad diarias y cifradas a Google Drive (`servidor\copia-seguridad.ps1`).
+- Copias de seguridad diarias y cifradas a Google Drive con rclone (`servidor\copia-seguridad.ps1`).
 
 No hay que descifrar nada: los archivos pasan tal cual, cifrados con la misma `CLAVE_MAESTRA`.
 
@@ -20,7 +20,7 @@ No hay que descifrar nada: los archivos pasan tal cual, cifrados con la misma `C
 
 | Qué | Detalle |
 |---|---|
-| Equipo | Windows 10/11 Pro (o Windows Server). Procesador i5/Ryzen 5 o mejor, **16 GB de RAM**, **SSD de 1 TB**. Conectado por **cable** al router. |
+| Equipo | **Windows Server 2019** (Standard o Essentials) con las últimas actualizaciones. **16 GB de RAM**, **SSD de 1 TB** (ideal un disco D: para los datos). Conectado por **cable** al router. |
 | UPS | De al menos 30 minutos para el servidor y el router. |
 | Internet | Estable. La IA (Anthropic) y el túnel van por internet. |
 | Dominio | Uno propio, por ejemplo `notaria1neiva.com.co` (unos 10–15 USD al año). |
@@ -32,19 +32,35 @@ No hay que descifrar nada: los archivos pasan tal cual, cifrados con la misma `C
 > **CLAVE_MAESTRA** debe ser **exactamente** la de Vercel. Si es otra, los documentos migrados no se pueden
 > abrir. Guárdela también fuera del servidor (sobre sellado del notario).
 
-## 2. Preparar Windows
+## 2. Preparar Windows Server 2019
 
-1. **Energía**: Configuración → Sistema → Inicio/apagado y suspensión → **Nunca** en suspensión y en apagar pantalla.
-2. **Actualizaciones**: Windows Update → Opciones avanzadas → **Horas activas** de 6:00 a. m. a 11:00 p. m. Reinicie a mano los domingos cuando haya actualizaciones.
-3. Cree las carpetas `C:\Notaria` y `D:\Notaria`. Si no hay disco D:, use `C:\Notaria` y cambie las rutas de los scripts y del `.env`.
-4. Instale:
-   - **Git para Windows**: <https://git-scm.com/download/win> (opciones por defecto). Con él el servidor baja la aplicación y sus actualizaciones de GitHub.
-   - **Node.js 24 LTS**: <https://nodejs.org> (instalador .msi, con las opciones por defecto).
-   - **PostgreSQL 17**: <https://www.postgresql.org/download/windows/> (instalador de EDB). Anote la contraseña del usuario `postgres`. Después agregue `C:\Program Files\PostgreSQL\17\bin` al **PATH** del sistema.
-   - **7-Zip**: <https://www.7-zip.org>.
-   - **NSSM**: <https://nssm.cc/download>. Copie `win64\nssm.exe` a `C:\Notaria\nssm\nssm.exe`.
-   - **cloudflared**: `winget install --id Cloudflare.cloudflared`.
-   - **Google Drive para escritorio**: <https://www.google.com/drive/download/>. Inicie sesión con la cuenta de las copias y anote la letra de la unidad (normalmente `G:\Mi unidad`).
+1. **Navegador**: en Windows Server, Internet Explorer bloquea las descargas («Configuración de seguridad
+   mejorada de IE»). En **Administrador del servidor → Servidor local**, ponga esa opción en **Desactivado**
+   para los administradores, y después instale **Microsoft Edge** o Chrome.
+2. Instale los programas, en este orden:
+
+   | # | Programa | Dónde | Nota |
+   |---|---|---|---|
+   | 1 | **Git para Windows** | <https://git-scm.com/download/win> | Opciones por defecto. Baja la app y sus actualizaciones de GitHub. |
+   | 2 | **Visual C++ 2015-2022 (x64)** | <https://aka.ms/vs/17/release/vc_redist.x64.exe> | Lo necesitan Prisma y el cifrado de contraseñas. |
+   | 3 | **Node.js 24 LTS** | <https://nodejs.org> | Instalador `.msi`, opciones por defecto. **No** marque «Tools for native modules». |
+   | 4 | **PostgreSQL 17** | <https://www.postgresql.org/download/windows/> | Instalador de EDB. Anote la contraseña de `postgres`. Puerto 5432. Agregue `C:\Program Files\PostgreSQL\17\bin` al **PATH del sistema**. |
+   | 5 | **7-Zip (x64)** | <https://www.7-zip.org> | Cifra las copias de la base. |
+   | 6 | **NSSM** | <https://nssm.cc/download> | Copie `win64\nssm.exe` a `C:\Notaria\nssm\`. |
+   | 7 | **rclone** | <https://rclone.org/downloads/> (Windows AMD64) | Copie `rclone.exe` a `C:\Notaria\rclone\`. Sube las copias a Google Drive. |
+   | 8 | **cloudflared** | <https://github.com/cloudflare/cloudflared/releases> | Archivo `cloudflared-windows-amd64.msi`. En Server 2019 no hay winget. |
+   | 9 | VS Code + Claude Code (opcional) | <https://code.visualstudio.com> | Para hacer la instalación con ayuda de Claude en el mismo servidor. |
+
+3. Abra **PowerShell como administrador** y ejecute el script de preparación. Ajusta Windows (rutas
+   largas, energía, actualizaciones sin reinicio automático, hora de Colombia, carpetas) y dice qué
+   programa falta:
+   ```powershell
+   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+   C:\Notaria\app\servidor\preparar-servidor.ps1
+   ```
+   El script está dentro de la aplicación, así que antes haga el paso 1 de la sección 4 (`git clone`).
+   Repítalo hasta que no falte nada, y **reinicie el servidor** una vez.
+4. Las actualizaciones de Windows quedan en «descargar y avisar». Instálelas a mano los domingos y reinicie.
 
 ## 3. Crear la base de datos local
 
@@ -128,18 +144,34 @@ contraseñas y el doble factor no cambian.
 
 ## 8. Copias de seguridad
 
-1. Cree `C:\Notaria\clave-copias.txt` con una contraseña larga (una sola línea, 20 caracteres o más) y guárdela también en papel en el sobre del notario.
-2. Pruebe la copia y prográmela:
+Las copias suben a Google Drive con **rclone**, que funciona en Windows Server sin que haya una sesión abierta.
+
+1. **Conecte rclone con Google Drive**, una sola vez:
+   ```powershell
+   C:\Notaria\rclone\rclone.exe config --config C:\Notaria\rclone\rclone.conf
+   ```
+   - Elija `n` (nuevo) y ponga el nombre **`gdrive`**.
+   - Tipo **Google Drive** (`drive`). Deje vacíos `client_id` y `client_secret`. Alcance **`drive`** (1).
+   - Responda **sí** a abrir el navegador e inicie sesión con la cuenta de Google de las copias.
+2. Cree `C:\Notaria\clave-copias.txt` con una contraseña larga (una sola línea, 20 caracteres o más) y guárdela también en papel en el sobre del notario.
+3. Deje esos dos archivos solo para los administradores:
+   ```powershell
+   icacls C:\Notaria\clave-copias.txt /inheritance:r /grant:r "Administradores:F" "SYSTEM:F"
+   icacls C:\Notaria\rclone\rclone.conf /inheritance:r /grant:r "Administradores:F" "SYSTEM:F"
+   ```
+   Si Windows está en inglés, use `Administrators` en lugar de `Administradores`.
+4. Pruebe la copia y prográmela (PowerShell como administrador):
    ```powershell
    .\servidor\copia-seguridad.ps1
    .\servidor\programar-copias.ps1
    ```
-3. Revise `D:\Notaria\registros\copias.log`: cada noche debe aparecer una línea `OK`.
-4. **Una vez al mes**, pruebe que una copia se puede restaurar en otro equipo (sección 10).
+5. Revise `D:\Notaria\registros\copias.log`: cada noche debe aparecer una línea `OK`.
+6. **Una vez al mes**, pruebe que una copia se puede restaurar en otro equipo (sección 10).
 
-En Drive quedan dos cosas:
+En Google Drive, en la carpeta «Respaldo Notaria», quedan tres cosas:
 - `base\` guarda la base de datos cifrada con 7-Zip; se conservan las últimas 30.
 - `archivos\` es un espejo de los documentos, ya cifrados por la aplicación.
+- `archivos-borrados\<fecha>\` guarda lo que se borró del servidor ese día, por si fue un error o un virus.
 
 ## 9. Apagar Vercel y Supabase
 
@@ -152,7 +184,11 @@ No los borre antes de confirmar que las copias del servidor funcionan.
 ## 10. Restaurar una copia (si el servidor se daña)
 
 1. Instale un equipo nuevo con los pasos 2 a 4. En el `.env` va **la misma** `CLAVE_MAESTRA`.
-2. Copie `archivos\` de Drive a `D:\Notaria\almacenamiento`.
+2. Configure rclone (sección 8, paso 1) y baje las copias:
+   ```powershell
+   C:\Notaria\rclone\rclone.exe --config C:\Notaria\rclone\rclone.conf copy "gdrive:Respaldo Notaria/archivos" D:\Notaria\almacenamiento
+   C:\Notaria\rclone\rclone.exe --config C:\Notaria\rclone\rclone.conf copy "gdrive:Respaldo Notaria/base" D:\Notaria\copias\base
+   ```
 3. Descomprima la última `base\*.7z` con la contraseña de las copias y restaure:
    ```powershell
    pg_restore --dbname="postgresql://notaria:CONTRASENA_BD@127.0.0.1:5432/escrituracion" --clean --if-exists --no-owner escrituracion-AAAAMMDD-HHMM.dump
