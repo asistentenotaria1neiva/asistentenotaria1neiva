@@ -16,7 +16,8 @@ import { guardarCifrado, leerCifrado, borrarCifrado, guardarParte, unirPartes, A
 import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { abrirPdf, extraerPaginas } from '../pdf';
-import { textoDocx, ErrorDocx } from '../escritura/docx';
+import { parrafosDocx, ErrorDocx } from '../escritura/docx';
+import { compactarUnidades, sinRelleno } from '../escritura/unidades';
 import { llamarEstructurado, prepararDocumento, modeloPrecision, ErrorIA } from '../ia/cliente';
 import { esDatoCatastral, soloDigitos, problemaDeForma, difierenEnCeros } from '../escritura/catastral';
 import { rescatarArreglo } from '../ia/json';
@@ -43,8 +44,11 @@ const LATIDO_MS = 30_000;
  * alto no encarece las lecturas normales y evita que un tramo denso (linderos, textos literales) se corte.
  */
 const MAXIMO_SALIDA_LECTURA = 64_000;
-/** Texto máximo de un documento de Word que se envía a leer */
-const MAXIMO_TEXTO = 150_000;
+/**
+ * Texto máximo de un documento de Word que se envía a leer: ~70.000 tokens, bajo los 100.000 donde Haiku
+ * cobra 5 veces más. Un reglamento cabe casi siempre, porque sus unidades se quitan antes (compactarUnidades).
+ */
+const MAXIMO_TEXTO = 240_000;
 
 export const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
@@ -102,9 +106,18 @@ export async function completarDocumento(s: SesionActiva, expedienteId: string, 
 /** `omitir`: tramos (por su página inicial) ya leídos, que no hace falta preparar otra vez */
 export async function bloquesDeArchivo(bytes: Buffer, mime: string, titulo: string, omitir: ReadonlySet<number> = new Set()): Promise<{ tramos: { bloque: Anthropic.Beta.BetaContentBlockParam; desde: number }[]; liberar: () => Promise<void> }> {
   if (mime === MIME_DOCX) {
-    let texto: string;
-    try { texto = textoDocx(bytes); } catch (e) { if (e instanceof ErrorDocx) throw new ErrorIA('El documento de Word no se pudo abrir.', 'FORMATO'); throw e; }
-    return { tramos: [{ bloque: { type: 'text', text: `<documento nombre="${titulo.replace(/"/g, "'")}">\n${texto.slice(0, MAXIMO_TEXTO)}\n</documento>` }, desde: 1 }], liberar: async () => {} };
+    let parrafos: string[];
+    try { parrafos = parrafosDocx(bytes); } catch (e) { if (e instanceof ErrorDocx) throw new ErrorIA('El documento de Word no se pudo abrir.', 'FORMATO'); throw e; }
+    // Un reglamento con decenas de unidades: sus descripciones no van a la IA (el sistema copia textual la
+    // del negocio al generar); así la lectura ve TODO lo demás y cuesta una fracción
+    const compacto = compactarUnidades(parrafos);
+    const texto = sinRelleno((compacto?.parrafos ?? parrafos).join('\n'));
+    // Un Word más largo (un reglamento de propiedad horizontal) va recortado y se avisa: los párrafos de
+    // las unidades del negocio los busca el sistema en el texto completo al generar (escritura/unidades.ts)
+    const recorte = texto.length > MAXIMO_TEXTO
+      ? `${texto.slice(0, MAXIMO_TEXTO)}\n[… el documento sigue: aquí van solo sus primeros ${MAXIMO_TEXTO.toLocaleString('es-CO')} de ${texto.length.toLocaleString('es-CO')} caracteres]`
+      : texto;
+    return { tramos: [{ bloque: { type: 'text', text: `<documento nombre="${titulo.replace(/"/g, "'")}">\n${recorte}\n</documento>` }, desde: 1 }], liberar: async () => {} };
   }
   const pdf = mime === 'application/pdf' ? await abrirPdf(bytes) : null;
   const paginas = pdf?.getPageCount() ?? 1;

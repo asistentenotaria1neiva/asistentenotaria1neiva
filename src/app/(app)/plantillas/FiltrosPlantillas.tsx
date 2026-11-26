@@ -7,7 +7,7 @@ interface Categoria { nombre: string; total: number; subcategorias: { nombre: st
 
 export function FiltrosPlantillas({ base, valores, categorias, anios, administrar, activos }: {
   base: string;
-  valores: { q: string; categoria: string; subcategoria: string; anio: string; desde: string; hasta: string; retiradas: boolean };
+  valores: { q: string; categoria: string; subcategoria: string; anio: string; desde: string; hasta: string; retiradas: boolean; orden: string };
   categorias: Categoria[];
   anios: { anio: number; total: number }[];
   administrar: boolean;
@@ -19,6 +19,8 @@ export function FiltrosPlantillas({ base, valores, categorias, anios, administra
   const enviar = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => e.currentTarget.form?.requestSubmit();
   return (
     <form className="tarjeta buscador-plantillas" method="get" action={base} role="search" aria-label="Buscar en la biblioteca">
+      {/* Al buscar o filtrar se conserva el orden elegido */}
+      {valores.orden && <input type="hidden" name="orden" value={valores.orden} />}
       <div className="filtros">
         <div className="ancho">
           <label htmlFor="q">Buscar plantilla</label>

@@ -151,7 +151,12 @@ export function plantillaNumerada(docx: Buffer): { texto: string; parrafos: numb
 
 /** Texto plano del documento (búsqueda, verificaciones): un párrafo por renglón */
 export function textoDocx(docx: Buffer): string {
-  return parrafosDe(documentoXml(docx)).map((p) => textoParaIA(p.texto)).filter(Boolean).join('\n');
+  return parrafosDocx(docx).join('\n');
+}
+
+/** Los párrafos no vacíos del documento, como los ve la IA */
+export function parrafosDocx(docx: Buffer): string[] {
+  return parrafosDe(documentoXml(docx)).map((p) => textoParaIA(p.texto)).filter(Boolean);
 }
 
 /** Texto de cada párrafo por su número (para comparar la plantilla con la escritura generada) */
@@ -653,6 +658,21 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
     c.reemplazos = (c.reemplazos ?? []).map((r) => ({ ...r, nuevo: limpiarZonaFirmas(r.nuevo ?? '', rotulo) }));
     c.insertar_despues = (c.insertar_despues ?? []).map((t) => limpiarZonaFirmas(t));
   }
+  // Varias líneas de la IA en un párrafo que en la plantilla no tiene saltos de línea: cada una va como
+  // párrafo propio (con el formato del párrafo), no unidas con saltos manuales (Shift+Enter), que en
+  // Word se desordenan al editar. Si la plantilla sí parte ese párrafo con saltos, se respetan.
+  for (const c of unidos.values()) {
+    const p = porNumero.get(c.p);
+    if (!p || enLaZonaDeFirmas(c.p) || p.enTabla || p.texto.includes('\n')) continue;
+    const lineas = (t: string) => t.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    if (c.accion === 'REESCRIBIR' && c.texto?.includes('\n')) {
+      const [primera = '', ...resto] = lineas(c.texto);
+      c.texto = primera;
+      c.insertar_despues = [...resto, ...(c.insertar_despues ?? [])];
+    }
+    c.reemplazos = (c.reemplazos ?? []).map((r) => (r.nuevo?.includes('\n') ? { ...r, nuevo: lineas(r.nuevo).join(' ') } : r));
+    c.insertar_despues = (c.insertar_despues ?? []).flatMap((t) => (typeof t === 'string' && t.includes('\n') ? lineas(t) : [t]));
+  }
   // La dirección va completa en la escritura aunque el certificado la traiga abreviada («CLL» → «CALLE»)
   // y la expedición de la cédula no va en mayúscula ni en negrita («expedida en Neiva»)
   const ajustar = (t: string) => expedicionEnMinuscula(expandirNomenclatura(t));
@@ -678,11 +698,32 @@ export function aplicarCambios(docx: Buffer, cambios: CambioParrafo[]): Resultad
     if (r.eliminado) eliminados++;
     insertados += nuevos.length;
     if (r.aplicados || nuevos.length) textos.set(c.p, [r.xml, ...nuevos].filter(Boolean).map((x) => textoParaIA(leerParrafo(x, 0, 0, false).texto)).filter(Boolean).join('\n'));
-    xml = xml.slice(0, p.inicio) + r.xml + nuevos.join('') + xml.slice(p.fin);
+    // Los cortes de renglón quedan como párrafos aparte (no con saltos manuales), salvo que la plantilla
+    // use saltos en ese párrafo; en las firmas y en las tablas se deja como está
+    const partir = (x: string) => (enLaZonaDeFirmas(c.p) || p.enTabla || p.texto.includes('\n') ? x : saltosComoParrafos(x));
+    xml = xml.slice(0, p.inicio) + partir(r.xml) + nuevos.map(partir).join('') + xml.slice(p.fin);
   }
   xml = domicilioEnNeiva(hojasDePapelEnBlanco(rotulosDeDerechos(sinEstadoCivilEnFirmas(xml))));
   zip.file('word/document.xml', xml);
   return { docx: zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer, aplicados, noAplicados: noAplicados.reverse(), eliminados, insertados, textos, reubicados };
+}
+
+/**
+ * Un párrafo con saltos de línea manuales (Shift+Enter) partido en párrafos, uno por renglón, con el
+ * mismo formato de párrafo y de corrida: así quedan las minutas de la notaría y en Word se editan sin
+ * desordenarse. Los saltos de página o de columna no se tocan. Si no hay saltos, devuelve lo mismo.
+ */
+export function saltosComoParrafos(xml: string): string {
+  const m = /^(<w:p\b[^>]*>)(<w:pPr>[\s\S]*?<\/w:pPr>|<w:pPr\/>)?([\s\S]*)<\/w:p>$/.exec(xml);
+  if (!m || !/<w:br\/>/.test(m[3])) return xml;
+  // Los identificadores de Word (w14:paraId, w14:textId) no se repiten en los párrafos nuevos
+  const abre = m[1].replace(/\s+w14:(?:paraId|textId)="[^"]*"/g, '');
+  const pPr = m[2] ?? '';
+  const cuerpo = m[3].replace(/(<w:r\b[^>]*>)(<w:rPr>[\s\S]*?<\/w:rPr>|<w:rPr\/>)?([\s\S]*?)<\/w:r>/g, (corrida, r: string, rPr = '', dentro: string) =>
+    /<w:br\/>/.test(dentro) ? `${r}${rPr}${dentro.replace(/<w:br\/>/g, `</w:r></w:p>${abre}${pPr}${r}${rPr}`)}</w:r>` : corrida);
+  // Sin renglones vacíos (dos saltos seguidos o un salto al final)
+  return `${m[1]}${pPr}${cuerpo}</w:p>`.replace(new RegExp(`<w:r\\b[^>]*>(?:<w:rPr>(?:(?!</w:rPr>).)*</w:rPr>)?</w:r>`, 'gs'), '')
+    .replace(/<w:p\b[^>]*>(?:<w:pPr>(?:(?!<\/w:pPr>)[\s\S])*<\/w:pPr>|<w:pPr\/>)?<\/w:p>/g, '');
 }
 
 /** Rótulos que la notaría no lleva bajo las firmas (en la comparecencia sí van) */

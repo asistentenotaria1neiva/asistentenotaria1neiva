@@ -25,7 +25,8 @@ import { guardarCifrado, leerCifrado, ARCHIVO_RETIRADO } from '../almacenamiento
 import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { obtenerConfig } from '../configuracion';
-import { plantillaNumerada, aplicarCambios, formatoPagina, textoDocx, textosPorParrafo, faltantesEn, verificarEn, normalizarMarcas, ErrorDocx, type CambioParrafo } from '../escritura/docx';
+import { unidadesDelNegocio, fragmentosDeUnidades, documentoDeFragmentos } from '../escritura/unidades';
+import { plantillaNumerada, aplicarCambios, formatoPagina, textoDocx, parrafosDocx,textosPorParrafo, faltantesEn, verificarEn, normalizarMarcas, ErrorDocx, type CambioParrafo } from '../escritura/docx';
 import { discordanciasDeGenero, describirDiscordancias } from '../escritura/genero';
 import { revisarCatastrales } from '../escritura/catastral';
 import { revisarLinderos } from '../escritura/linderos';
@@ -419,15 +420,50 @@ async function leerPendientes(id: string, expedienteId: string, p: Progreso, lim
 
 // ------------------------------------------------------------------ 2. redacción
 
+/** Párrafos de los Word ya abiertos en esta instancia (cada etapa de la generación arma el contexto otra vez) */
+const parrafosEnMemoria = new Map<string, string[]>();
+
+/**
+ * Agrega a la lectura de cada Word (en memoria, no se guarda) el texto exacto de los párrafos que describen
+ * las unidades del negocio: un reglamento las trae todas y su lectura con IA no las transcribe.
+ */
+async function conFragmentosDeUnidades<T extends { id: string; mime: string; nombreOriginal: string; rutaCifrada: string; hashSha256: string; lectura: Prisma.JsonValue }>(leidos: T[], observaciones: string | null): Promise<T[]> {
+  const words = leidos.filter((d) => d.mime === MIME_DOCX && d.rutaCifrada !== ARCHIVO_RETIRADO);
+  if (!words.length) return leidos;
+  return Promise.all(leidos.map(async (d) => {
+    if (!words.includes(d)) return d;
+    // Las unidades salen de los demás documentos (orden, certificado) y de las observaciones
+    const otros = leidos.filter((x) => x !== d).flatMap((x) => (x.lectura as unknown as Lectura).documentos ?? []);
+    const unidades = unidadesDelNegocio(otros, observaciones);
+    if (!unidades.length) return d;
+    try {
+      let parrafos = parrafosEnMemoria.get(d.hashSha256);
+      if (!parrafos) {
+        parrafos = parrafosDocx(await leerCifrado(d.rutaCifrada));
+        if (parrafosEnMemoria.size >= 20) parrafosEnMemoria.delete(parrafosEnMemoria.keys().next().value!);
+        parrafosEnMemoria.set(d.hashSha256, parrafos);
+      }
+      const extra = documentoDeFragmentos(d.nombreOriginal, fragmentosDeUnidades(parrafos, unidades));
+      if (!extra) return d;
+      const lectura = d.lectura as unknown as Lectura;
+      return { ...d, lectura: { ...lectura, documentos: [...(lectura.documentos ?? []), extra] } as unknown as Prisma.JsonValue };
+    } catch (e) {
+      // Es una ayuda: si el Word no se puede abrir, queda lo leído por la IA
+      console.error('[generacion] fragmentos de unidades', e);
+      return d;
+    }
+  }));
+}
+
 const hoy = () => new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', year: 'numeric', month: 'long', day: 'numeric' });
 
 async function contexto(expedienteId: string, p: Progreso) {
   const e = await obtenerExpediente(p.sesion, expedienteId);
   const plantilla = await bytesPlantilla(e);
   const docs = await db.documento.findMany({ where: { expedienteId }, orderBy: { creadoEn: 'asc' } });
-  const leidos = docs.filter((d) => d.estadoLectura === 'LEIDO' && d.lectura);
-  const textoDocs = leidos.map((d, i) => lecturaComoTexto(`D${i + 1}`, d.nombreOriginal, d.lectura as unknown as Lectura)).join('\n\n');
-  return { e, plantilla, docs, leidos, textoDocs, sinLeer: docs.filter((d) => !leidos.includes(d)).map((d) => d.nombreOriginal) };
+  const leidos = await conFragmentosDeUnidades(docs.filter((d) => d.estadoLectura === 'LEIDO' && d.lectura), e.observaciones);
+  const textoDocs =leidos.map((d, i) => lecturaComoTexto(`D${i + 1}`, d.nombreOriginal, d.lectura as unknown as Lectura)).join('\n\n');
+  return { e, plantilla, docs, leidos, textoDocs, sinLeer: docs.filter((d) => !leidos.some((l) => l.id === d.id)).map((d) => d.nombreOriginal) };
 }
 
 const sumar = (p: Progreso, r: Pick<ResultadoLlamada<unknown>, 'tokensEntrada' | 'tokensSalida' | 'tokensCacheLectura'>) => {
@@ -784,8 +820,8 @@ function reemplazarFaltante(p: Progreso, dato: string, valor: string) {
   }
 }
 
-/** Un Word de hasta 150.000 caracteres pesa en tokens como unas 15 páginas de PDF */
-const PESO_DOCX = 15;
+/** Un Word de hasta 240.000 caracteres pesa en tokens como unas 25 páginas de PDF */
+const PESO_DOCX = 25;
 
 /**
  * Busca los faltantes en los documentos originales, en grupos de hasta PAGINAS_POR_TRAMO páginas por

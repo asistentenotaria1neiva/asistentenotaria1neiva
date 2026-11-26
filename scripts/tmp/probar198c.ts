@@ -1,0 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { compactarUnidades, sinRelleno, fragmentosDeUnidades } from '../../src/lib/escritura/unidades';
+const ps = readFileSync(process.argv[2], 'utf8').split('\n');
+const c = compactarUnidades(ps)!;
+const t = sinRelleno(c.parrafos.join('\n'));
+console.log('total', ps.join('\n').length, 'para la IA', t.length, 'unidades', c.quitadas);
+console.log(c.parrafos.filter((p) => p.startsWith('[El sistema')).map((p) => p.slice(0, 160)).join('\n'));
+console.log('LOTE conservado:', c.parrafos.some((p) => /^LOTE 2/.test(p)));
+const f = fragmentosDeUnidades(ps, [{ tipo: 'APARTAMENTO', numero: '405', agrupacion: 'TORRE 3' }, { tipo: 'LOCAL', numero: '20' }]);
+console.log(f.map((x) => [x.unidad.numero, x.texto.length, x.texto.slice(-60)]));

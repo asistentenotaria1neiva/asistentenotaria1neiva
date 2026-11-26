@@ -12,7 +12,7 @@ const negrillas = (xml: string) => (xml.match(/<w:r><w:rPr>(?:(?!<\/w:rPr>).)*<w
 describe('formato de impresión de la notaría', () => {
   it('completa el último renglón con guiones escritos, sin pasarse al siguiente', () => {
     const [p] = textos(aplicarFormatoNotarial(conGuia('MATRICULA INMOBILIARIA: 200-301776.'), ANCHO));
-    expect(p).toMatch(/^MATRICULA INMOBILIARIA: 200-301776\. -{40,}\t$/);
+    expect(p).toMatch(/^MATRICULA INMOBILIARIA: 200-301776\. -{40,}$/);
     // Un renglón lleno: los guiones no caben y no se agregan
     const lleno = 'a'.repeat(Math.floor(RENGLON / 556));
     expect(guionesDeRelleno([{ texto: lleno, negrilla: false }], RENGLON)).toBe(0);
@@ -85,13 +85,13 @@ describe('formato de impresión de la notaría', () => {
     expect(b).not.toMatch(/Comparecieron|mayor de edad/);
   });
 
-  it('guiones escritos (Google Docs no muestra el relleno de la tabulación) y una tabulación al margen que completa lo que falta', () => {
+  it('solo guiones escritos, como en las minutas: sin tabulación de relleno (en Word anula la tecla Tab)', () => {
     const xml = aplicarFormatoNotarial(conGuia('Texto de la cláusula.') + sinGuia('LOS OTORGANTES,'), ANCHO);
-    // La guía de la plantilla (en 8894) se cambia por una sola, en el margen derecho
+    // La guía de la plantilla (en 8894) se quita y no se pone otra
     expect(xml).not.toContain('w:pos="8894"');
-    expect(xml.match(/w:leader="hyphen"/g)).toHaveLength(1);
-    expect(xml).toContain(`<w:tabs><w:tab w:val="right" w:leader="hyphen" w:pos="${ANCHO}"/></w:tabs>`);
-    expect(textos(xml)[0]).toMatch(/^Texto de la cláusula\. -{70,}\t$/);
+    expect(xml).not.toContain('w:leader');
+    expect(xml).not.toContain('<w:tab/>');
+    expect(textos(xml)[0]).toMatch(/^Texto de la cláusula\. -{70,}$/);
     // El encabezado de las firmas no se rellena
     expect(textos(xml)[1]).toBe('LOS OTORGANTES,');
   });
@@ -103,7 +103,7 @@ describe('formato de impresión de la notaría', () => {
       sinGuia('De lo cual doy fe.'), sinGuia('______________________________________'), sinGuia('NOMBRE'),
     ].join(''), ANCHO);
     const t = textos(xml);
-    expect(t[0]).toMatch(/^OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA\. -{3,}\t$/);
+    expect(t[0]).toMatch(/^OFICINA DE REGISTRO DE INSTRUMENTOS PÚBLICOS DE NEIVA - HUILA\. -{3,}$/);
     expect(t[1]).toBe('Celda');
     // Justo antes del renglón de firma no se rellena; en la zona de firmas tampoco
     expect(t.slice(2)).toEqual(['De lo cual doy fe.', '______________________________________', 'NOMBRE']);
@@ -129,7 +129,7 @@ describe('formato de impresión de la notaría', () => {
   it('cada renglón de los linderos termina con guiones', () => {
     const xml = `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="hyphen" w:pos="8894"/></w:tabs></w:pPr><w:r><w:t>NORTE: con el lote 12.</w:t><w:br/><w:t>SUR: con la calle 24B Sur.</w:t></w:r><w:r><w:tab/></w:r></w:p>`;
     const [p] = textos(aplicarFormatoNotarial(xml, ANCHO));
-    expect(p.split('\n').every((l) => /\. -{30,}\t$/.test(l))).toBe(true);
+    expect(p.split('\n').every((l) => /\. -{30,}$/.test(l))).toBe(true);
   });
 
   it('negrilla en títulos de cláusula, nombres, datos en mayúsculas y cifras', () => {
@@ -147,9 +147,9 @@ describe('formato de impresión de la notaría', () => {
       sinGuia('COMPRAVENTA $3.000.000'), conGuia('MATRICULA INMOBILIARIA: 200-1.'),
     ].join(''), ANCHO);
     const t = textos(xml);
-    expect(t[0]).toMatch(/^ESCRITURA PÚBLICA NÚMERO: -{40,}	$/);
-    expect(t[1]).toMatch(/^FECHA DE OTORGAMIENTO: -{40,}	$/);
-    expect(t[3]).toMatch(/^-{20,} PERSONAS QUE INTERVIENEN EN EL ACTO -{20,}	$/);
+    expect(t[0]).toMatch(/^ESCRITURA PÚBLICA NÚMERO: -{40,}$/);
+    expect(t[1]).toMatch(/^FECHA DE OTORGAMIENTO: -{40,}$/);
+    expect(t[3]).toMatch(/^-{20,} PERSONAS QUE INTERVIENEN EN EL ACTO -{20,}$/);
     expect(t).toContain('ALVARO PRUEBA LUNA\t1.075.000.111');
     expect(t).toContain('ESPECIFICACION\tVALOR DEL ACTO');
     expect(t).toContain('COMPRAVENTA\t$3.000.000');
@@ -162,7 +162,7 @@ describe('formato de impresión de la notaría', () => {
     for (const c of ['ESCRITURA PÚBLICA NÚMERO: ____________', 'ESCRITURA PÚBLICA NÚMERO: ----------------', 'ESCRITURA PÚBLICA NÚMERO', 'FECHA DE OTORGAMIENTO: _______']) {
       const xml = aplicarFormatoNotarial(conTab(c), ANCHO);
       expect(xml).toContain('<w:ind w:left="720"/>');
-      expect(textos(xml)[0]).toMatch(/^(ESCRITURA PÚBLICA NÚMERO|FECHA DE OTORGAMIENTO): -{30,}\t$/);
+      expect(textos(xml)[0]).toMatch(/^(ESCRITURA PÚBLICA NÚMERO|FECHA DE OTORGAMIENTO): -{30,}$/);
     }
     for (const c of ['ESPECIFICACIÓN:\tVALOR DEL ACTO:', 'CÓDIGO\tESPECIFICACIÓN\tVALOR DEL ACTO', 'CODIGO ESPECIFICACION VALOR DEL ACTO']) {
       expect(aplicarFormatoNotarial(conTab(c), ANCHO)).toContain('<w:ind w:firstLine="720"/>');
@@ -191,7 +191,7 @@ describe('formato de impresión de la notaría', () => {
     // Número y fecha con sangría izquierda de una tabulación; «ESPECIFICACION» con sangría de primera línea
     expect(parrafos[0]).toContain('<w:ind w:left="720"/>');
     expect(parrafos[1]).toContain('<w:ind w:left="720"/>');
-    expect(t[0]).toMatch(/^ESCRITURA PÚBLICA NÚMERO: -{30,}\t$/);
+    expect(t[0]).toMatch(/^ESCRITURA PÚBLICA NÚMERO: -{30,}$/);
     expect(parrafos[t.indexOf('ESPECIFICACION\tVALOR DEL ACTO')]).toContain('<w:ind w:firstLine="720"/>');
     // Tras el último inmueble (no entre inmuebles): exactamente cinco renglones vacíos, en lugar del encabezado del notario
     const ultima = t.findIndex((x, i) => i > t.findIndex((y) => y.startsWith('MATRICULA INMOBILIARIA: 200-2')) && x.startsWith('OFICINA DE REGISTRO'));
@@ -241,7 +241,7 @@ describe('formato de impresión de la notaría', () => {
 
   it('Resolución 9146: los títulos centrados quedan justificados con guiones a ambos lados', () => {
     const [p] = textos(aplicarFormatoNotarial('<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>COMPRAVENTA</w:t></w:r></w:p>', ANCHO));
-    const m = /^(-+) COMPRAVENTA (-+)	$/.exec(p)!;
+    const m = /^(-+) COMPRAVENTA (-+)$/.exec(p)!;
     expect(m).not.toBeNull();
     expect(Math.abs(m[1].length - m[2].length)).toBeLessThanOrEqual(1);
   });

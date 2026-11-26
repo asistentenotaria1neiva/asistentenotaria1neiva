@@ -48,10 +48,10 @@ const ANCHOS_NEGRILLA = [278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 
 const GUION = 333;
 /**
  * Guiones escritos de menos al final de cada párrafo: el cálculo es aproximado y un guion de más
- * bajaría de renglón. Lo que falta hasta el margen lo completa la tabulación derecha con relleno
- * de guiones (Word la dibuja exacta; un visor que no la muestre deja solo ese pequeño tramo).
+ * bajaría de renglón. Con uno basta (el error de los anchos de Arial en un renglón es menor que un
+ * guion); el renglón queda a lo sumo a dos guiones del margen, como cuando se escriben a mano.
  */
-const HOLGURA = 2;
+const HOLGURA = 1;
 /**
  * Una palabra que cabe en el renglón por menos de esto (milésimas de em, ≈ 2,4 pt) puede quedar en
  * él o bajar al siguiente según el programa que muestre el documento: se calculan los guiones de
@@ -203,9 +203,6 @@ function conNegrilla(rPr: string, negrilla: boolean): string {
 /** Un run con el texto; los saltos de línea («\n») y las tabulaciones («\t») van como w:br y w:tab */
 const runTexto = (rPr: string, texto: string) => texto.split(/(\n|\t)/).map((t) => (t === '\n' ? '<w:br/>' : t === '\t' ? '<w:tab/>' : t ? `<w:t xml:space="preserve">${codificar(t)}</w:t>` : '')).join('').replace(/^/, `<w:r>${rPr}`) + '</w:r>';
 
-/** Tras los guiones escritos, una tabulación que completa el renglón hasta el margen (ver tabRelleno) */
-const FIN_RELLENO = '\t';
-
 /** El rPr de un run sin negrilla, subrayado, cursiva ni resaltado: para los guiones */
 const rPrNeutro = (rPr: string) => {
   const r = rPr.replace(/<w:(?:b|bCs|i|iCs|u|highlight)(?:\s[^>]*)?\/>/g, '');
@@ -312,19 +309,6 @@ export function guionesCentrado(segmentos: Segmento[], renglon: number): [number
 // Hijos de w:pPr que el esquema pone después de w:tabs
 const TRAS_TABS = new Set(['w:suppressAutoHyphens', 'w:kinsoku', 'w:wordWrap', 'w:overflowPunct', 'w:topLinePunct', 'w:autoSpaceDE', 'w:autoSpaceDN', 'w:bidi', 'w:adjustRightInd', 'w:snapToGrid', 'w:spacing', ...TRAS_ESPACIADO]);
 
-/**
- * pPr con una tabulación derecha en el margen (`pos`, twips) con relleno de guiones: completa
- * exactamente el renglón después de los guiones escritos, sin depender del cálculo de anchos.
- */
-export function tabRelleno(pPr: string, pos: number): string {
-  const tab = `<w:tab w:val="right" w:leader="hyphen" w:pos="${pos}"/>`;
-  const interior = pPr.replace(/^<w:pPr\/>$/, '').replace(/^<w:pPr>|<\/w:pPr>$/g, '');
-  const nuevo = /<w:tabs>/.test(interior)
-    ? interior.replace(/<\/w:tabs>/, `${tab}</w:tabs>`)
-    : ponerHijo(interior, [], `<w:tabs>${tab}</w:tabs>`, TRAS_TABS);
-  return `<w:pPr>${nuevo}</w:pPr>`;
-}
-
 /** pPr con una sola tabulación derecha en `pos` (twips), en lugar de las que traía: el valor queda contra el margen */
 export function tabDerecha(pPr: string, pos: number): string {
   const interior = pPr.replace(/^<w:pPr\/>$/, '').replace(/^<w:pPr>|<\/w:pPr>$/g, '').replace(/<w:tabs>[\s\S]*?<\/w:tabs>|<w:tabs\/>/g, '');
@@ -371,9 +355,8 @@ export function rellenarParrafo(p: string, anchoTexto: number): string {
   const segmentos: Segmento[] = partes.filter((r) => r.texto).map((r) => ({ texto: r.texto!, negrilla: esNegrilla(r.rPr) }));
   const n = guionesDeRelleno(segmentos, renglon, renglonPrimero);
   const cuerpo = partes.map((r) => (r.texto === null ? r.xml : r.texto ? runTexto(r.rPr, r.texto) : '')).join('');
-  const conTab = n > 0 || partes.some((r) => r.texto?.includes(FIN_RELLENO));
-  const final = n > 0 ? runTexto(rPrNeutro(ultimoTexto.rPr), ` ${'-'.repeat(n)}${FIN_RELLENO}`) : '';
-  return `<w:p${m[1] ?? ''}>${conTab ? tabRelleno(pPr, anchoTexto - twips(pPr, 'right')) : pPr}${cuerpo}${final}</w:p>`;
+  const final = n > 0 ? runTexto(rPrNeutro(ultimoTexto.rPr), ` ${'-'.repeat(n)}`) : '';
+  return `<w:p${m[1] ?? ''}>${pPr}${cuerpo}${final}</w:p>`;
 }
 
 /**
@@ -519,7 +502,7 @@ function rellenarSaltos(partes: Run[], renglon: number, renglonPrimero: number):
       k = f;
     }
     const n = guionesDeRelleno(segmentos, renglon, primero ? renglonPrimero : renglon);
-    if (n > 0 && texto.slice(inicio, i).trim()) inserciones.set(i, `${/\s$/.test(texto.slice(inicio, i)) ? '' : ' '}${'-'.repeat(n)}${FIN_RELLENO}`);
+    if (n > 0 && texto.slice(inicio, i).trim()) inserciones.set(i, `${/\s$/.test(texto.slice(inicio, i)) ? '' : ' '}${'-'.repeat(n)}`);
     inicio = i + 1;
     primero = false;
   }
@@ -680,7 +663,7 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
       const dato = rotulo[2].replace(/[_\-\s.]+$/, '').replace(/^[_\-\s]+/, '').trim();
       const linea = `${rotulo[1]}:${dato ? ` ${dato}` : ''}`;
       const n = guionesDeRelleno([{ texto: linea, negrilla: true }], renglonTexto - SANGRIA_CARATULA / 20 * 1000 / 12);
-      parrafo(`<w:p${m[1] ?? ''}>${n > 0 ? tabRelleno(sangria, anchoTexto) : sangria}${runTexto(rPr, linea)}${n > 0 ? runTexto(rPrNeutro(rPr), ` ${'-'.repeat(n)}${FIN_RELLENO}`) : ''}</w:p>`);
+      parrafo(`<w:p${m[1] ?? ''}>${sangria}${runTexto(rPr, linea)}${n > 0 ? runTexto(rPrNeutro(rPr), ` ${'-'.repeat(n)}`) : ''}</w:p>`);
       previo = linea;
       continue;
     }
@@ -690,7 +673,7 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
       // Título centrado con guiones a ambos lados: el renglón queda justificado y completo
       const g = guionesCentrado([{ texto: plano, negrilla: true }], renglonTexto);
       const titulo = runTexto('<w:rPr><w:b/><w:bCs/><w:u w:val="single"/></w:rPr>', plano);
-      parrafo(`<w:p${m[1] ?? ''}>${g ? `${tabRelleno('', anchoTexto)}${runTexto('', `${'-'.repeat(g[0])} `)}${titulo}${runTexto('', ` ${'-'.repeat(g[1])}${FIN_RELLENO}`)}` : `<w:pPr></w:pPr>${titulo}`}</w:p>`);
+      parrafo(`<w:p${m[1] ?? ''}>${g ? `<w:pPr></w:pPr>${runTexto('', `${'-'.repeat(g[0])} `)}${titulo}${runTexto('', ` ${'-'.repeat(g[1])}`)}` : `<w:pPr></w:pPr>${titulo}`}</w:p>`);
       previo = plano;
       continue;
     }
@@ -801,19 +784,16 @@ export function aplicarFormatoNotarial(cuerpo: string, anchoTexto: number): stri
     const rPrGuiones = rPrNeutro(ultimoTexto?.rPr ?? '');
     // Un título centrado (fuera de la zona de firmas) queda justificado, con guiones a ambos lados
     const centro = centrado && !zonaFirmas ? guionesCentrado(segmentos, renglonPrimero) : null;
-    // Margen derecho del párrafo, desde el margen izquierdo de la página (twips)
-    const margen = anchoTexto - twips(pPr, 'right');
-    let conTab = partes.some((r) => r.texto?.includes(FIN_RELLENO));
+    // Solo guiones escritos, como en las minutas de la notaría: sin tabulación de relleno (en Word, una
+    // tabulación propia anula las predeterminadas y la tecla Tab salta al margen con guiones)
     if (centro) {
       const primerTexto = partes.find((r) => r.texto !== null && r.texto.trim());
       nuevos.unshift(runTexto(rPrNeutro(primerTexto?.rPr ?? ''), `${'-'.repeat(centro[0])} `));
-      nuevos.push(runTexto(rPrGuiones, ` ${'-'.repeat(centro[1])}${FIN_RELLENO}`));
-      conTab = true;
+      nuevos.push(runTexto(rPrGuiones, ` ${'-'.repeat(centro[1])}`));
     } else if (rellenar) {
       const n = guionesDeRelleno(segmentos, renglon, renglonPrimero);
-      if (n > 0) { nuevos.push(runTexto(rPrGuiones, ` ${'-'.repeat(n)}${FIN_RELLENO}`)); conTab = true; }
+      if (n > 0) nuevos.push(runTexto(rPrGuiones, ` ${'-'.repeat(n)}`));
     }
-    if (conTab) pPr = tabRelleno(pPr, margen);
     parrafo(`<w:p${m[1] ?? ''}>${pPr}${nuevos.join('')}</w:p>`, centrado && zonaFirmas ? 'center' : 'both');
     previo = plano;
   }

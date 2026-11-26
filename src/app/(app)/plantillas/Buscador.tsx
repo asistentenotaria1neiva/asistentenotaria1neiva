@@ -5,7 +5,8 @@
  */
 import Link from 'next/link';
 import type { SesionActiva } from '@/lib/sesion-tipos';
-import { buscarPlantillas, opcionesFiltro, obtenerPlantilla, filtroDesdeParametros } from '@/lib/servicios/plantillas';
+import { buscarPlantillas, opcionesFiltro, obtenerPlantilla, filtroDesdeParametros, ORDENES } from '@/lib/servicios/plantillas';
+import { OrdenPlantillas } from './OrdenPlantillas';
 import { fecha, Vacio } from '../componentes';
 import { Icono } from '../../Icono';
 import { FiltrosPlantillas } from './FiltrosPlantillas';
@@ -13,7 +14,7 @@ import { VisorDocx } from './VisorDocx';
 
 type Parametros = Record<string, string | string[] | undefined>;
 
-const PARAMETROS = ['q', 'categoria', 'subcategoria', 'anio', 'desde', 'hasta', 'retiradas', 'pagina', 'ver'];
+const PARAMETROS = ['q', 'categoria', 'subcategoria', 'anio', 'desde', 'hasta', 'retiradas', 'orden', 'pagina', 'ver'];
 
 /** Enlace a la misma página con los parámetros cambiados (null quita el parámetro) */
 function enlace(base: string, p: Parametros, cambios: Record<string, string | number | null>): string {
@@ -42,6 +43,7 @@ export async function Buscador({ s, parametros, base, acciones, administrar = fa
   const ver = typeof parametros.ver === 'string' ? parametros.ver : undefined;
   const [r, opciones, elegida] = await Promise.all([buscarPlantillas(s, filtro), opcionesFiltro(), ver ? obtenerPlantilla(ver) : null]);
   const visible = elegida && (elegida.activa || administrar) ? elegida : null;
+  const orden = filtro.orden ?? 'recientes';
   const filtrado = !!(filtro.q || filtro.categoria || filtro.subcategoria || filtro.anio || filtro.desde || filtro.hasta);
   // Filtros activos como chips que se quitan con un clic (al quitar la categoría también se quita el banco)
   const activos: { texto: string; quitar: Record<string, null> }[] = [
@@ -57,7 +59,7 @@ export async function Buscador({ s, parametros, base, acciones, administrar = fa
     <>
       <FiltrosPlantillas
         base={base}
-        valores={{ q: filtro.q ?? '', categoria: filtro.categoria ?? '', subcategoria: filtro.subcategoria ?? '', anio: filtro.anio ? String(filtro.anio) : '', desde: texto(parametros.desde), hasta: texto(parametros.hasta), retiradas: filtro.retiradas ?? false }}
+        valores={{ q: filtro.q ?? '', categoria: filtro.categoria ?? '', subcategoria: filtro.subcategoria ?? '', anio: filtro.anio ? String(filtro.anio) : '', desde: texto(parametros.desde), hasta: texto(parametros.hasta), retiradas: filtro.retiradas ?? false, orden: filtro.orden ?? '' }}
         categorias={opciones.categorias}
         anios={opciones.anios}
         administrar={administrar}
@@ -75,7 +77,16 @@ export async function Buscador({ s, parametros, base, acciones, administrar = fa
       />
       <div className="biblioteca">
         <section className="tarjeta resultados-plantillas" aria-label="Plantillas encontradas">
-          <p className="total" aria-live="polite">{r.total.toLocaleString('es-CO')} plantilla{r.total === 1 ? '' : 's'}{filtrado ? ' con el filtro' : ' en la biblioteca'} · más recientes primero</p>
+          <div className="cabeza-resultados">
+            <p className="total" aria-live="polite">{r.total.toLocaleString('es-CO')} plantilla{r.total === 1 ? '' : 's'}{filtrado ? ' con el filtro' : ' en la biblioteca'}</p>
+            {r.total > 1 && (
+              <OrdenPlantillas
+                actual={orden}
+                // El orden por defecto no va en la URL; al cambiarlo se vuelve a la primera página
+                opciones={Object.entries(ORDENES).map(([valor, o]) => ({ valor, texto: o.texto, href: enlace(base, parametros, { orden: valor === 'recientes' ? null : valor, pagina: null }) }))}
+              />
+            )}
+          </div>
           {!r.filas.length && (
             <Vacio icono="buscar" titulo="Ninguna plantilla coincide">
               <p>Pruebe con menos palabras o quite algún filtro.</p>

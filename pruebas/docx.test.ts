@@ -107,30 +107,50 @@ describe('la escritura conserva la forma de la plantilla', () => {
     expect(t[2]).toBe('ANTECEDENTES');
     expect(t[4]).toBe('PARÁGRAFO SEGUNDO: Otro texto sin guiones.');
     // El párrafo cambiado tenía relleno: se recalcula (los guiones viejos no quedan sueltos)
-    expect(t[3]).toMatch(/^PARÁGRAFO PRIMERO: Texto nuevo bastante más largo del parágrafo\. -{10,}\t$/);
+    expect(t[3]).toMatch(/^PARÁGRAFO PRIMERO: Texto nuevo bastante más largo del parágrafo\. -{10,}$/);
+  });
+
+  // EXP-2026-00198: la IA reescribió «CEDULA CATASTRAL PAZ Y SALVO: …» y «NOMBRE O DIRECCION …» en
+  // líneas, y quedaron unidas con saltos manuales (Shift+Enter) que en Word se desordenan al editar
+  it('las líneas que escribe la IA quedan como párrafos aparte, no con saltos de línea manuales', () => {
+    const { docx: salida } = aplicarCambios(CARATULA, [
+      { p: 4, accion: 'REESCRIBIR', reemplazos: [], texto: 'CEDULA CATASTRAL PAZ Y SALVO: 0101.\nNOMBRE O DIRECCION DEL INMUEBLE: CARRERA 2W.', insertar_despues: ['SUR: con la calle.\nNORTE: con el lote.'] },
+      { p: 5, accion: 'REEMPLAZAR', reemplazos: [{ original: 'Otro texto', nuevo: 'Otro\ntexto' }], texto: '', insertar_despues: [] },
+    ]);
+    const xml = documentoXml(salida);
+    expect(xml).not.toContain('<w:br/>');
+    const t = textos(salida);
+    // Cada una con su formato y sus propios guiones de relleno
+    expect(t.slice(3, 7).map((x) => x.replace(/ -{3,}$/, ''))).toEqual(['CEDULA CATASTRAL PAZ Y SALVO: 0101.', 'NOMBRE O DIRECCION DEL INMUEBLE: CARRERA 2W.', 'SUR: con la calle.', 'NORTE: con el lote.']);
+    expect(t.slice(3, 7).every((x) => / -{10,}$/.test(x))).toBe(true);
+    // Un salto dentro de un reemplazo queda como espacio
+    expect(t[7]).toBe('PARÁGRAFO SEGUNDO: Otro texto sin guiones.');
   });
 
   describe('la comparecencia del vendedor queda separada de la cláusula del comprador', () => {
     // Como en las plantillas de venta: un solo párrafo de Word, con guiones que llenan el renglón en medio
     const VENTA = docx(p(r('Comparecieron quienes dijeron ser, '), r('ANA PEREZ', true), r(', mayor de edad, y manifestaron: ----------------------------------------------------------PRIMERO: Que por este instrumento público transfiere en venta a quien dijo ser, '), r('LUIS GOMEZ', true), r(', el derecho de dominio sobre el siguiente inmueble: -----------')));
 
+    // El corte deja dos párrafos (comparecencia y cláusula), sin salto manual: se revisan unidos
+    const partes = (salida: Buffer) => { const t = textos(formatoPagina(salida)); expect(t).toHaveLength(2); expect(documentoXml(salida)).not.toContain('<w:br/>'); return t.join('\n'); };
+
     it('con un reemplazo que toca el corte', () => {
       const { docx: salida } = aplicarCambios(VENTA, [{ p: 1, accion: 'REEMPLAZAR', reemplazos: [{ original: 'y manifestaron: PRIMERO: Que por este instrumento público transfiere', nuevo: 'y manifestaron: PRIMERO: Que por este instrumento público transfieren' }, { original: 'ANA PEREZ', nuevo: 'MARIA JOSEFA RODRIGUEZ LOSADA' }], texto: '', insertar_despues: [] }]);
-      const t = textos(formatoPagina(salida))[0];
-      expect(t).toMatch(/MARIA JOSEFA RODRIGUEZ LOSADA, mayor de edad, y manifestaron: -{10,}\t?\nPRIMERO: Que por este instrumento público transfieren en venta/);
+      const t = partes(salida);
+      expect(t).toMatch(/MARIA JOSEFA RODRIGUEZ LOSADA, mayor de edad, y manifestaron: -{10,}\nPRIMERO: Que por este instrumento público transfieren en venta/);
     });
 
     it('con el párrafo reescrito', () => {
       const { docx: salida } = aplicarCambios(VENTA, [{ p: 1, accion: 'REESCRIBIR', reemplazos: [], texto: 'Comparecieron quienes dijeron ser, **PEDRO SUAREZ**, mayor de edad, y manifestaron: PRIMERO: Que por este instrumento público transfiere en venta a quien dijo ser, **JUAN DIAZ**, el derecho de dominio sobre el siguiente inmueble:', insertar_despues: [] }]);
-      const t = textos(formatoPagina(salida))[0];
-      expect(t).toMatch(/y manifestaron: -{10,}\t?\nPRIMERO: Que por este instrumento/);
-      expect(t).toMatch(/siguiente inmueble: -+\t?$/);
+      const t = partes(salida);
+      expect(t).toMatch(/y manifestaron: -{10,}\nPRIMERO: Que por este instrumento/);
+      expect(t).toMatch(/siguiente inmueble: -+$/);
     });
 
     it('si el reemplazo no toca el corte, los guiones viejos se vuelven a medir', () => {
       const { docx: salida } = aplicarCambios(VENTA, [{ p: 1, accion: 'REEMPLAZAR', reemplazos: [{ original: 'ANA PEREZ', nuevo: 'MARIA JOSEFA RODRIGUEZ LOSADA DE LA TORRE' }], texto: '', insertar_despues: [] }]);
-      const t = textos(formatoPagina(salida))[0];
-      expect(t).toMatch(/y manifestaron: -{10,}\t?\nPRIMERO:/);
+      const t = partes(salida);
+      expect(t).toMatch(/y manifestaron: -{10,}\nPRIMERO:/);
       expect(t).not.toMatch(/-{58}PRIMERO/);
     });
   });

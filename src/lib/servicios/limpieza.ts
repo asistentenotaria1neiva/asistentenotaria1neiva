@@ -7,7 +7,7 @@
  *      definitivamente, con sus documentos, versiones y archivos (la auditoría se conserva).
  *   2. LIMPIEZA_PDF_DIAS (3): los PDF soporte ya leídos de escrituras con una versión terminada se
  *      retiran a los N días de cargados. Lo que la IA leyó queda en la base: se puede generar de nuevo.
- *   3. LIMPIEZA_PDF_MAXIMO_MB (500): si aun así los PDF soporte pasan de ese total, se retiran antes
+ *   3. LIMPIEZA_PDF_MAXIMO_MB (300): si aun así los PDF soporte pasan de ese total, se retiran antes
  *      (de los más antiguos a los más nuevos, solo de escrituras con versión terminada).
  *
  * Nunca toca una escritura que se está generando ni las plantillas de la biblioteca.
@@ -24,7 +24,7 @@ const DIA = 24 * 3600_000;
 export async function limpiarAlmacenamiento() {
   const diasEscrituras = numero(process.env.LIMPIEZA_ESCRITURAS_DIAS, 30);
   const diasPdf = numero(process.env.LIMPIEZA_PDF_DIAS, 3);
-  const maximoPdf = numero(process.env.LIMPIEZA_PDF_MAXIMO_MB, 500) * 1024 * 1024;
+  const maximoPdf = numero(process.env.LIMPIEZA_PDF_MAXIMO_MB, 300) * 1024 * 1024;
   let escriturasBorradas = 0, pdfRetirados = 0, bytesLiberados = 0;
 
   // 1. Escrituras viejas, completas

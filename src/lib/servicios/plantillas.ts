@@ -25,8 +25,21 @@ function exigirAdministrar(s: SesionActiva) {
   if (!puedeAdministrar(s)) throw new ErrorPlantilla('Solo el revisor o el administrador pueden modificar la biblioteca.');
 }
 
+/** Formas de ordenar la lista de plantillas (la primera es la de siempre) */
+export const ORDENES = {
+  recientes: { texto: 'Más recientes', orderBy: [{ fecha: 'desc' }, { nombre: 'asc' }] },
+  antiguas: { texto: 'Más antiguas', orderBy: [{ fecha: 'asc' }, { nombre: 'asc' }] },
+  'nombre-az': { texto: 'Nombre (A a Z)', orderBy: [{ nombre: 'asc' }, { fecha: 'desc' }] },
+  'nombre-za': { texto: 'Nombre (Z a A)', orderBy: [{ nombre: 'desc' }, { fecha: 'desc' }] },
+  categoria: { texto: 'Categoría y banco', orderBy: [{ categoria: 'asc' }, { subcategoria: 'asc' }, { nombre: 'asc' }] },
+  usadas: { texto: 'Más usadas', orderBy: [{ expedientes: { _count: 'desc' } }, { fecha: 'desc' }] },
+} satisfies Record<string, { texto: string; orderBy: Prisma.PlantillaOrderByWithRelationInput[] }>;
+export type OrdenPlantillas = keyof typeof ORDENES;
+export const esOrden = (v: unknown): v is OrdenPlantillas => typeof v === 'string' && Object.hasOwn(ORDENES, v);
+
 export interface FiltroPlantillas {
   q?: string;
+  orden?: OrdenPlantillas;
   categoria?: string;
   subcategoria?: string;
   anio?: number;
@@ -47,6 +60,7 @@ export function filtroDesdeParametros(p: Record<string, string | string[] | unde
     anio: Number.isInteger(anio) && anio > 1990 && anio < 2100 ? anio : undefined,
     desde: fecha('desde'), hasta: fecha('hasta', true),
     retiradas: uno('retiradas') === '1',
+    orden: esOrden(uno('orden')) ? (uno('orden') as OrdenPlantillas) : undefined,
     pagina: Math.max(1, Math.trunc(Number(uno('pagina'))) || 1),
   };
 }
@@ -62,14 +76,33 @@ export async function buscarPlantillas(s: SesionActiva, f: FiltroPlantillas) {
     ...(terminos.length ? { AND: terminos.map((t) => ({ busqueda: { contains: t } })) } : {}),
   };
   const pagina = f.pagina ?? 1;
+  if (f.orden === 'nombre-az' || f.orden === 'nombre-za') return porNombre(where, pagina, f.orden === 'nombre-za');
   const [total, filas] = await Promise.all([
     db.plantilla.count({ where }),
     db.plantilla.findMany({
-      where, orderBy: [{ fecha: 'desc' }, { nombre: 'asc' }], skip: (pagina - 1) * POR_PAGINA, take: POR_PAGINA,
-      select: { id: true, nombre: true, categoria: true, subcategoria: true, anio: true, fecha: true, activa: true, origen: true, caracteres: true },
+      where, orderBy: ORDENES[f.orden ?? 'recientes'].orderBy, skip: (pagina - 1) * POR_PAGINA, take: POR_PAGINA,
+      select: SELECCION_FILA,
     }),
   ]);
   return { total, filas, pagina, paginas: Math.max(1, Math.ceil(total / POR_PAGINA)) };
+}
+
+const SELECCION_FILA = { id: true, nombre: true, categoria: true, subcategoria: true, anio: true, fecha: true, activa: true, origen: true, caracteres: true } as const;
+const comparar = new Intl.Collator('es', { numeric: true, sensitivity: 'base' }).compare;
+/** «410 - CASA HABITACION - SOLTERA» se ordena por «CASA HABITACION - SOLTERA» y después por su número */
+const sinNumeroInicial = (n: string) => n.replace(/^\s*\d+\s*[-–.]\s*/, '').trim() || n;
+
+/**
+ * Orden por nombre: casi todos empiezan con el número del catálogo, que la base ordenaría como texto
+ * («1, 10, 100, 2…»). Se ordenan aquí por la descripción (orden natural, sin tildes) y se trae solo la página.
+ */
+async function porNombre(where: Prisma.PlantillaWhereInput, pagina: number, descendente: boolean) {
+  const todas = await db.plantilla.findMany({ where, select: { id: true, nombre: true } });
+  todas.sort((a, b) => (comparar(sinNumeroInicial(a.nombre), sinNumeroInicial(b.nombre)) || comparar(a.nombre, b.nombre)) * (descendente ? -1 : 1));
+  const ids = todas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA).map((x) => x.id);
+  const filas = await db.plantilla.findMany({ where: { id: { in: ids } }, select: SELECCION_FILA });
+  filas.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+  return { total: todas.length, filas, pagina, paginas: Math.max(1, Math.ceil(todas.length / POR_PAGINA)) };
 }
 
 /** Categorías (con sus subcategorías y cuántas plantillas tiene cada una) y años, para los filtros */
