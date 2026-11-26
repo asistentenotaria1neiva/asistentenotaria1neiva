@@ -12,7 +12,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
-import { guardarCifrado, leerCifrado, borrarCifrado, guardarParte, unirPartes } from '../almacenamiento';
+import { guardarCifrado, leerCifrado, borrarCifrado, guardarParte, unirPartes, ARCHIVO_RETIRADO } from '../almacenamiento';
 import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { abrirPdf, extraerPaginas } from '../pdf';
@@ -379,8 +379,9 @@ export async function leerDocumento(documentoId: string, usuarioId: string, { re
 
 /** Vuelve a leer un documento (p. ej. si la lectura falló) */
 export async function releerDocumento(s: SesionActiva, documentoId: string, base: string | null = null) {
-  const doc = await db.documento.findUniqueOrThrow({ where: { id: documentoId }, select: { expedienteId: true, estadoLectura: true, actualizadoEn: true } });
+  const doc = await db.documento.findUniqueOrThrow({ where: { id: documentoId }, select: { expedienteId: true, estadoLectura: true, actualizadoEn: true, rutaCifrada: true } });
   await expedienteEditable(s, doc.expedienteId);
+  if (doc.rutaCifrada === ARCHIVO_RETIRADO) throw new ErrorNegocio('El archivo original se retiró para liberar espacio: no se puede volver a leer. Cárguelo de nuevo si lo necesita.');
   if (!process.env.ANTHROPIC_API_KEY) throw new ErrorNegocio('La IA no está configurada en el servidor.');
   if (doc.estadoLectura === 'EN_CURSO' && Date.now() - doc.actualizadoEn.getTime() < LECTURA_CORTADA_MS) throw new ErrorNegocio('El documento se está leyendo.');
   if (!(await consumirLimite(`ia:${s.usuario.id}`, 200, 3600)).permitido) throw new ErrorNegocio('Límite de lecturas por hora alcanzado.');
@@ -397,12 +398,19 @@ export async function eliminarDocumento(s: SesionActiva, documentoId: string) {
   await auditar({ ...datosAuditoria(s), accion: 'DOCUMENTO_RETIRADO', entidad: 'documento', entidadId: doc.id, detalle: { expedienteId: doc.expedienteId, sha256: doc.hashSha256 } });
 }
 
-/** Descarga individual (siempre auditada); no existe exportación masiva */
-export async function descargarDocumento(s: SesionActiva, documentoId: string) {
+/**
+ * Descarga individual (siempre auditada); no existe exportación masiva. El archivo no cambia una vez
+ * guardado: si el navegador ya tiene esta misma copia (etagCliente coincide con el hash), se responde
+ * «sin cambios» sin volver a leerlo ni enviarlo, pero igual se verifica el permiso y se audita.
+ */
+export async function descargarDocumento(s: SesionActiva, documentoId: string, etagCliente?: string | null) {
   const doc = await db.documento.findUniqueOrThrow({ where: { id: documentoId } });
   await obtenerExpediente(s, doc.expedienteId); // verifica permiso
-  const bytes = await leerCifrado(doc.rutaCifrada);
-  if (sha256(bytes) !== doc.hashSha256) throw new ErrorNegocio('El documento no pasó la verificación de integridad.');
+  if (doc.rutaCifrada === ARCHIVO_RETIRADO) throw new ErrorNegocio('El archivo original se retiró del almacenamiento para liberar espacio. Lo que la IA leyó de él se conserva en la escritura.');
+  const etag = `"${doc.hashSha256}"`;
+  const noModificado = etagCliente === etag;
+  const bytes = noModificado ? null : await leerCifrado(doc.rutaCifrada);
+  if (bytes && sha256(bytes) !== doc.hashSha256) throw new ErrorNegocio('El documento no pasó la verificación de integridad.');
   await auditar({ ...datosAuditoria(s), accion: 'DOCUMENTO_DESCARGADO', entidad: 'documento', entidadId: doc.id, detalle: { expedienteId: doc.expedienteId } });
-  return { bytes, mime: doc.mime, nombre: doc.nombreOriginal };
+  return { bytes, etag, mime: doc.mime, nombre: doc.nombreOriginal };
 }

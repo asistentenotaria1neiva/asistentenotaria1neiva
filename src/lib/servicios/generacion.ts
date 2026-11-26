@@ -21,7 +21,7 @@ import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { auditar } from '../auditoria';
 import { datosAuditoria, type SesionActiva } from '../sesion-tipos';
-import { guardarCifrado, leerCifrado } from '../almacenamiento';
+import { guardarCifrado, leerCifrado, ARCHIVO_RETIRADO } from '../almacenamiento';
 import { sha256 } from '../seguridad/cifrado';
 import { consumirLimite } from '../seguridad/limites';
 import { obtenerConfig } from '../configuracion';
@@ -795,7 +795,8 @@ const PESO_DOCX = 15;
 async function buscarFaltantes(id: string, expedienteId: string, p: Progreso) {
   const inicio = Date.now();
   let faltan = buscables(p);
-  const docs = await db.documento.findMany({ where: { expedienteId }, orderBy: { creadoEn: 'asc' }, select: { id: true, nombreOriginal: true, mime: true, paginas: true, rutaCifrada: true } });
+  // Los documentos cuyo original se retiró para liberar espacio ya no se pueden volver a mirar
+  const docs = await db.documento.findMany({ where: { expedienteId, rutaCifrada: { not: ARCHIVO_RETIRADO } }, orderBy: { creadoEn: 'asc' }, select: { id: true, nombreOriginal: true, mime: true, paginas: true, rutaCifrada: true } });
   const grupos: (typeof docs)[] = [];
   let grupo: typeof docs = [], paginas = 0;
   for (const d of docs) {
@@ -930,12 +931,18 @@ async function terminar(id: string, expedienteId: string, version: number, p: Pr
 
 // ------------------------------------------------------------------ consulta y descarga
 
-export async function descargarGeneracion(s: SesionActiva, id: string, vista: boolean) {
+/**
+ * Una versión ya terminada no cambia: si el navegador tiene esta misma copia (etagCliente coincide con
+ * el hash), se responde «sin cambios» sin volver a leerla ni enviarla (permiso y auditoría, igual).
+ */
+export async function descargarGeneracion(s: SesionActiva, id: string, vista: boolean, etagCliente?: string | null) {
   const g = await db.generacion.findUnique({ where: { id }, include: { expediente: { select: { id: true, numeroInterno: true } } } });
   if (!g || !g.rutaDocx) throw new ErrorNegocio('Versión no encontrada.');
   await obtenerExpediente(s, g.expedienteId); // verifica permiso
-  const bytes = await leerCifrado(g.rutaDocx);
-  if (g.hashSha256 && sha256(bytes) !== g.hashSha256) throw new ErrorNegocio('El archivo no pasó la verificación de integridad.');
+  const etag = g.hashSha256 ? `"${g.hashSha256}"` : null;
+  const noModificado = etag !== null && etagCliente === etag;
+  const bytes = noModificado ? null : await leerCifrado(g.rutaDocx);
+  if (bytes && g.hashSha256 && sha256(bytes) !== g.hashSha256) throw new ErrorNegocio('El archivo no pasó la verificación de integridad.');
   if (!vista) await auditar({ ...datosAuditoria(s), accion: 'ESCRITURA_DESCARGADA', entidad: 'expediente', entidadId: g.expedienteId, detalle: { version: g.version } });
-  return { bytes, nombre: `${g.expediente.numeroInterno}-v${g.version}.docx` };
+  return { bytes, etag, nombre: `${g.expediente.numeroInterno}-v${g.version}.docx` };
 }

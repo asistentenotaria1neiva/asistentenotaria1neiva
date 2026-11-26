@@ -10,6 +10,7 @@ import { NextResponse, after, type NextRequest } from 'next/server';
 import { leerSesion } from '@/lib/sesion';
 import { noLeidas, notificacionesNuevas } from '@/lib/servicios/notificaciones';
 import { generacionesPorReanudar } from '@/lib/servicios/generacion';
+import { limpiezaPeriodica } from '@/lib/servicios/limpieza';
 
 /** Una etapa reanudada corre en esta invocación */
 export const maxDuration = 300;
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
   after(async () => {
     const tareas = await generacionesPorReanudar().catch((err) => { console.error('[reanudar generaciones]', err); return []; });
     await Promise.all(tareas.map((t) => t().catch((err) => console.error('[reanudar generación]', err))));
+    // Borra escrituras y PDF soporte viejos (como máximo una vez cada 6 horas): src/lib/servicios/limpieza.ts
+    await limpiezaPeriodica().catch((err) => console.error('[limpieza]', err));
   });
   return NextResponse.json({
     ahora: ahora.toISOString(),

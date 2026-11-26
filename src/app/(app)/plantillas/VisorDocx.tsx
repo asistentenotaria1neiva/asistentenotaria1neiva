@@ -76,7 +76,8 @@ export function VisorDocx({ url }: { url: string }) {
     setEstado('cargando');
     (async () => {
       try {
-        const r = await fetch(url, { signal: controlador.signal, cache: 'no-store' });
+        // no-cache: usa la copia del navegador si el servidor confirma que no cambió (ETag), sin volver a bajarla
+        const r = await fetch(url, { signal: controlador.signal, cache: 'no-cache' });
         if (!r.ok) throw new Error((await r.text()) || `Error ${r.status}`);
         const datos = await r.blob();
         const { renderAsync } = await import('docx-preview');

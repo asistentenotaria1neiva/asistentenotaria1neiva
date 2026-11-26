@@ -133,7 +133,14 @@ export async function unirPartes(carga: string, total: number): Promise<Buffer> 
   }
 }
 
+/**
+ * Ruta de un documento soporte cuyo archivo original se borró para liberar espacio: lo que la IA leyó
+ * sigue en la base de datos, pero el PDF ya no existe (no se puede ver, ni volver a leer).
+ */
+export const ARCHIVO_RETIRADO = 'retirado';
+
 export async function leerCifrado(relativa: string): Promise<Buffer> {
+  if (relativa === ARCHIVO_RETIRADO) throw new Error('El archivo original se retiró del almacenamiento para liberar espacio.');
   const contenido = await leerUno(relativa);
   const total = piezasDe(contenido);
   if (!total) return contenido;
@@ -147,6 +154,7 @@ export async function leerCifrado(relativa: string): Promise<Buffer> {
 }
 
 export async function borrarCifrado(relativa: string): Promise<void> {
+  if (relativa === ARCHIVO_RETIRADO) return; // ya no hay archivo
   // Un archivo en piezas: se borran sus piezas (el índice pesa unos bytes; un archivo normal se borra sin leerlo entero)
   let total: number | null = null;
   try {

@@ -38,13 +38,46 @@ export function BotonAccion({ accion, texto, textoPendiente, clase, confirmar, i
   );
 }
 
-/** Vuelve a pedir la página cada cierto tiempo mientras hay un proceso en segundo plano */
-export function RefrescoAutomatico({ segundos = 5 }: { segundos?: number }) {
+/** Con la pestaña oculta se consulta mucho menos (el servidor sigue trabajando igual) */
+const SEGUNDOS_OCULTA = 60;
+
+/**
+ * Mientras hay un proceso en segundo plano, consulta cada pocos segundos una huella corta del estado
+ * (api/expedientes/[id]/estado) y solo vuelve a pedir la página completa cuando cambia. Antes se pedía
+ * la página entera cada 5 segundos, y eso agotaba la transferencia mensual de Vercel.
+ */
+export function RefrescoAutomatico({ expedienteId, huella, segundos = 5 }: { expedienteId: string; huella: string; segundos?: number }) {
   const router = useRouter();
+  const actual = useRef(huella);
+  useEffect(() => { actual.current = huella; }, [huella]);
   useEffect(() => {
-    const t = setInterval(() => router.refresh(), segundos * 1000);
-    return () => clearInterval(t);
-  }, [router, segundos]);
+    let activo = true;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const consultar = async () => {
+      try {
+        const r = await fetch(`/api/expedientes/${encodeURIComponent(expedienteId)}/estado`, { cache: 'no-store' });
+        if (!activo) return;
+        if (r.status === 401) { router.refresh(); return; } // sesión cerrada: la página lleva al ingreso
+        if (r.ok) {
+          const { huella: nueva } = (await r.json()) as { huella: string };
+          if (activo && nueva !== actual.current) { actual.current = nueva; router.refresh(); }
+        }
+      } catch {
+        // Sin conexión: se intenta en la próxima vuelta
+      }
+      programar();
+    };
+    const programar = () => {
+      if (!activo) return;
+      clearTimeout(t);
+      t = setTimeout(consultar, (document.visibilityState === 'visible' ? segundos : SEGUNDOS_OCULTA) * 1000);
+    };
+    // Al volver a la pestaña se consulta de inmediato
+    const alVolver = () => { if (document.visibilityState === 'visible') { clearTimeout(t); void consultar(); } };
+    programar();
+    document.addEventListener('visibilitychange', alVolver);
+    return () => { activo = false; clearTimeout(t); document.removeEventListener('visibilitychange', alVolver); };
+  }, [router, expedienteId, segundos]);
   return null;
 }
 

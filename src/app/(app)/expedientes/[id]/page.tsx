@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { after } from 'next/server';
 import { db } from '@/lib/db';
 import { requerirSesion } from '@/lib/sesion';
 import { expedienteDePagina, puedeEditar, ErrorNegocio } from '@/lib/servicios/expedientes';
-import { generacionEnCurso, generacionPorReanudar, cambiosDeVersion, type ResultadoGeneracion } from '@/lib/servicios/generacion';
-import { leerDocumento, LECTURA_CORTADA_MS, PAGINAS_POR_TRAMO } from '@/lib/servicios/documentos';
-import { urlAplicacion } from '@/lib/seguridad/red';
+import { cambiosDeVersion, type ResultadoGeneracion } from '@/lib/servicios/generacion';
+import { PAGINAS_POR_TRAMO } from '@/lib/servicios/documentos';
+import { vigilarExpediente, huellaEstado } from '@/lib/servicios/vigilancia';
+import { ARCHIVO_RETIRADO } from '@/lib/almacenamiento';
 import { lecturaComoTexto, type Lectura } from '@/lib/ia/instrucciones';
 import { EtiquetaVersion, Tabla, fecha, hace } from '../../componentes';
 import { Icono, type NombreIcono } from '../../../Icono';
@@ -52,23 +52,10 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
   const editable = puedeEditar(s, e);
   const esAdmin = s.usuario.rol === 'ADMINISTRADOR';
 
-  // Una etapa de la generación que se cortó se reanuda; un documento cuya lectura no empezó o se cortó, se lee
-  const reanudar = await generacionPorReanudar(id);
-  if (reanudar) after(() => reanudar().catch((err) => console.error('[reanudar generación]', err)));
-  // Primero la generación en curso: si pasó el tiempo máximo la cierra con error, y la lista de
-  // versiones (que se lee después) ya la muestra con su error y no como «Generando»
-  const enCurso = await generacionEnCurso(id);
-  const [documentos, generaciones] = await Promise.all([
-    db.documento.findMany({ where: { expedienteId: id }, orderBy: { creadoEn: 'asc' } }),
-    db.generacion.findMany({ where: { expedienteId: id }, orderBy: { version: 'desc' }, take: 20, include: { generadaPor: { select: { nombreCompleto: true } } } }),
-  ]);
-  const trabados = documentos.filter((d) => (d.estadoLectura === 'PENDIENTE' && Date.now() - d.creadoEn.getTime() > 60_000) || (d.estadoLectura === 'EN_CURSO' && Date.now() - d.actualizadoEn.getTime() > LECTURA_CORTADA_MS));
-  if (editable && !enCurso && trabados.length && process.env.ANTHROPIC_API_KEY) {
-    // Con el mismo inicio: si el primero agota el tiempo de esta invocación, los demás siguen en otra
-    const base = await urlAplicacion();
-    const inicio = Date.now();
-    after(async () => { for (const d of trabados.slice(0, 3)) await leerDocumento(d.id, s.usuario.id, { base, inicio }).catch((err) => console.error('[leerDocumento]', err)); });
-  }
+  // Reanuda la generación cortada, cierra la vencida y vuelve a leer los documentos trabados (antes de
+  // leer las versiones, para que la vencida ya salga con su error y no como «Generando»)
+  const { enCurso, documentos } = await vigilarExpediente(s, id, editable);
+  const generaciones = await db.generacion.findMany({ where: { expedienteId: id }, orderBy: { version: 'desc' }, take: 20, include: { generadaPor: { select: { nombreCompleto: true } } } });
   const leyendo = documentos.some((d) => d.estadoLectura === 'EN_CURSO' || d.estadoLectura === 'PENDIENTE');
   // Una generación cancelada no reemplaza a la versión anterior: se sigue mostrando la última terminada
   const ultima = generaciones.find((g) => g.estado !== 'EN_CURSO' && g.estado !== 'CANCELADA');
@@ -186,7 +173,7 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
           <strong>Eliminada por el usuario</strong>{e.eliminadoPor ? ` (${e.eliminadoPor.nombreCompleto})` : ''} el {fecha(e.eliminadoEn)}. El responsable ya no la ve; usted la ve en solo lectura. Puede restaurarla o borrarla definitivamente.
         </div></div>
       )}
-      {(enCurso || leyendo) && <RefrescoAutomatico segundos={enCurso ? 5 : 8} />}
+      {(enCurso || leyendo) && <RefrescoAutomatico expedienteId={id} huella={huellaEstado(enCurso, documentos, generaciones[0])} segundos={enCurso ? 5 : 8} />}
 
       <nav className="tarjeta pasos" aria-label="Pasos de la escritura">
         <ol className="pasos-escritura">
@@ -257,8 +244,10 @@ export default async function Escritura({ params }: { params: Promise<{ id: stri
                     <li key={d.id} className={est.li || undefined}>
                       <span className="icono-doc" aria-hidden="true"><Icono nombre={d.estadoLectura === 'ERROR' ? 'alerta' : iconoArchivo(d.nombreOriginal)} tamano={18} /></span>
                       <div className="nombre">
-                        <a href={`/api/documentos/${d.id}`} target="_blank" rel="noopener">{d.nombreOriginal}</a>
-                        <div className="tenue">{tamano(d.tamano)}{d.paginas ? ` · ${d.paginas} pág.` : ''}{tipos.length ? ` · ${[...new Set(tipos)].slice(0, 4).join(', ')}` : ''}</div>
+                        {d.rutaCifrada === ARCHIVO_RETIRADO
+                          ? <span title="El archivo original se borró para liberar espacio; lo que leyó la IA se conserva">{d.nombreOriginal}</span>
+                          : <a href={`/api/documentos/${d.id}`} target="_blank" rel="noopener">{d.nombreOriginal}</a>}
+                        <div className="tenue">{d.rutaCifrada === ARCHIVO_RETIRADO ? 'Archivo retirado · ' : ''}{tamano(d.tamano)}{d.paginas ? ` · ${d.paginas} pág.` : ''}{tipos.length ? ` · ${[...new Set(tipos)].slice(0, 4).join(', ')}` : ''}</div>
                       </div>
                       <div className="estado-doc">
                         <span className={`etiqueta ${est.clase}`}>{est.texto}</span>
