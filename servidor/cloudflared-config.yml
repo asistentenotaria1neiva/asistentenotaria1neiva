@@ -1,0 +1,13 @@
+# Configuración de Cloudflare Tunnel (paso 7 de docs/servidor_local.md).
+# Copie este archivo a C:\Users\<usuario>\.cloudflared\config.yml y cambie ID_DEL_TUNEL y el dominio.
+tunnel: ID_DEL_TUNEL
+credentials-file: C:\Users\USUARIO\.cloudflared\ID_DEL_TUNEL.json
+
+ingress:
+  - hostname: escrituras.SU-DOMINIO.com.co
+    service: http://127.0.0.1:3000
+    originRequest:
+      # Las cargas grandes y las generaciones pueden tardar: no cortar antes de tiempo
+      connectTimeout: 30s
+      keepAliveTimeout: 300s
+  - service: http_status:404

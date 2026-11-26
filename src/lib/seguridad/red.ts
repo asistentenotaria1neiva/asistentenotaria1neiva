@@ -1,7 +1,8 @@
 /**
  * Restricción por red: el personal solo entra desde la IP pública de la oficina.
- * En Vercel la IP real llega en X-Real-IP; solo se confía en esa cabecera si
- * CONFIAR_EN_PROXY=true (en producción Vercel la sobrescribe siempre).
+ * En el servidor local la app escucha solo en 127.0.0.1 y se llega por Cloudflare Tunnel, que pone la
+ * IP real en CF-Connecting-IP (en Vercel llegaba en X-Real-IP). Solo se confía en esas cabeceras si
+ * CONFIAR_EN_PROXY=true: nadie más puede ponerlas, porque nadie más llega al puerto de la app.
  */
 import 'server-only';
 import { headers } from 'next/headers';
@@ -9,7 +10,7 @@ import { headers } from 'next/headers';
 export async function ipCliente(): Promise<string> {
   const h = await headers();
   if (process.env.CONFIAR_EN_PROXY === 'true') {
-    const real = h.get('x-real-ip');
+    const real = h.get('cf-connecting-ip') ?? h.get('x-real-ip');
     if (real) return real.trim();
   }
   // Sin proxy (desarrollo): Next no expone la IP del socket; se usa x-forwarded-for local o 127.0.0.1

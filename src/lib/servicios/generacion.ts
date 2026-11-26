@@ -30,6 +30,7 @@ import { plantillaNumerada, aplicarCambios, formatoPagina, textoDocx, parrafosDo
 import { discordanciasDeGenero, describirDiscordancias } from '../escritura/genero';
 import { revisarCatastrales } from '../escritura/catastral';
 import { revisarLinderos } from '../escritura/linderos';
+import { revisarAccesoDeLotes, esDivision } from '../escritura/acceso-lotes';
 import { revisarBloquesDeInmuebles, revisarRemisionDeLinderos } from '../escritura/inmuebles';
 import { actosPedidos, encabezadosDeActos, actosSinCumplir, nombraActo } from '../escritura/actos';
 import { ubicarActos } from '../escritura/ubicar-actos';
@@ -926,6 +927,8 @@ async function terminar(id: string, expedienteId: string, version: number, p: Pr
     .map((x) => ({ nivel: 'CRITICA' as const, origen: 'SISTEMA' as const, p: x.parrafos[0] ?? 0, detalle: `${x.detalle} Genere de nuevo o pídalo en «Corregir la versión» antes de imprimir.` }));
   const automaticas: Advertencia[] = [
     ...deInmuebles,
+    // Desenglobe, subdivisión, división material, loteo: ningún lote resultante sin vía ni servidumbre (Decreto 1077 de 2015)
+    ...revisarAccesoDeLotes(texto, { esDivision: esDivision({ categoria: c.e.plantilla?.categoria, plantilla: c.e.plantillaNombre, observaciones: c.e.observaciones, caratula: texto.slice(0, 1500) }) }),
     ...c.sinLeer.map((n) => ({ nivel: 'ADVERTENCIA' as const, origen: 'SISTEMA' as const, p: 0, detalle: `El documento «${n}» no se pudo leer: sus datos no se usaron. Ábralo en la lista de documentos y léalo de nuevo, o cárguelo con mejor calidad.` })),
     ...linderos.advertencias,
     ...pendientes(faltantes, verificar, r.noAplicados),

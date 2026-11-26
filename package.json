@@ -7,6 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "servidor": "next start -H 127.0.0.1 -p 3000",
     "prueba": "vitest run",
     "tipos": "tsc --noEmit",
     "db:migrar": "prisma migrate deploy",
