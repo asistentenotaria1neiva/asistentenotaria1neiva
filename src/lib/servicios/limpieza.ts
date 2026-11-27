@@ -1,14 +1,15 @@
 /**
- * Limpieza automática del almacenamiento (Supabase gratis: 1 GB). Corre sola, como máximo una vez
- * cada 6 horas, después de responder una consulta de notificaciones (api/notificaciones), y también a
- * mano con scripts/liberar-espacio.ts. Tres reglas, configurables con variables de entorno:
+ * Limpieza automática del almacenamiento. Corre sola, como máximo una vez cada 6 horas, después de
+ * responder una consulta de notificaciones (api/notificaciones). Tres reglas, configurables con
+ * variables de entorno. Los valores por defecto son para el servidor local de la notaría, con disco de
+ * sobra (en Supabase gratis, 1 GB, se usaban 30 días / 3 días / 550 MB, y los PDF se retiraban casi enseguida):
  *
- *   1. LIMPIEZA_ESCRITURAS_DIAS (30): las escrituras creadas hace más de ese número de días se borran
- *      definitivamente, con sus documentos, versiones y archivos (la auditoría se conserva).
- *   2. LIMPIEZA_PDF_DIAS (3): los PDF soporte ya leídos de escrituras con una versión terminada se
+ *   1. LIMPIEZA_ESCRITURAS_DIAS (3650, unos 10 años): las escrituras creadas hace más de ese número de
+ *      días se borran definitivamente, con sus documentos, versiones y archivos (la auditoría se conserva).
+ *   2. LIMPIEZA_PDF_DIAS (365): los PDF soporte ya leídos de escrituras con una versión terminada se
  *      retiran a los N días de cargados. Lo que la IA leyó queda en la base: se puede generar de nuevo.
- *   3. LIMPIEZA_PDF_MAXIMO_MB (550): si aun así los PDF soporte pasan de ese total, se retiran antes
- *      (de los más antiguos a los más nuevos, solo de escrituras con versión terminada).
+ *   3. LIMPIEZA_PDF_MAXIMO_MB (100000, unos 100 GB): si aun así los PDF soporte pasan de ese total, se
+ *      retiran antes (de los más antiguos a los más nuevos, solo de escrituras con versión terminada).
  *
  * Nunca toca una escritura que se está generando ni las plantillas de la biblioteca.
  */
@@ -22,9 +23,9 @@ const numero = (v: string | undefined, porDefecto: number) => (v && Number.isFin
 const DIA = 24 * 3600_000;
 
 export async function limpiarAlmacenamiento() {
-  const diasEscrituras = numero(process.env.LIMPIEZA_ESCRITURAS_DIAS, 30);
-  const diasPdf = numero(process.env.LIMPIEZA_PDF_DIAS, 3);
-  const maximoPdf = numero(process.env.LIMPIEZA_PDF_MAXIMO_MB, 550) * 1024 * 1024;
+  const diasEscrituras = numero(process.env.LIMPIEZA_ESCRITURAS_DIAS, 3650);
+  const diasPdf = numero(process.env.LIMPIEZA_PDF_DIAS, 365);
+  const maximoPdf = numero(process.env.LIMPIEZA_PDF_MAXIMO_MB, 100_000) * 1024 * 1024;
   let escriturasBorradas = 0, pdfRetirados = 0, bytesLiberados = 0;
 
   // 1. Escrituras viejas, completas

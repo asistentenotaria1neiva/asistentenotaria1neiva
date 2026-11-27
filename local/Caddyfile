@@ -1,0 +1,46 @@
+# Caddy: HTTPS delante de la aplicación (que solo escucha en 127.0.0.1:3000).
+# Las cookies de sesión (__Host-), los avisos push y el service worker exigen HTTPS.
+#   - Red de la oficina: https://192.168.2.200 / https://servidor, con "tls internal": Caddy crea su propia
+#     autoridad certificadora; su certificado raíz se instala una vez en cada equipo (docs/instalacion_local.md, paso 6).
+#   - Fuera de la oficina: https://servidor.tail52cfb3.ts.net, solo para los equipos de la red privada de
+#     Tailscale. El certificado (válido en cualquier navegador) lo entrega Tailscale; Caddy lo pide solo.
+{
+	# El puerto 80 ya lo usa Windows (IIS / http.sys) en este servidor: solo HTTPS
+	auto_https disable_redirects
+	# Rutas fijas para que el servicio (cuenta SYSTEM) y el administrador vean la misma autoridad
+	storage file_system C:/Escrituracion/caddy/datos
+}
+
+(aplicacion) {
+	# Documentos de hasta 30 MB por acción (next.config.ts) más el sobre del formulario
+	request_body {
+		max_size 64MB
+	}
+
+	reverse_proxy 127.0.0.1:3000 {
+		# La IP que valida la aplicación (IPS_OFICINA) es la del equipo que se conecta; se sobrescribe
+		# siempre, así un equipo no puede hacerse pasar por otra IP
+		header_up X-Real-IP {remote_host}
+		# Las etapas largas de la IA responden en minutos
+		transport http {
+			response_header_timeout 10m
+		}
+	}
+
+	log {
+		output file C:/Escrituracion/caddy/acceso.log {
+			roll_size 20MiB
+			roll_keep 10
+		}
+	}
+}
+
+# En la oficina se entra por https://servidor (el nombre de red del equipo, el mismo de las carpetas compartidas)
+https://servidor, https://192.168.2.200, https://localhost {
+	tls internal
+	import aplicacion
+}
+
+https://servidor.tail52cfb3.ts.net {
+	import aplicacion
+}

@@ -2,6 +2,7 @@
 datos_locales/
 almacenamiento/
 respaldos/
+logs/
 
 # Secretos
 .env

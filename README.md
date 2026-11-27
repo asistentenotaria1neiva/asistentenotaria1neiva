@@ -68,6 +68,10 @@ La primera vez, la aplicación abre **/instalacion** para crear el administrador
 | `URL_APLICACION` | Dirección pública de la aplicación; la generación la usa para encadenar sus etapas (vacío = el dominio de la petición) |
 | `PDF_CONVERSOR_URL` | URL de un servicio Gotenberg externo (vacío = solo Word) |
 
+## Instalación local (servidor de la notaría)
+
+Para correr todo en el servidor de la oficina, sin pagar Supabase ni Vercel (PostgreSQL local, archivos en disco, HTTPS con Caddy, respaldos diarios), siga [`docs/instalacion_local.md`](docs/instalacion_local.md). Los scripts están en [`local/`](local/).
+
 ## Despliegue en Vercel + Supabase
 
 Base de datos PostgreSQL y archivos cifrados en Supabase (proyecto en `us-east-1`); la aplicación en Vercel (`vercel.json`, región `iad1`, junto a la base: si se cambia la región de una, cambie la de la otra).

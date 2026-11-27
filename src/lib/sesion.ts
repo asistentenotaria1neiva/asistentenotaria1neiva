@@ -44,6 +44,38 @@ async function dispositivoActual() {
   return db.dispositivo.findUnique({ where: { tokenHash: huellaToken(token) } });
 }
 
+/**
+ * Transición de Vercel al servidor local: el navegador guarda la cookie del equipo por dirección, y en
+ * https://servidor no envía la que recibió en el dominio de Vercel, así que un equipo ya aprobado llega
+ * como desconocido. Hasta la fecha RECONOCER_EQUIPOS_HASTA (AAAA-MM-DD, hora de Colombia; vacía = apagado)
+ * se le reconoce y se le entrega una cookie nueva, solo si se cumple TODO:
+ *   - el usuario ya pasó la contraseña y está en la red de la oficina (lo valida quien llama);
+ *   - la huella del navegador coincide con UN solo equipo aprobado;
+ *   - ese mismo usuario ya había iniciado sesión antes desde ese equipo.
+ * La huella no es secreta (se arma con datos del navegador): por eso no basta sola, y el reconocimiento
+ * queda en la auditoría y como alerta para el administrador. Un registro PENDIENTE del mismo navegador
+ * (hecho antes por el usuario) se borra: queda el equipo aprobado, con su nombre e historial.
+ */
+async function reconocerEquipoAprobado(usuarioId: string, usuario: string, huella: string | null, ip: string, actual: { id: string; estado: string; nombre: string } | null) {
+  const hasta = process.env.RECONOCER_EQUIPOS_HASTA;
+  if (!huella || !hasta || !/^\d{4}-\d{2}-\d{2}$/.test(hasta) || Date.now() > Date.parse(`${hasta}T23:59:59-05:00`)) return null;
+  if (actual && actual.estado !== 'PENDIENTE') return null; // un equipo revocado no se rehabilita así
+  const iguales = await db.dispositivo.findMany({ where: { estado: 'APROBADO', huella } });
+  if (iguales.length !== 1) return null;
+  const aprobado = iguales[0];
+  if (!(await db.sesion.findFirst({ where: { usuarioId, dispositivoId: aprobado.id }, select: { id: true } }))) return null;
+  const token = tokenAleatorio();
+  const reconocido = await db.$transaction(async (tx) => {
+    if (actual && actual.id !== aprobado.id) await tx.dispositivo.delete({ where: { id: actual.id } });
+    return tx.dispositivo.update({ where: { id: aprobado.id }, data: { tokenHash: huellaToken(token) } });
+  });
+  (await cookies()).set(COOKIE_DISPOSITIVO, firmarToken(token), opcionesCookie(400 * 24 * 3600));
+  await auditar({ accion: 'EQUIPO_RECONOCIDO', usuarioId, usuarioNombre: usuario, ip, dispositivoId: reconocido.id, entidad: 'dispositivo', entidadId: reconocido.id,
+    detalle: { nombre: reconocido.nombre, registroPendienteBorrado: actual?.nombre ?? null, motivo: 'mismo navegador de un equipo aprobado (cambio de Vercel al servidor local)' } });
+  await alertar('EQUIPO_RECONOCIDO', 'BAJA', `El equipo "${reconocido.nombre}" se reconoció automáticamente al ingresar ${usuario} (mismo navegador, cambio de dirección de la aplicación).`, { ip, dispositivoId: reconocido.id });
+  return reconocido;
+}
+
 async function fueraDeHorario(): Promise<boolean> {
   const h = await obtenerConfig('acceso.horario');
   if (!h.activo) return false;
@@ -108,7 +140,8 @@ export async function iniciarSesion(usuarioTxt: string, contrasena: string, huel
     return { ok: false, error: 'Fuera del horario permitido de acceso.' };
   }
 
-  const disp = await dispositivoActual();
+  let disp = await dispositivoActual();
+  if (!esAdmin && disp?.estado !== 'APROBADO') disp = (await reconocerEquipoAprobado(u.id, u.usuario, huella, ip, disp)) ?? disp;
   if (!esAdmin && disp?.estado !== 'APROBADO') {
     await alertar('DISPOSITIVO_NO_AUTORIZADO', 'ALTA', `Intento de ingreso de ${u.usuario} desde un equipo ${disp ? (disp.estado === 'PENDIENTE' ? 'pendiente de aprobación' : 'revocado') : 'no registrado'}.`, { ip, dispositivoId: disp?.id });
     await auditar({ accion: 'INGRESO_RECHAZADO', usuarioId: u.id, usuarioNombre: u.usuario, ip, dispositivoId: disp?.id, detalle: { motivo: 'equipo no autorizado' } });
